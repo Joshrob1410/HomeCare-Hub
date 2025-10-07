@@ -85,6 +85,8 @@ export type RequesterContext = {
   supa: ReturnType<typeof supabaseServer>;
   admin: ReturnType<typeof supabaseAdmin>;
   user: User;
+  /** Convenience mirror to avoid dotting everywhere. */
+  userId: string;
   level: AppLevel;
   isAdmin: boolean;
   canCompany: boolean;
@@ -126,5 +128,56 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
     if (Array.isArray(ids)) managedHomeIds = ids as string[];
   }
 
-  return { supa, admin, user, level, isAdmin, canCompany, canManager, companyScope, managedHomeIds };
+  return {
+    supa,
+    admin,
+    user,
+    userId: user.id,
+    level,
+    isAdmin,
+    canCompany,
+    canManager,
+    companyScope,
+    managedHomeIds,
+  };
+}
+
+/* =========================
+   Guard helpers (exported)
+   ========================= */
+
+/**
+ * Only admin or company-level users can modify "company positions".
+ * Managers/staff are blocked.
+ * Throws a 403 Response if not allowed.
+ */
+export function restrictCompanyPositions(ctx: RequesterContext, _position?: string) {
+  if (ctx.isAdmin || ctx.canCompany) return;
+  throw new Response("Forbidden: requires company scope", { status: 403 });
+}
+
+/**
+ * Ensure the action is within the caller's company scope
+ * (admins bypass; company users must match; managers/staff forbidden).
+ */
+export function requireCompanyScope(ctx: RequesterContext, companyId: string | null | undefined) {
+  if (!companyId) throw new Response("Bad Request: company_id is required", { status: 400 });
+  if (ctx.isAdmin) return;
+  if (!ctx.canCompany) throw new Response("Forbidden: requires company role", { status: 403 });
+  if (ctx.companyScope !== companyId) throw new Response("Forbidden: wrong company", { status: 403 });
+}
+
+/**
+ * Ensure the caller is allowed to act on a home.
+ * Admins and company-level users are allowed on any home in their company
+ * (you can tighten this later if needed). Managers must manage that home.
+ */
+export function requireManagerScope(ctx: RequesterContext, homeId: string | null | undefined) {
+  if (!homeId) throw new Response("Bad Request: home_id is required", { status: 400 });
+  if (ctx.isAdmin || ctx.canCompany) return;
+  if (ctx.level === "3_MANAGER") {
+    if (ctx.managedHomeIds.includes(homeId)) return;
+    throw new Response("Forbidden: not manager of this home", { status: 403 });
+  }
+  throw new Response("Forbidden: requires manager role", { status: 403 });
 }
