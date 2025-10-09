@@ -5,15 +5,31 @@ import { createClient, type User } from "@supabase/supabase-js";
 
 export type AppLevel = "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF";
 
-/** Server-side Supabase client bound to Next's cookies/headers (Anon key). */
+/** Server-side Supabase client bound to request cookies (Anon key). */
 export function supabaseServer() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
-  // New API: pass the functions directly. The SSR helper handles read-only cookies on Next 15.
+  // Derive the type of the 3rd arg of `cookies().set(name, value, options)`
+  type CookieStore = Awaited<ReturnType<typeof cookies>>;
+  type CookieOpts = Parameters<CookieStore["set"]>[2];
+
   return createServerClient(url, anon, {
-    cookies,
-    headers: nextHeaders,
+    cookies: {
+      async get(name: string) {
+        const store = await cookies();
+        return store.get(name)?.value;
+      },
+      async set(name: string, value: string, options?: CookieOpts) {
+        const store = await cookies();
+        store.set(name, value, options);
+      },
+      async remove(name: string, options?: CookieOpts) {
+        const store = await cookies();
+        // Clear by setting maxAge=0
+        store.set(name, "", { ...(options ?? {}), maxAge: 0, path: "/" });
+      },
+    },
   });
 }
 
@@ -46,13 +62,13 @@ export async function requireUser(req?: Request) {
   if (auth?.startsWith("Bearer ")) {
     const token = auth.slice(7).trim();
 
-    // validate token using the service-role client
+    // Validate token using the service-role client
     const admin = supabaseAdmin();
     const { data, error } = await admin.auth.getUser(token);
     const user = (data?.user as User) ?? null;
     if (error || !user) throw new Response("Unauthorized", { status: 401 });
 
-    // user-scoped client that forwards the bearer to PostgREST (for RLS)
+    // User-scoped client forwarding the bearer (keeps RLS intact)
     const supa = createClient(url, anon, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false, autoRefreshToken: false },
@@ -61,7 +77,7 @@ export async function requireUser(req?: Request) {
     return { supa, user };
   }
 
-  // fallback to cookie-based session
+  // Fallback to cookie-based session
   const supa = supabaseServer();
   const { data, error } = await supa.auth.getUser();
   const user = (data?.user as User) ?? null;
@@ -87,7 +103,7 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
   const { supa, user } = await requireUser(req);
   const admin = supabaseAdmin();
 
-  // get_effective_level returns a single scalar row; select via .single() and read the field
+  // get_effective_level returns a single scalar row; use .single()
   const { data: lvlRow, error: lvlErr } = await supa.rpc("get_effective_level").single();
   if (lvlErr) throw new Response("Failed to resolve level", { status: 500 });
   const level = (lvlRow as { get_effective_level: AppLevel }).get_effective_level;
@@ -96,7 +112,7 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
   const canCompany = isAdmin || level === "2_COMPANY";
   const canManager = isAdmin || level === "2_COMPANY" || level === "3_MANAGER";
 
-  // company scope (first membership if any; admins typically ignore)
+  // Company scope (first membership if any; admins typically ignore)
   let companyScope: string | null = null;
   if (!isAdmin) {
     const { data: cm } = await supa
@@ -108,7 +124,7 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
     companyScope = (cm as { company_id: string } | null)?.company_id ?? null;
   }
 
-  // manager scope homes
+  // Manager scope homes
   let managedHomeIds: string[] = [];
   if (level === "3_MANAGER") {
     const { data: ids } = await supa.rpc("home_ids_managed_by", { p_user: user.id });
@@ -119,7 +135,7 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Helper guards used by admin/self routes
+   Guards
    ────────────────────────────────────────────────────────────────────────── */
 
 export function restrictCompanyPositions(ctx: RequesterContext, _position: string) {
