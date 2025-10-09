@@ -9,14 +9,22 @@ type CompanyIdRow = { company_id: string };
 type UserIdRow = { user_id: string };
 type HomeIdRow = { id: string };
 type ManagedHomeRow = { home_id: string };
-type HomeMembershipRow = { user_id: string; home_id: string; role: "MANAGER" | "STAFF" };
+type HomeMembershipRow = {
+  user_id: string;
+  home_id: string;
+  role: "MANAGER" | "STAFF";
+};
 type HomeInfoRow = { id: string; name: string };
 type CompanyMembershipInfoRow = {
   user_id: string;
   has_company_access: boolean | null;
   is_dsl: boolean | null;
 };
-type ProfileRow = { user_id: string; full_name: string | null; is_admin: boolean | null };
+type ProfileRow = {
+  user_id: string;
+  full_name: string | null;
+  is_admin: boolean | null;
+};
 
 /** Minimal subset of the Auth admin user we actually read */
 type AuthUserLite = {
@@ -50,7 +58,9 @@ export async function GET(req: NextRequest) {
         .eq("user_id", ctx.user.id)
         .returns<CompanyIdRow[]>();
 
-      const myCompanyIds = Array.from(new Set((myCompanies ?? []).map((r) => r.company_id)));
+      const myCompanyIds = Array.from(
+        new Set((myCompanies ?? []).map((r) => r.company_id))
+      );
       if (myCompanyIds.length === 0) {
         return NextResponse.json({ error: "No company scope." }, { status: 403 });
       }
@@ -134,7 +144,12 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    const authUsers: AuthUserLite[] = (authUsersRes?.users ?? []) as AuthUserLite[];
+    // Supabase admin.listUsers(): read from data.users and fall back to []
+    const authUsersData = (authUsersRes as any)?.data;
+    const authUsers: AuthUserLite[] = Array.isArray(authUsersData?.users)
+      ? (authUsersData.users as AuthUserLite[])
+      : [];
+
     const emailMap = new Map<string, AuthUserLite>();
     authUsers.forEach((u) => emailMap.set(u.id, u));
 
@@ -154,7 +169,7 @@ export async function GET(req: NextRequest) {
           .select("id, name")
           .in("id", homeIdSet)
           .returns<HomeInfoRow[]>()
-      : { data: [] as HomeInfoRow[] };
+      : ({ data: [] as HomeInfoRow[] } as const);
 
     const nameByHomeId = new Map<string, string>();
     (homesInfo ?? []).forEach((h) => nameByHomeId.set(h.id, h.name));
@@ -194,7 +209,7 @@ export async function GET(req: NextRequest) {
         level === "2_COMPANY" ? compMs.find((x) => x.user_id === id) : null;
       const bank = level === "2_COMPANY" ? !!bankMs.find((x) => x.user_id === id) : false;
       const company = !!compRow?.has_company_access;
-      const dsl = !!compRow?.is_dsl; // <= NEW
+      const dsl = !!compRow?.is_dsl;
 
       return {
         id,
@@ -208,7 +223,7 @@ export async function GET(req: NextRequest) {
           bank,
           manager_homes: managerHomes,
           staff_home: staffHomes.length ? staffHomes[0] : null,
-          dsl, // <= NEW
+          dsl,
         },
       };
     });
