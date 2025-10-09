@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getServerSupabase } from '@/supabase/server';
 import UserChip from './_components/UserChip';
@@ -9,7 +9,7 @@ import MobileSidebar from './_components/MobileSidebar';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
     // Block access if not signed in
-    const supabase = getServerSupabase();
+    const supabase = await getServerSupabase();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect('/auth/login');
 
@@ -51,3 +51,4 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
     );
 }
+
