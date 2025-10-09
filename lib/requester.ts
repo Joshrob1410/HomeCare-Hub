@@ -130,3 +130,29 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
 
   return { supa, admin, user, level, isAdmin, canCompany, canManager, companyScope, managedHomeIds };
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Helper guards used by admin/self routes
+   These throw Response(403) when the caller lacks scope/privilege.
+   Exported symbols must match the imports in the routes.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/** Only Admin or Company-level can set company positions. */
+export function restrictCompanyPositions(ctx: RequesterContext, _position: string) {
+  if (ctx.isAdmin || ctx.canCompany) return;
+  throw new Response("Forbidden", { status: 403 });
+}
+
+/** Require that the operation is within the caller's company scope (admins bypass). */
+export function requireCompanyScope(ctx: RequesterContext, companyId: string) {
+  if (ctx.isAdmin) return;
+  if (ctx.companyScope && ctx.companyScope === companyId) return;
+  throw new Response("Forbidden", { status: 403 });
+}
+
+/** Require that the operation targets a home the caller manages (admins/company bypass). */
+export function requireManagerScope(ctx: RequesterContext, homeId: string) {
+  if (ctx.isAdmin || ctx.canCompany) return;
+  if (ctx.level === "3_MANAGER" && ctx.managedHomeIds.includes(homeId)) return;
+  throw new Response("Forbidden", { status: 403 });
+}
