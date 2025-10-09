@@ -1,40 +1,45 @@
 // lib/requester.ts
 import { cookies, headers as nextHeaders } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { createClient, type User } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 
 export type AppLevel = "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF";
 
 /** Server-side Supabase client bound to request cookies (Anon key). */
-export function supabaseServer() {
+export async function supabaseServer(): Promise<SupabaseClient> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+  if (!url || !anon) throw new Error("Missing NEXT_PUBLIC_SUPABASE_* env vars.");
 
-  // Derive the type of the 3rd arg of `cookies().set(name, value, options)`
-  type CookieStore = Awaited<ReturnType<typeof cookies>>;
-  type CookieOpts = Parameters<CookieStore["set"]>[2];
+  // Next.js 15: cookies() is async
+  const cookieStore = await cookies();
 
   return createServerClient(url, anon, {
+    // Newer @supabase/ssr expects getAll/setAll cookie methods
     cookies: {
-      async get(name: string) {
-        const store = await cookies();
-        return store.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll().map(({ name, value }) => ({ name, value }));
       },
-      async set(name: string, value: string, options?: CookieOpts) {
-        const store = await cookies();
-        store.set(name, value, options);
-      },
-      async remove(name: string, options?: CookieOpts) {
-        const store = await cookies();
-        // Clear by setting maxAge=0
-        store.set(name, "", { ...(options ?? {}), maxAge: 0, path: "/" });
+      setAll(cookiesToSet) {
+        // In some runtimes this is read-only; guard and no-op if needed.
+        const mutable = cookieStore as unknown as {
+          set?: (name: string, value: string, options?: Record<string, unknown>) => void;
+        };
+        if (typeof mutable.set !== "function") return;
+        cookiesToSet.forEach(({ name, value, options }) => {
+          try {
+            mutable.set!(name, value, options);
+          } catch {
+            /* ignore if store is read-only */
+          }
+        });
       },
     },
   });
 }
 
 /** Privileged Supabase client using the Service Role key (never expose to client). */
-export function supabaseAdmin() {
+export function supabaseAdmin(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
   if (!url || !key) throw new Error("Missing SUPABASE env vars for admin client.");
@@ -52,11 +57,17 @@ function pickAuthHeader(h: Headers): string | null {
 }
 
 /** Get the current user (via Authorization bearer if present, else cookies). */
-export async function requireUser(req?: Request) {
+export async function requireUser(
+  req?: Request
+): Promise<{ supa: SupabaseClient; user: User }> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
-  const h = req ? req.headers : nextHeaders();
+  // Ensure we always have a concrete Headers object
+  const h: Headers = req
+    ? (req.headers as Headers)
+    : ((await nextHeaders()) as unknown as Headers);
+
   const auth = pickAuthHeader(h);
 
   if (auth?.startsWith("Bearer ")) {
@@ -65,10 +76,10 @@ export async function requireUser(req?: Request) {
     // Validate token using the service-role client
     const admin = supabaseAdmin();
     const { data, error } = await admin.auth.getUser(token);
-    const user = (data?.user as User) ?? null;
+    const user = data?.user as User | null;
     if (error || !user) throw new Response("Unauthorized", { status: 401 });
 
-    // User-scoped client forwarding the bearer (keeps RLS intact)
+    // User-scoped client that forwards the bearer to PostgREST (for RLS)
     const supa = createClient(url, anon, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false, autoRefreshToken: false },
@@ -78,17 +89,17 @@ export async function requireUser(req?: Request) {
   }
 
   // Fallback to cookie-based session
-  const supa = supabaseServer();
+  const supa = await supabaseServer();
   const { data, error } = await supa.auth.getUser();
-  const user = (data?.user as User) ?? null;
+  const user = data?.user as User | null;
   if (error || !user) throw new Response("Unauthorized", { status: 401 });
   return { supa, user };
 }
 
 /** Convenience context many routes use. */
 export type RequesterContext = {
-  supa: ReturnType<typeof supabaseServer>;
-  admin: ReturnType<typeof supabaseAdmin>;
+  supa: SupabaseClient;
+  admin: SupabaseClient;
   user: User;
   level: AppLevel;
   isAdmin: boolean;
@@ -103,10 +114,10 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
   const { supa, user } = await requireUser(req);
   const admin = supabaseAdmin();
 
-  // get_effective_level returns a single scalar row; use .single()
-  const { data: lvlRow, error: lvlErr } = await supa.rpc("get_effective_level").single();
+  // Effective level via your RPC
+  const { data: lvl, error: lvlErr } = await supa.rpc("get_effective_level");
   if (lvlErr) throw new Response("Failed to resolve level", { status: 500 });
-  const level = (lvlRow as { get_effective_level: AppLevel }).get_effective_level;
+  const level = String(lvl) as AppLevel;
 
   const isAdmin = level === "1_ADMIN";
   const canCompany = isAdmin || level === "2_COMPANY";
@@ -121,7 +132,7 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
       .eq("user_id", user.id)
       .limit(1)
       .maybeSingle();
-    companyScope = (cm as { company_id: string } | null)?.company_id ?? null;
+    companyScope = cm?.company_id ?? null;
   }
 
   // Manager scope homes
@@ -131,24 +142,39 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
     if (Array.isArray(ids)) managedHomeIds = ids as string[];
   }
 
-  return { supa, admin, user, level, isAdmin, canCompany, canManager, companyScope, managedHomeIds };
+  return {
+    supa,
+    admin,
+    user,
+    level,
+    isAdmin,
+    canCompany,
+    canManager,
+    companyScope,
+    managedHomeIds,
+  };
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Guards
+   Helper guards used by admin/self routes
+   These throw Response(403) when the caller lacks scope/privilege.
+   Exported symbols must match the imports in the routes.
    ────────────────────────────────────────────────────────────────────────── */
 
+/** Only Admin or Company-level can set company positions. */
 export function restrictCompanyPositions(ctx: RequesterContext, _position: string) {
   if (ctx.isAdmin || ctx.canCompany) return;
   throw new Response("Forbidden", { status: 403 });
 }
 
+/** Require that the operation is within the caller's company scope (admins bypass). */
 export function requireCompanyScope(ctx: RequesterContext, companyId: string) {
   if (ctx.isAdmin) return;
   if (ctx.companyScope && ctx.companyScope === companyId) return;
   throw new Response("Forbidden", { status: 403 });
 }
 
+/** Require that the operation targets a home the caller manages (admins/company bypass). */
 export function requireManagerScope(ctx: RequesterContext, homeId: string) {
   if (ctx.isAdmin || ctx.canCompany) return;
   if (ctx.level === "3_MANAGER" && ctx.managedHomeIds.includes(homeId)) return;
