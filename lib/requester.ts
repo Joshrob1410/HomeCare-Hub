@@ -5,10 +5,25 @@ import { createClient, type User } from "@supabase/supabase-js";
 
 export type AppLevel = "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF";
 
+/** Minimal cookie options shape for Supabase SSR adapter */
+type CookieOptions = {
+  expires?: Date;
+  maxAge?: number;
+  path?: string;
+  domain?: string;
+  sameSite?: "lax" | "strict" | "none";
+  secure?: boolean;
+  httpOnly?: boolean;
+};
+
 /** Server-side Supabase client bound to request cookies (Anon key). */
 export function supabaseServer() {
   const cookieStore = cookies();
-  type CookieOpts = NonNullable<Parameters<typeof cookieStore.set>[2]>;
+  // Cast to 'any' so we can feature-detect .set() (read-only in most Next 15 contexts)
+  const anyCookies = cookieStore as unknown as {
+    get?: (name: string) => { value?: string } | undefined;
+    set?: (opts: { name: string; value: string } & CookieOptions) => void;
+  };
 
   const supa = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL as string,
@@ -16,13 +31,22 @@ export function supabaseServer() {
     {
       cookies: {
         get(name: string) {
-          return cookieStore.get(name)?.value ?? null;
+          // Return undefined when missing (what supabase expects)
+          return cookieStore.get(name)?.value ?? undefined;
         },
-        set(name: string, value: string, options?: CookieOpts) {
-          cookieStore.set(name, value, options);
+        set(name: string, value: string, options?: CookieOptions) {
+          try {
+            anyCookies.set?.({ name, value, ...(options ?? {}) });
+          } catch {
+            // no-op when cookies are read-only (e.g., most Next 15 server contexts)
+          }
         },
-        remove(name: string, options?: CookieOpts) {
-          cookieStore.set(name, "", { ...(options ?? {}), maxAge: 0 });
+        remove(name: string, options?: CookieOptions) {
+          try {
+            anyCookies.set?.({ name, value: "", ...(options ?? {}), maxAge: 0 });
+          } catch {
+            // no-op when cookies are read-only
+          }
         },
       },
     }
@@ -62,7 +86,7 @@ export async function requireUser(req?: Request) {
     // validate token using the service-role client
     const admin = supabaseAdmin();
     const { data, error } = await admin.auth.getUser(token);
-    const user = data?.user as User | null;
+    const user = (data?.user as User) ?? null;
     if (error || !user) throw new Response("Unauthorized", { status: 401 });
 
     // user-scoped client that forwards the bearer to PostgREST (for RLS)
@@ -74,10 +98,10 @@ export async function requireUser(req?: Request) {
     return { supa, user };
   }
 
-  // fallback to cookie-based session (if you later sync cookies to routes)
+  // fallback to cookie-based session
   const supa = supabaseServer();
   const { data, error } = await supa.auth.getUser();
-  const user = data?.user as User | null;
+  const user = (data?.user as User) ?? null;
   if (error || !user) throw new Response("Unauthorized", { status: 401 });
   return { supa, user };
 }
@@ -100,10 +124,10 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
   const { supa, user } = await requireUser(req);
   const admin = supabaseAdmin();
 
-  // effective level via your RPC
-  const { data: lvl, error: lvlErr } = await supa.rpc("get_effective_level");
+  // get_effective_level returns a single scalar; pick it from the field named after the function
+  const { data: lvlRow, error: lvlErr } = await supa.rpc("get_effective_level").single();
   if (lvlErr) throw new Response("Failed to resolve level", { status: 500 });
-  const level = (lvl as string) as AppLevel;
+  const level = (lvlRow as { get_effective_level: AppLevel }).get_effective_level;
 
   const isAdmin = level === "1_ADMIN";
   const canCompany = isAdmin || level === "2_COMPANY";
@@ -118,7 +142,7 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
       .eq("user_id", user.id)
       .limit(1)
       .maybeSingle();
-    companyScope = cm?.company_id ?? null;
+    companyScope = (cm as { company_id: string } | null)?.company_id ?? null;
   }
 
   // manager scope homes
