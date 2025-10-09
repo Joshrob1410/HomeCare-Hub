@@ -4,35 +4,45 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequester } from "@/lib/requester";
 
-/**
- * PATCH body:
- * {
- *   user_id: string,
- *   full_name?: string,
- *   email?: string,
- *   password?: string,
- *
- *   // memberships
- *   set_home?: { home_id: string, clear_bank_for_company?: string },
- *   clear_home?: { home_id: string },
- *   set_bank?: { company_id: string, home_id?: string },
- *
- *   // change position in an existing home membership
- *   // accepts one of: "STAFF" | "TEAM_LEADER" | "DEPUTY_MANAGER" | "MANAGER"
- *   set_home_role?: { home_id: string, role: string },
- *
- *   // admin-only: move user's company (simple upsert)
- *   set_company?: { company_id: string },
- *
- *   // app-level role change (server enforces caps)
- *   // level: "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF"
- *   set_level?: { level: string }
- * }
- */
+/** Minimal row shapes used in this file */
+type HomeRow = { company_id: string };
+type HomeMembershipRow = {
+  user_id: string;
+  home_id: string;
+  role: "STAFF" | "MANAGER";
+  staff_subrole: "RESIDENTIAL" | "TEAM_LEADER" | null;
+  manager_subrole: "DEPUTY_MANAGER" | "MANAGER" | null;
+};
+type BankMembershipRow = { company_id: string };
+type CompanyMembershipRow = { company_id: string };
+
+/** Request body (all fields optional except user_id) */
+type PatchBody = {
+  user_id: string;
+  full_name?: string;
+  email?: string;
+  password?: string;
+
+  set_home?: { home_id: string; clear_bank_for_company?: string };
+  clear_home?: { home_id: string };
+  set_bank?: { company_id: string; home_id?: string };
+
+  set_home_role?: {
+    home_id: string;
+    role: "STAFF" | "TEAM_LEADER" | "DEPUTY_MANAGER" | "MANAGER" | string;
+  };
+
+  set_company?: { company_id: string };
+
+  set_level?: {
+    level: "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF" | string;
+  };
+};
+
 export async function PATCH(req: NextRequest) {
   try {
     const r = await getRequester(req);
-    const body = await req.json();
+    const body = (await req.json()) as PatchBody;
 
     const {
       user_id,
@@ -45,7 +55,7 @@ export async function PATCH(req: NextRequest) {
       set_home_role,
       set_company,
       set_level,
-    } = body ?? {};
+    } = body ?? ({} as PatchBody);
 
     if (!user_id) {
       return NextResponse.json({ error: "user_id is required" }, { status: 400 });
@@ -56,7 +66,8 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const actingOwnAccount = r.user?.id && String(r.user.id) === String(user_id);
+    const actingOwnAccount =
+      r.user?.id ? String(r.user.id) === String(user_id) : false;
 
     // ─────────────────────────────────────────────────────────────────────────────
     // 1) Profile name (use ADMIN client to bypass RLS) + mirror to Auth metadata
@@ -85,7 +96,7 @@ export async function PATCH(req: NextRequest) {
     // 2) Email / password (via Admin API). Allowed for admin/company/manager.
     // ─────────────────────────────────────────────────────────────────────────────
     if (email || password) {
-      const patch: any = {};
+      const patch: { email?: string; password?: string } = {};
       if (email) patch.email = String(email).trim();
       if (password) patch.password = String(password);
       const { error: updErr } = await r.admin.auth.admin.updateUserById(user_id, patch);
@@ -139,98 +150,99 @@ export async function PATCH(req: NextRequest) {
         .eq("home_id", clear_home.home_id);
     }
 
-      // 6) Assign to a specific home (move existing STAFF if present; insert otherwise)
-      if (set_home?.home_id) {
-          const targetHomeId: string = set_home.home_id;
+    // 6) Assign to a specific home (move existing STAFF if present; insert otherwise)
+    if (set_home?.home_id) {
+      const targetHomeId: string = set_home.home_id;
 
-          // Scope checks (use admin client so RLS can't block reads)
-          if (r.level === "3_MANAGER" && !r.managedHomeIds.includes(targetHomeId)) {
-              return NextResponse.json({ error: "Managers can only assign to their managed homes" }, { status: 403 });
-          }
-          if (r.level === "2_COMPANY" && r.companyScope) {
-              const { data: h, error: homeErr } = await r.admin
-                  .from("homes")
-                  .select("company_id")
-                  .eq("id", targetHomeId)
-                  .maybeSingle();
-              if (homeErr) return NextResponse.json({ error: homeErr.message }, { status: 400 });
-              if (h?.company_id && h.company_id !== r.companyScope) {
-                  return NextResponse.json({ error: "Cannot assign to a home in another company" }, { status: 403 });
-              }
-          }
-
-          // If asked, clear bank membership for that company (move Bank → Home)
-          if (set_home.clear_bank_for_company) {
-              const { error: delBankErr } = await r.admin
-                  .from("bank_memberships")
-                  .delete()
-                  .eq("user_id", user_id)
-                  .eq("company_id", set_home.clear_bank_for_company);
-              if (delBankErr) return NextResponse.json({ error: delBankErr.message }, { status: 400 });
-          }
-
-          // 6a) If the user already has *any* membership for the target home, do nothing.
-          {
-              const { data: existingAtTarget, error: exErr } = await r.admin
-                  .from("home_memberships")
-                  .select("user_id, home_id, role, staff_subrole, manager_subrole")
-                  .eq("user_id", user_id)
-                  .eq("home_id", targetHomeId)
-                  .limit(1);
-              if (exErr) return NextResponse.json({ error: exErr.message }, { status: 400 });
-
-              if (existingAtTarget && existingAtTarget.length) {
-                  // Already a member of this home; no need to add/move a STAFF row.
-                  // (Position changes, if requested, will be handled in step 7.)
-              } else {
-                  // 6b) See if they have a STAFF row on some other home → move it here.
-                  const { data: staffElsewhere, error: staffErr } = await r.admin
-                      .from("home_memberships")
-                      .select("home_id")
-                      .eq("user_id", user_id)
-                      .eq("role", "STAFF")
-                      .neq("home_id", targetHomeId)
-                      .limit(1);
-
-                  if (staffErr) return NextResponse.json({ error: staffErr.message }, { status: 400 });
-
-                  if (staffElsewhere && staffElsewhere.length) {
-                      // Move the existing STAFF membership to the new home.
-                      const fromHomeId = staffElsewhere[0].home_id as string;
-
-                      // NOTE: because you likely have a unique (user_id, home_id), make sure there isn't any row at target.
-                      // We already checked existingAtTarget above, so this update won't violate that constraint.
-                      const { error: moveErr } = await r.admin
-                          .from("home_memberships")
-                          .update({
-                              home_id: targetHomeId,
-                              // default subroles for STAFF when moving
-                              role: "STAFF",
-                              staff_subrole: "RESIDENTIAL",
-                              manager_subrole: null,
-                          })
-                          .eq("user_id", user_id)
-                          .eq("home_id", fromHomeId);
-
-                      if (moveErr) return NextResponse.json({ error: moveErr.message }, { status: 400 });
-                  } else {
-                      // 6c) No STAFF row anywhere → create a new STAFF membership at the target home.
-                      const { error: insErr } = await r.admin
-                          .from("home_memberships")
-                          .insert({
-                              user_id,
-                              home_id: targetHomeId,
-                              role: "STAFF",
-                              staff_subrole: "RESIDENTIAL",
-                              manager_subrole: null,
-                          });
-                      if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
-                  }
-              }
-          }
+      // Scope checks (use admin client so RLS can't block reads)
+      if (r.level === "3_MANAGER" && !r.managedHomeIds.includes(targetHomeId)) {
+        return NextResponse.json({ error: "Managers can only assign to their managed homes" }, { status: 403 });
+      }
+      if (r.level === "2_COMPANY" && r.companyScope) {
+        const { data: h, error: homeErr } = await r.admin
+          .from("homes")
+          .select("company_id")
+          .eq("id", targetHomeId)
+          .maybeSingle()
+          .returns<HomeRow | null>();
+        if (homeErr) return NextResponse.json({ error: homeErr.message }, { status: 400 });
+        if (h?.company_id && h.company_id !== r.companyScope) {
+          return NextResponse.json({ error: "Cannot assign to a home in another company" }, { status: 403 });
+        }
       }
 
+      // If asked, clear bank membership for that company (move Bank → Home)
+      if (set_home.clear_bank_for_company) {
+        const { error: delBankErr } = await r.admin
+          .from("bank_memberships")
+          .delete()
+          .eq("user_id", user_id)
+          .eq("company_id", set_home.clear_bank_for_company);
+        if (delBankErr) return NextResponse.json({ error: delBankErr.message }, { status: 400 });
+      }
 
+      // 6a) If the user already has *any* membership for the target home, do nothing.
+      {
+        const { data: existingAtTarget, error: exErr } = await r.admin
+          .from("home_memberships")
+          .select("user_id, home_id, role, staff_subrole, manager_subrole")
+          .eq("user_id", user_id)
+          .eq("home_id", targetHomeId)
+          .maybeSingle()
+          .returns<HomeMembershipRow | null>();
+        if (exErr) return NextResponse.json({ error: exErr.message }, { status: 400 });
+
+        if (existingAtTarget) {
+          // Already a member of this home; no need to add/move a STAFF row.
+          // (Position changes, if requested, will be handled in step 7.)
+        } else {
+          // 6b) See if they have a STAFF row on some other home → move it here.
+          const { data: staffElsewhere, error: staffErr } = await r.admin
+            .from("home_memberships")
+            .select("home_id")
+            .eq("user_id", user_id)
+            .eq("role", "STAFF")
+            .neq("home_id", targetHomeId)
+            .limit(1)
+            .returns<{ home_id: string }[]>();
+
+          if (staffErr) return NextResponse.json({ error: staffErr.message }, { status: 400 });
+
+          if (staffElsewhere && staffElsewhere.length) {
+            // Move the existing STAFF membership to the new home.
+            const fromHomeId = staffElsewhere[0].home_id;
+
+            // NOTE: because you likely have a unique (user_id, home_id), make sure there isn't any row at target.
+            // We already checked existingAtTarget above, so this update won't violate that constraint.
+            const { error: moveErr } = await r.admin
+              .from("home_memberships")
+              .update({
+                home_id: targetHomeId,
+                // default subroles for STAFF when moving
+                role: "STAFF",
+                staff_subrole: "RESIDENTIAL",
+                manager_subrole: null,
+              } satisfies Partial<HomeMembershipRow>)
+              .eq("user_id", user_id)
+              .eq("home_id", fromHomeId);
+
+            if (moveErr) return NextResponse.json({ error: moveErr.message }, { status: 400 });
+          } else {
+            // 6c) No STAFF row anywhere → create a new STAFF membership at the target home.
+            const { error: insErr } = await r.admin
+              .from("home_memberships")
+              .insert({
+                user_id,
+                home_id: targetHomeId,
+                role: "STAFF",
+                staff_subrole: "RESIDENTIAL",
+                manager_subrole: null,
+              } satisfies HomeMembershipRow);
+            if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
+          }
+        }
+      }
+    }
 
     // ─────────────────────────────────────────────────────────────────────────────
     // 7) Change position for an existing home membership
@@ -249,7 +261,8 @@ export async function PATCH(req: NextRequest) {
           .from("homes")
           .select("company_id")
           .eq("id", set_home_role.home_id)
-          .maybeSingle();
+          .maybeSingle()
+          .returns<HomeRow | null>();
         if (h?.company_id && h.company_id !== r.companyScope) {
           return NextResponse.json({ error: "Cannot change position in another company" }, { status: 403 });
         }
@@ -283,7 +296,7 @@ export async function PATCH(req: NextRequest) {
 
       const { error } = await r.admin
         .from("home_memberships")
-        .update(patch as any)
+        .update(patch satisfies Partial<HomeMembershipRow>)
         .eq("user_id", user_id)
         .eq("home_id", set_home_role.home_id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -317,28 +330,34 @@ export async function PATCH(req: NextRequest) {
       }
 
       async function deriveCompanyIdForUser(): Promise<string | null> {
-        const h = await r.admin
+        // from home membership (joined to homes to get company_id)
+        const { data: h } = await r.admin
           .from("home_memberships")
           .select("home_id, homes!inner(company_id)")
           .eq("user_id", user_id)
-          .limit(1);
-        const viaHome = (h.data as any[])?.[0]?.homes?.company_id as string | undefined;
+          .limit(1)
+          .returns<{ home_id: string; homes: { company_id: string } }[]>();
+        const viaHome = h?.[0]?.homes?.company_id;
         if (viaHome) return viaHome;
 
-        const b = await r.admin
+        // from bank membership
+        const { data: b } = await r.admin
           .from("bank_memberships")
           .select("company_id")
           .eq("user_id", user_id)
-          .limit(1);
-        const viaBank = (b.data as any[])?.[0]?.company_id as string | undefined;
+          .limit(1)
+          .returns<BankMembershipRow[]>();
+        const viaBank = b?.[0]?.company_id;
         if (viaBank) return viaBank;
 
-        const cm = await r.admin
+        // from company membership
+        const { data: cm } = await r.admin
           .from("company_memberships")
           .select("company_id")
           .eq("user_id", user_id)
-          .limit(1);
-        const viaCM = (cm.data as any[])?.[0]?.company_id as string | undefined;
+          .limit(1)
+          .returns<CompanyMembershipRow[]>();
+        const viaCM = cm?.[0]?.company_id;
         if (viaCM) return viaCM;
 
         if (r.companyScope) return r.companyScope;
@@ -416,8 +435,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof Response) return e;
-    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
+    const err = e instanceof Error ? e : new Error("Unexpected error");
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

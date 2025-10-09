@@ -4,44 +4,71 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequester } from "@/lib/requester";
 
+/** Typed bodies for this route */
+type PostBody = { name: string };
+type PatchBody = { company_id: string; name: string };
+
 /**
- * POST { name: string }                   // Admin only
+ * POST { name: string }                       // Admin only
  * PATCH { company_id: string, name: string }  // Admin only
  */
 export async function POST(req: NextRequest) {
   try {
     const r = await getRequester(req);
-    if (!r.isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    if (!r.isAdmin) {
+      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    }
 
-    const body = await req.json();
-    const { name } = body ?? {};
-    if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
+    const body = (await req.json()) as PostBody;
+    const name = body?.name?.toString().trim();
+    if (!name) {
+      return NextResponse.json({ error: "name is required" }, { status: 400 });
+    }
 
-    const { error } = await r.supa.from("companies").insert({ name: String(name).trim() });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    const { error } = await r.supa.from("companies").insert({ name });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof Response) return e;
-    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
+    const err = e instanceof Error ? e : new Error("Unexpected error");
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function PATCH(req: NextRequest) {
   try {
     const r = await getRequester(req);
-    if (!r.isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    if (!r.isAdmin) {
+      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    }
 
-    const body = await req.json();
-    const { company_id, name } = body ?? {};
-    if (!company_id || !name) return NextResponse.json({ error: "company_id and name are required" }, { status: 400 });
+    const body = (await req.json()) as PatchBody;
+    const company_id = body?.company_id?.toString();
+    const name = body?.name?.toString().trim();
 
-    const { error } = await r.supa.from("companies").update({ name: String(name).trim() }).eq("id", company_id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!company_id || !name) {
+      return NextResponse.json(
+        { error: "company_id and name are required" },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await r.supa
+      .from("companies")
+      .update({ name })
+      .eq("id", company_id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof Response) return e;
-    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
+    const err = e instanceof Error ? e : new Error("Unexpected error");
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

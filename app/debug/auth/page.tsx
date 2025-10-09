@@ -3,27 +3,38 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/supabase/client';
 
-type AppLevel = '1_ADMIN'|'2_COMPANY'|'3_MANAGER'|'4_STAFF';
+type AppLevel = '1_ADMIN' | '2_COMPANY' | '3_MANAGER' | '4_STAFF';
+
+type ProfileRow = {
+  user_id: string;
+  full_name: string | null;
+  is_admin: boolean | null;
+} & Record<string, unknown>;
 
 export default function DebugAuth() {
-  const [userId, setUserId] = useState<string|null>(null);
-  const [email, setEmail] = useState<string|null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [level, setLevel] = useState<AppLevel | null>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [error, setError] = useState<string|null>(null);
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       const { data: userData, error: uErr } = await supabase.auth.getUser();
-      if (uErr) return setError(uErr.message);
+      if (uErr) {
+        setError(uErr.message);
+        return;
+      }
       const u = userData.user;
       setUserId(u?.id ?? null);
       setEmail(u?.email ?? null);
 
       // what level does the DB think?
-      const { data: lvl, error: lErr } = await supabase.rpc('get_effective_level');
+      const { data: lvl, error: lErr } = await supabase
+        .rpc('get_effective_level')
+        .returns<AppLevel>();
       if (lErr) setError(lErr.message);
-      else setLevel(lvl as AppLevel);
+      else setLevel(lvl ?? null);
 
       if (u?.id) {
         // read your profile row (policy allows self-read)
@@ -31,7 +42,8 @@ export default function DebugAuth() {
           .from('profiles')
           .select('*')
           .eq('user_id', u.id)
-          .maybeSingle();
+          .maybeSingle()
+          .returns<ProfileRow | null>();
         if (pErr) setError(pErr.message);
         else setProfile(prof);
       }

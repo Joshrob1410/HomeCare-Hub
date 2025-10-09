@@ -1,32 +1,73 @@
 // app/api/admin/assign/route.ts
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import {
-  getRequester,
-  requireCompanyScope,
-  requireManagerScope,
-  restrictCompanyPositions,
-} from "@/lib/requester";
+import { NextRequest, NextResponse } from "next/server";
+import { getRequester, supabaseAdmin } from "@/lib/requester";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+/** Typed request body (discriminated union). */
+type AssignAction =
+  | {
+      action: "company_position";
+      user_id: string;
+      company_id: string;
+      position: string;
+      enable?: boolean;
+    }
+  | {
+    action: "staff_subrole";
+    user_id: string;
+    home_id: string;
+    subrole?: string | null;
+  }
+  | {
+    action: "manager_subrole";
+    user_id: string;
+    home_id: string;
+    subrole?: "DEPUTY" | "MANAGER" | null;
+  };
 
-export async function POST(req: Request) {
+/** Minimal local guards that mirror the original helpers' intent. */
+function restrictCompanyPositions(
+  ctx: { isAdmin: boolean; canCompany: boolean },
+  _position: string
+) {
+  // Comment in original file: "only company-level (or admin) can set company positions"
+  if (!(ctx.isAdmin || ctx.canCompany)) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+}
+
+function requireCompanyScope(
+  ctx: { isAdmin: boolean; companyScope: string | null },
+  companyId: string
+) {
+  if (ctx.isAdmin) return;
+  if (!companyId || ctx.companyScope !== companyId) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+}
+
+function requireManagerScope(
+  ctx: { isAdmin: boolean; canCompany: boolean; managedHomeIds: string[] },
+  homeId: string
+) {
+  if (ctx.isAdmin || ctx.canCompany) return;
+  if (!homeId || !ctx.managedHomeIds.includes(homeId)) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const ctx = await getRequester(req); // pass req so bearer/cookies work consistently
+    const body = (await req.json()) as AssignAction;
+    const ctx = await getRequester(req); // bearer/cookies consistent
 
-    // Use ctx.user.id (or ctx.userId provided by getRequester)
     if (!ctx.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
     if (!body?.action) {
       return NextResponse.json({ error: "Missing action" }, { status: 400 });
     }
+
+    const admin = supabaseAdmin();
 
     if (body.action === "company_position") {
       const { user_id, company_id, position, enable } = body;
@@ -46,22 +87,23 @@ export async function POST(req: Request) {
       const p = String(position).toUpperCase();
       const en = enable !== false;
 
-      const { error } = await supabaseAdmin.rpc("admin_set_company_position", {
+      const { error } = await admin.rpc<null>("admin_set_company_position", {
         p_user_id: user_id,
         p_company_id: company_id,
         p_position: p,
         p_enable: en,
       });
 
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
       return NextResponse.json({ ok: true });
     }
 
     if (body.action === "staff_subrole") {
       const { user_id, home_id, subrole } = body;
 
-      // managers can only update subroles for homes they manage;
-      // admins/company-level bypass
+      // managers can only update subroles for homes they manage; admins/company-level bypass
       requireManagerScope(ctx, home_id);
 
       if (!user_id || !home_id) {
@@ -73,13 +115,15 @@ export async function POST(req: Request) {
 
       const s = subrole ? String(subrole).toUpperCase() : null;
 
-      const { error } = await supabaseAdmin.rpc("admin_set_staff_subrole", {
+      const { error } = await admin.rpc<null>("admin_set_staff_subrole", {
         p_user_id: user_id,
         p_home_id: home_id,
         p_staff_subrole: s,
       });
 
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -96,26 +140,32 @@ export async function POST(req: Request) {
         );
       }
 
-      const mapped = !subrole
-        ? null
-        : String(subrole).toUpperCase() === "DEPUTY"
-        ? "DEPUTY_MANAGER"
-        : "MANAGER";
+      const mapped =
+        !subrole
+          ? null
+          : subrole === "DEPUTY"
+          ? "DEPUTY_MANAGER"
+          : "MANAGER";
 
-      const { error } = await supabaseAdmin.rpc("admin_set_manager_subrole", {
+      const { error } = await admin.rpc<null>("admin_set_manager_subrole", {
         p_user_id: user_id,
         p_home_id: home_id,
         p_manager_subrole: mapped,
       });
 
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
       return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
-  } catch (e: any) {
-    console.error(e);
-    const status = e?.status || 500;
-    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status });
+  } catch (e: unknown) {
+    // If one of our guards threw a Response (e.g., 401/403), return it as-is.
+    if (e instanceof Response) return e;
+
+    const err = e instanceof Error ? e : new Error("Unknown error");
+    console.error(err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

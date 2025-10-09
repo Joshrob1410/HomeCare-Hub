@@ -1,36 +1,36 @@
 // app/api/enums/route.ts
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+export const runtime = "nodejs";
+
+import { NextRequest, NextResponse } from "next/server";
 import { getRequester } from "@/lib/requester";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } }
-);
+type EnumValues = string[];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const ctx = await getRequester();
-    if (!ctx.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Will throw Response(401) if not authenticated
+    const ctx = await getRequester(req);
 
-    const [cp, ss, ms] = await Promise.all([
-      supabaseAdmin.rpc("list_company_positions"),
-      supabaseAdmin.rpc("list_staff_subroles"),
-      supabaseAdmin.rpc("list_manager_subroles"),
-    ]);
+    const [{ data: cp, error: cpErr }, { data: ss, error: ssErr }, { data: ms, error: msErr }] =
+      await Promise.all([
+        ctx.admin.rpc<EnumValues>("list_company_positions"),
+        ctx.admin.rpc<EnumValues>("list_staff_subroles"),
+        ctx.admin.rpc<EnumValues>("list_manager_subroles"),
+      ]);
 
-    if (cp.error) throw cp.error;
-    if (ss.error) throw ss.error;
-    if (ms.error) throw ms.error;
+    if (cpErr) throw cpErr;
+    if (ssErr) throw ssErr;
+    if (msErr) throw msErr;
 
     return NextResponse.json({
-      company_positions: cp.data || [],
-      staff_subroles: ss.data || [],
-      manager_subroles: ms.data || [],
+      company_positions: cp ?? [],
+      staff_subroles: ss ?? [],
+      manager_subroles: ms ?? [],
     });
-  } catch (e: any) {
-    console.error(e);
-    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
+  } catch (e: unknown) {
+    if (e instanceof Response) return e;
+    const err = e instanceof Error ? e : new Error("Unexpected error");
+    console.error(err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
