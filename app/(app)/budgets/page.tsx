@@ -150,8 +150,16 @@ async function prepareImageForUpload(
         src = await loadViaImg();
     }
 
-    const w = 'width' in src ? (src as any).width : (src as HTMLImageElement).naturalWidth;
-    const h = 'height' in src ? (src as any).height : (src as HTMLImageElement).naturalHeight;
+    type HasWidth = { width: number };
+    type HasHeight = { height: number };
+
+    const w = 'width' in src
+        ? (src as HasWidth).width
+        : (src as HTMLImageElement).naturalWidth;
+
+    const h = 'height' in src
+        ? (src as HasHeight).height
+        : (src as HTMLImageElement).naturalHeight;
 
     const maxDim = 1280;
     const scale = Math.min(1, maxDim / Math.max(w, h));
@@ -164,7 +172,7 @@ async function prepareImageForUpload(
     const ctx = canvas.getContext('2d', { alpha: false })!;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'medium';
-    // @ts-ignore
+
     ctx.drawImage(src, 0, 0, outW, outH);
 
     const blob: Blob = await new Promise((res, rej) =>
@@ -397,6 +405,9 @@ export default function Page() {
     );
 
     // Load headers, entries and submission status whenever home/week changes
+    // derive a safe dependency for the union-typed `view`
+    const selectedHomeId = view.status === 'ready' ? view.selectedHomeId : null;
+
     useEffect(() => {
         (async () => {
             if (view.status !== 'ready' || !view.selectedHomeId) return;
@@ -469,14 +480,16 @@ export default function Page() {
                 .eq('home_id', view.selectedHomeId)
                 .eq('week_start', weekStart)
                 .maybeSingle();
+
             if (subErr) {
                 console.warn('⚠️ load submission failed', subErr);
                 setSubmission(null);
             } else {
-                setSubmission((subRow as any) ?? null);
+                const submissionRow: Submission | null = (subRow ?? null) as Submission | null;
+                setSubmission(submissionRow);
             }
         })();
-    }, [view.status, view.selectedHomeId, weekStart, prevWeekStart, ensureCurrentHeader, loadWeekHeader]);
+    }, [view.status, selectedHomeId, weekStart, prevWeekStart, ensureCurrentHeader, loadWeekHeader]);
 
     const isAdmin = view.status === 'ready' && view.level === '1_ADMIN';
     const isCompany = view.status === 'ready' && view.level === '2_COMPANY';
@@ -621,17 +634,27 @@ export default function Page() {
         [header, view.status]
     );
 
+    // ✅ Derive safe, narrowed values for deps (avoid union-property access in deps)
+    const selectedHomeIdDep = view.status === 'ready' ? view.selectedHomeId : null;
+    const uidDep = view.status === 'ready' ? view.uid : null;
+    const initialsDep = view.status === 'ready' ? view.initials : '';
+
     const onAddEntry = useCallback(
         async () => {
-            if (view.status !== 'ready' || !view.selectedHomeId) return;
+            // Keep the original guard, but use the derived id for clarity.
+            if (view.status !== 'ready' || !selectedHomeIdDep) return;
+            if (!uidDep) return; // uid exists when status === 'ready'; this is a safe, explicit guard.
 
             const amount = parseMoney(newAmountTxt);
             const ypIn = newKind === 'WITHDRAWAL' ? 0 : parseMoney(newYpCashInTxt);
 
-            const desc = newKind === 'WITHDRAWAL' ? newDesc.trim() || `Withdrawal (card) £${formatMoney(amount)}` : newDesc.trim();
+            const desc =
+                newKind === 'WITHDRAWAL'
+                    ? newDesc.trim() || `Withdrawal (card) £${formatMoney(amount)}`
+                    : newDesc.trim();
 
             const payload: Entry = {
-                home_id: view.selectedHomeId,
+                home_id: selectedHomeIdDep,
                 week_start: weekStart,
                 entry_no: nextEntryNo,
                 date: newDate,
@@ -640,11 +663,15 @@ export default function Page() {
                 amount,
                 yp_cash_in: ypIn,
                 is_withdrawal: newKind === 'WITHDRAWAL',
-                created_by: view.uid,
-                created_by_initials: view.initials,
+                created_by: uidDep,
+                created_by_initials: initialsDep,
             };
 
-            const { data, error } = await supabase.from('budgets_home_entries').insert(payload).select('*').single();
+            const { data, error } = await supabase
+                .from('budgets_home_entries')
+                .insert(payload)
+                .select('*')
+                .single();
 
             if (error) {
                 console.error('❌ insert budgets_home_entries failed', error);
@@ -655,8 +682,9 @@ export default function Page() {
 
             if (newFile) {
                 const res = await uploadReceipt(created, newFile);
-                if (res.ok) {
-                    created = { ...created, receipt_path: res.path! };
+                // ✅ remove non-null assertion; guard path before using it
+                if (res.ok && res.path) {
+                    created = { ...created, receipt_path: res.path };
                 }
             }
 
@@ -671,10 +699,11 @@ export default function Page() {
             setNewFile(null);
         },
         [
+            // ✅ use derived, safely-typed deps instead of `view.selectedHomeId | uid | initials`
             view.status,
-            view.selectedHomeId,
-            view.uid,
-            view.initials,
+            selectedHomeIdDep,
+            uidDep,
+            initialsDep,
             weekStart,
             nextEntryNo,
             newDate,
@@ -688,13 +717,31 @@ export default function Page() {
         ]
     );
 
+
     const updateEntry = useCallback(async (e: Entry, patch: Partial<Entry>) => {
         if (!e.id) return;
-        const normalized: Partial<Entry> = { ...patch };
-        if (typeof normalized.amount === 'string') normalized.amount = parseMoney(normalized.amount as any);
-        if (typeof normalized.yp_cash_in === 'string') normalized.yp_cash_in = parseMoney(normalized.yp_cash_in as any);
 
-        const upd = { ...e, ...normalized };
+        // Normalize possible string inputs to numbers without using `any`
+        const normalized: Partial<Entry> = { ...patch };
+        if (typeof normalized.amount === 'string') {
+            normalized.amount = parseMoney(normalized.amount);
+        }
+        if (typeof normalized.yp_cash_in === 'string') {
+            normalized.yp_cash_in = parseMoney(normalized.yp_cash_in);
+        }
+
+        // Merge only defined fields to keep the final type strictly Entry
+        const upd: Entry = {
+            ...e,
+            ...(normalized.date !== undefined ? { date: normalized.date } : {}),
+            ...(normalized.description !== undefined ? { description: normalized.description } : {}),
+            ...(normalized.method !== undefined ? { method: normalized.method } : {}),
+            ...(normalized.amount !== undefined ? { amount: normalized.amount } : {}),
+            ...(normalized.yp_cash_in !== undefined ? { yp_cash_in: normalized.yp_cash_in } : {}),
+            ...(normalized.is_withdrawal !== undefined ? { is_withdrawal: normalized.is_withdrawal } : {}),
+            ...(normalized.receipt_path !== undefined ? { receipt_path: normalized.receipt_path } : {}),
+        };
+
         setEntries((prev) => prev.map((x) => (x.id === e.id ? upd : x)));
 
         const { error } = await supabase
@@ -715,6 +762,7 @@ export default function Page() {
         }
     }, []);
 
+
     const deleteEntry = useCallback(
         async (e: Entry) => {
             if (!e.id) return;
@@ -723,8 +771,9 @@ export default function Page() {
             if (e.receipt_path) {
                 try {
                     await supabase.storage.from(BUCKET).remove([e.receipt_path]);
-                } catch (er) {
-                    console.warn('⚠️ receipt remove during deleteEntry:', (er as any)?.message || er);
+                } catch (er: unknown) {
+                    const msg = er instanceof Error ? er.message : String(er);
+                    console.warn('⚠️ receipt remove during deleteEntry:', msg);
                 }
             }
 
@@ -740,15 +789,19 @@ export default function Page() {
         [entries]
     );
 
+
     /** ====== Submit current week (Managers only) ====== */
+    // Derive narrowed values once per render (safe for deps)
+
     const submitCurrentWeek = useCallback(async () => {
-        if (view.status !== 'ready' || !view.selectedHomeId) return;
+        if (view.status !== 'ready' || !selectedHomeIdDep || !uidDep) return;
+
         setSubmitting(true);
         try {
             const { data, error } = await supabase
                 .from('budgets_home_submissions')
                 .upsert(
-                    { home_id: view.selectedHomeId, week_start: weekStart, submitted_by: view.uid },
+                    { home_id: selectedHomeIdDep, week_start: weekStart, submitted_by: uidDep },
                     { onConflict: 'home_id,week_start' }
                 )
                 .select('*')
@@ -758,11 +811,14 @@ export default function Page() {
                 console.error('❌ submit failed', error);
                 return;
             }
-            setSubmission(data as Submission);
+
+            const row: Submission = data as Submission;
+            setSubmission(row);
         } finally {
             setSubmitting(false);
         }
-    }, [view.status, view.selectedHomeId, view.uid, weekStart]);
+    }, [view.status, selectedHomeIdDep, uidDep, weekStart]);
+
 
     /** ====== Company tab: load submissions list and selected view ====== */
     const homesForSelectedCompany = useMemo(() => {
@@ -771,12 +827,15 @@ export default function Page() {
         return view.homes.filter((h) => h.company_id === view.selectedCompanyId);
     }, [view]);
 
+    // Narrow union-only fields once per render for safe deps
+    const selectedCompanyIdDep = view.status === 'ready' ? view.selectedCompanyId : null;
+    // Stable ids array for deps
+    const homeIds = useMemo(() => homesForSelectedCompany.map((h) => h.id), [homesForSelectedCompany]);
+
     useEffect(() => {
         (async () => {
-            if (tab !== 'COMPANY' || view.status !== 'ready') return;
-            if (!view.selectedCompanyId) return;
+            if (tab !== 'COMPANY' || !selectedCompanyIdDep) return;
 
-            const homeIds = homesForSelectedCompany.map((h) => h.id);
             if (homeIds.length === 0) {
                 setCompanySubmissions([]);
                 setSelectedCompanySubmission(null);
@@ -784,36 +843,37 @@ export default function Page() {
             }
 
             setLoadingCompanySubs(true);
+            try {
+                // 🔹 Only fetch submissions for the selected week
+                const { data, error } = await supabase
+                    .from('budgets_home_submissions')
+                    .select('*')
+                    .in('home_id', homeIds)
+                    .eq('week_start', companyWeekStart) // ← match the chosen week
+                    .order('submitted_at', { ascending: false });
 
-            // 🔹 Only fetch submissions for the selected week
-            const { data, error } = await supabase
-                .from('budgets_home_submissions')
-                .select('*')
-                .in('home_id', homeIds)
-                .eq('week_start', companyWeekStart) // ← match the chosen week
-                .order('submitted_at', { ascending: false });
+                if (error) {
+                    console.error('❌ load company submissions failed', error);
+                    setCompanySubmissions([]);
+                    return;
+                }
 
-            setLoadingCompanySubs(false);
+                const subs: Submission[] = (data ?? []) as Submission[];
+                setCompanySubmissions(subs);
 
-            if (error) {
-                console.error('❌ load company submissions failed', error);
-                setCompanySubmissions([]);
-                return;
-            }
-
-            const subs = (data ?? []) as Submission[];
-            setCompanySubmissions(subs);
-
-            // 🔹 Auto-select first for convenience
-            if (subs.length) setSelectedCompanySubmission(subs[0]);
-            else {
-                setSelectedCompanySubmission(null);
-                setCompanyViewEntries([]);
-                setCompanyViewHeader(null);
+                // 🔹 Auto-select first for convenience
+                if (subs.length) {
+                    setSelectedCompanySubmission(subs[0]);
+                } else {
+                    setSelectedCompanySubmission(null);
+                    setCompanyViewEntries([]);
+                    setCompanyViewHeader(null);
+                }
+            } finally {
+                setLoadingCompanySubs(false);
             }
         })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tab, view.status, view.selectedCompanyId, companyWeekStart]); // ← add companyWeekStart
+    }, [tab, selectedCompanyIdDep, homeIds, companyWeekStart]);
 
 
     useEffect(() => {
@@ -837,8 +897,11 @@ export default function Page() {
                     .order('entry_no', { ascending: true }),
             ]);
 
-            setCompanyViewHeader((hdr as any) ?? null);
-            setCompanyViewEntries((ents as any) ?? []);
+            const header: WeekHeader | null = (hdr ?? null) as WeekHeader | null;
+            const entries: Entry[] = (ents ?? []) as Entry[];
+
+            setCompanyViewHeader(header);
+            setCompanyViewEntries(entries);
             setLoadingCompanyView(false);
         })();
     }, [selectedCompanySubmission]);
@@ -1105,7 +1168,9 @@ export default function Page() {
                                         <Th className="text-right">YP Cash In</Th>
                                         <Th>Initials</Th>
                                         <Th>Receipt</Th>
-                                        <Th></Th>
+                                        <Th className="text-right">
+                                            <span className="sr-only">Actions</span>
+                                        </Th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white">
@@ -1343,7 +1408,7 @@ export default function Page() {
                                             <label className="block text-xs text-gray-700 mb-1">YP Cash In</label>
                                             <MoneyText value={newYpCashInTxt} onChange={setNewYpCashInTxt} placeholder="£0.00" />
                                             <p className="text-[11px] text-gray-600 mt-1">
-                                                Use when spend should have come from the young person's cash.
+                                                Use when spend should have come from the young persons cash.
                                             </p>
                                         </div>
                                     )}
@@ -1390,25 +1455,25 @@ export default function Page() {
                     )}
                 </>
             ) : tab === 'COMPANY' ? (
-                    <CompanyReviewTab
-                        view={view}
-                        companies={view.companies}
-                        homes={homesForSelectedCompany}
-                        submissions={companySubmissions}
-                        loadingList={loadingCompanySubs}
-                        selected={selectedCompanySubmission}
-                        onSelect={setSelectedCompanySubmission}
-                        header={companyViewHeader}
-                        entries={companyViewEntries}
-                        loadingView={loadingCompanyView}
-                        signUrl={signUrl}
-                        companyWeekStart={companyWeekStart}             // 🔹 NEW
-                        setCompanyWeekStart={setCompanyWeekStart}       // 🔹 NEW
-                    />
+                <CompanyReviewTab
+                    view={view}
+                    companies={view.companies}
+                    homes={homesForSelectedCompany}
+                    submissions={companySubmissions}
+                    loadingList={loadingCompanySubs}
+                    selected={selectedCompanySubmission}
+                    onSelect={setSelectedCompanySubmission}
+                    header={companyViewHeader}
+                    entries={companyViewEntries}
+                    loadingView={loadingCompanyView}
+                    signUrl={signUrl}
+                    companyWeekStart={companyWeekStart}             // 🔹 NEW
+                    setCompanyWeekStart={setCompanyWeekStart}       // 🔹 NEW
+                />
 
             ) : (
                 <div className="text-sm text-gray-700">
-                    The Young People tab will track each young person's balances and transactions. Say the word when you're ready and I'll
+                    The Young People tab will track each young persons balances and transactions. Say the word when you are ready and I will
                     scaffold this to match your process (cash in/out, pocket money, clothing, activities).
                 </div>
             )}
@@ -1701,6 +1766,36 @@ function ReceiptCell({
 }
 
 /** ====== Company review tab (read-only) ====== */
+// Narrow, explicit "ready" view — eliminates `any`
+type ViewReady = {
+    status: 'ready';
+    level: Level;
+    uid: string;
+    initials: string;
+    companies: Company[];
+    homes: Home[];
+    selectedCompanyId: string | null;
+    selectedHomeId: string | null;
+    bankOnly: boolean;
+};
+
+// Props for CompanyReviewTab (includes the NEW week props)
+type CompanyReviewTabProps = {
+    view: ViewReady;
+    companies: Company[];
+    homes: Home[];
+    submissions: Submission[];
+    loadingList: boolean;
+    selected: Submission | null;
+    onSelect: (s: Submission | null) => void;
+    header: WeekHeader | null;
+    entries: Entry[];
+    loadingView: boolean;
+    signUrl: (path: string, ttlSec?: number) => Promise<string | null>;
+    companyWeekStart: string; // ISO date string for the chosen week
+    setCompanyWeekStart: React.Dispatch<React.SetStateAction<string>>;
+};
+
 function CompanyReviewTab({
     view,
     companies,
@@ -1713,31 +1808,9 @@ function CompanyReviewTab({
     entries,
     loadingView,
     signUrl,
-    companyWeekStart,                 // 🔹 NEW
-    setCompanyWeekStart,              // 🔹 NEW
-}: {
-    view: Extract<ReturnType<typeof useState> extends any ? any : never, { status: 'ready' }> extends never ? any : {
-        status: 'ready';
-        level: Level;
-        uid: string;
-        initials: string;
-        companies: Company[];
-        homes: Home[];
-        selectedCompanyId: string | null;
-        selectedHomeId: string | null;
-        bankOnly: boolean;
-    };
-    companies: Company[];
-    homes: Home[];
-    submissions: Submission[];
-    loadingList: boolean;
-    selected: Submission | null;
-    onSelect: (s: Submission | null) => void;
-    header: WeekHeader | null;
-    entries: Entry[];
-    loadingView: boolean;
-    signUrl: (path: string, ttlSec?: number) => Promise<string | null>;
-}) {
+    companyWeekStart,           // ✅ now typed
+    setCompanyWeekStart,        // ✅ now typed
+}: CompanyReviewTabProps) {
     const homeName = useCallback(
         (id: string) => homes.find((h) => h.id === id)?.name ?? id.slice(0, 8),
         [homes]
@@ -1747,7 +1820,12 @@ function CompanyReviewTab({
         if (!header) {
             return computeTotals(entries, 0, 0, 0);
         }
-        return computeTotals(entries, header.cash_carried_forward, header.card_carried_forward, header.budget_issued);
+        return computeTotals(
+            entries,
+            header.cash_carried_forward,
+            header.card_carried_forward,
+            header.budget_issued
+        );
     }, [entries, header]);
 
     return (

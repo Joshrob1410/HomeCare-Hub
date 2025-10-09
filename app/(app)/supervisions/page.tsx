@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel, type AppLevel } from '@/supabase/roles';
 
@@ -38,9 +38,12 @@ type FormQuestion = {
     order_index: number;
     label: string;
     type: QuestionType;
-    options: string[];    // [] for TEXT
+    options: string[]; // [] for TEXT
     required: boolean;
 };
+
+// For editor where questions always have an ID
+type FormQuestionWithId = Omit<FormQuestion, 'id'> & { id: string };
 
 type FormMeta = {
     id: string;
@@ -49,6 +52,15 @@ type FormMeta = {
     is_active: boolean;
     created_at: string;
     updated_at: string;
+};
+
+type AnswerValue = string | string[] | null;
+
+type AnswerUpsert = {
+    supervision_id: string;
+    question_id: string;
+    answer_text: string | null;
+    answer_multi: string[] | null;
 };
 
 /* Utilities */
@@ -65,10 +77,14 @@ function fmtLocalDateTimeInput(d = new Date()) {
 
 function chipTone(status: Supervision['status']) {
     switch (status) {
-        case 'SIGNED': return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
-        case 'ISSUED': return 'bg-amber-50 text-amber-700 ring-amber-100';
-        case 'DRAFT': return 'bg-slate-50 text-slate-700 ring-slate-100';
-        default: return 'bg-rose-50 text-rose-700 ring-rose-100';
+        case 'SIGNED':
+            return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+        case 'ISSUED':
+            return 'bg-amber-50 text-amber-700 ring-amber-100';
+        case 'DRAFT':
+            return 'bg-slate-50 text-slate-700 ring-slate-100';
+        default:
+            return 'bg-rose-50 text-rose-700 ring-rose-100';
     }
 }
 
@@ -112,7 +128,7 @@ export default function SupervisionsPage() {
                     .eq('role', 'STAFF')
                     .eq('staff_subrole', 'TEAM_LEADER')
                     .limit(1);
-                setIsTeamLeader(!!(hm.data && hm.data.length));
+                setIsTeamLeader(Boolean(hm.data && hm.data.length));
             }
         })();
     }, []);
@@ -135,11 +151,21 @@ export default function SupervisionsPage() {
             </header>
 
             <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
-                <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>My Supervisions</TabBtn>
-                {canStart && <TabBtn active={tab === 'START'} onClick={() => setTab('START')}>Start Supervision</TabBtn>}
-                <TabBtn active={tab === 'ACTIVE'} onClick={() => setTab('ACTIVE')}>Active Supervisions</TabBtn>
+                <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>
+                    My Supervisions
+                </TabBtn>
+                {canStart && (
+                    <TabBtn active={tab === 'START'} onClick={() => setTab('START')}>
+                        Start Supervision
+                    </TabBtn>
+                )}
+                <TabBtn active={tab === 'ACTIVE'} onClick={() => setTab('ACTIVE')}>
+                    Active Supervisions
+                </TabBtn>
                 {(isAdmin || isCompany) && (
-                    <TabBtn active={tab === 'FORMS'} onClick={() => setTab('FORMS')}>Form Builder</TabBtn>
+                    <TabBtn active={tab === 'FORMS'} onClick={() => setTab('FORMS')}>
+                        Form Builder
+                    </TabBtn>
                 )}
             </div>
 
@@ -154,15 +180,15 @@ export default function SupervisionsPage() {
                     }}
                 />
             )}
-            {tab === 'ACTIVE' && <ActiveSupervisions forceReveal={forceShowActive} onHandled={() => setForceShowActive(false)} />}
+            {tab === 'ACTIVE' && (
+                <ActiveSupervisions forceReveal={forceShowActive} onHandled={() => setForceShowActive(false)} />
+            )}
             {tab === 'FORMS' && (isAdmin || isCompany) && <FormBuilder />}
         </div>
     );
 }
 
-function TabBtn(
-    props: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
-) {
+function TabBtn(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
     const { active, children, ...rest } = props;
     return (
         <button
@@ -203,7 +229,7 @@ function MySupervisions() {
             .eq('supervisee_id', me)
             .eq('status', 'ISSUED')
             .order('scheduled_for', { ascending: false });
-        if (!p.error) setPending((p.data as any[]) || []);
+        if (!p.error) setPending((p.data as SupervisionV[]) ?? []);
 
         // Completed FOR me
         const fm = await supabase
@@ -213,7 +239,7 @@ function MySupervisions() {
             .eq('status', 'SIGNED')
             .order('scheduled_for', { ascending: false })
             .range(forMeOffset, forMeOffset + PAGE - 1);
-        if (!fm.error) setCForMe((fm.data as any[]) || []);
+        if (!fm.error) setCForMe((fm.data as SupervisionV[]) ?? []);
 
         // Completed BY me
         const bm = await supabase
@@ -223,7 +249,7 @@ function MySupervisions() {
             .eq('status', 'SIGNED')
             .order('scheduled_for', { ascending: false })
             .range(byMeOffset, byMeOffset + PAGE - 1);
-        if (!bm.error) setCByMe((bm.data as any[]) || []);
+        if (!bm.error) setCByMe((bm.data as SupervisionV[]) ?? []);
     }
 
     useEffect(() => {
@@ -261,7 +287,11 @@ function MySupervisions() {
                                     <td className="p-2">{new Date(r.scheduled_for).toLocaleString()}</td>
                                     <td className="p-2">{r.supervisor_name || r.supervisor_id.slice(0, 8)}</td>
                                     <td className="p-2">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${chipTone(r.status)}`}>
+                                        <span
+                                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${chipTone(
+                                                r.status
+                                            )}`}
+                                        >
                                             {r.status === 'ISSUED' ? 'SUBMITTED' : r.status}
                                         </span>
                                     </td>
@@ -276,7 +306,11 @@ function MySupervisions() {
                                 </tr>
                             ))}
                             {pending.length === 0 && (
-                                <tr><td className="p-4 text-gray-500" colSpan={4}>Nothing pending.</td></tr>
+                                <tr>
+                                    <td className="p-4 text-gray-500" colSpan={4}>
+                                        Nothing pending.
+                                    </td>
+                                </tr>
                             )}
                         </tbody>
                     </table>
@@ -332,7 +366,11 @@ function MySupervisions() {
                                 </tr>
                             ))}
                             {cForMe.length === 0 && (
-                                <tr><td className="p-4 text-gray-500" colSpan={3}>No items on this page.</td></tr>
+                                <tr>
+                                    <td className="p-4 text-gray-500" colSpan={3}>
+                                        No items on this page.
+                                    </td>
+                                </tr>
                             )}
                         </tbody>
                     </table>
@@ -388,7 +426,11 @@ function MySupervisions() {
                                 </tr>
                             ))}
                             {cByMe.length === 0 && (
-                                <tr><td className="p-4 text-gray-500" colSpan={3}>No items on this page.</td></tr>
+                                <tr>
+                                    <td className="p-4 text-gray-500" colSpan={3}>
+                                        No items on this page.
+                                    </td>
+                                </tr>
                             )}
                         </tbody>
                     </table>
@@ -400,7 +442,9 @@ function MySupervisions() {
                 <SupervisionEditor
                     supervision={pendingOpen}
                     onClose={() => setPendingOpen(null)}
-                    onSubmitted={() => { }}
+                    onSubmitted={() => {
+                        /* noop in this view */
+                    }}
                     readOnly
                     canAccept
                     onAccepted={async () => {
@@ -412,7 +456,6 @@ function MySupervisions() {
         </div>
     );
 }
-
 
 /* =========================
    START (create DRAFT)
@@ -432,7 +475,7 @@ function StartSupervision({
     const [homes, setHomes] = useState<Home[]>([]);
     const [people, setPeople] = useState<Person[]>([]);
     const [bankPeople, setBankPeople] = useState<Person[]>([]);
-    const [superviseeId, setSuperviseeId] = useState<string>('');        // home pick
+    const [superviseeId, setSuperviseeId] = useState<string>(''); // home pick
     const [bankSuperviseeId, setBankSuperviseeId] = useState<string>(''); // bank pick
     const [scheduledFor, setScheduledFor] = useState<string>(fmtLocalDateTimeInput());
     const [loading, setLoading] = useState(true);
@@ -447,11 +490,18 @@ function StartSupervision({
             // Determine company
             const { data: u } = await supabase.auth.getUser();
             const me = u.user?.id || '';
-            if (!me) { setLoading(false); return; }
+            if (!me) {
+                setLoading(false);
+                return;
+            }
 
             // Get company via membership or manager home → company fallback
             let cid = '';
-            const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', me).maybeSingle();
+            const cm = await supabase
+                .from('company_memberships')
+                .select('company_id')
+                .eq('user_id', me)
+                .maybeSingle();
             if (cm.data?.company_id) cid = cm.data.company_id;
 
             if (!cid) {
@@ -469,18 +519,13 @@ function StartSupervision({
             }
             setCompanyId(cid);
 
-            // Homes in company
             // Homes visible for this user
             if (cid) {
-                // Admin/Company: all homes in company
                 const lvl = await getEffectiveLevel();
                 const asLevel = (lvl as Level) || '4_STAFF';
                 if (asLevel === '1_ADMIN' || asLevel === '2_COMPANY') {
-                    const h = await supabase.from('homes')
-                        .select('id,name,company_id')
-                        .eq('company_id', cid)
-                        .order('name');
-                    setHomes((h.data || []) as any);
+                    const h = await supabase.from('homes').select('id,name,company_id').eq('company_id', cid).order('name');
+                    setHomes(((h.data as Home[]) || []));
                 } else if (asLevel === '3_MANAGER') {
                     // Managers: ONLY homes they are a manager of
                     const myHomes = await supabase
@@ -488,13 +533,12 @@ function StartSupervision({
                         .select('home_id')
                         .eq('user_id', me)
                         .eq('role', 'MANAGER');
-                    const ids = Array.from(new Set((myHomes.data || []).map((r: any) => r.home_id)));
+                    const ids = Array.from(
+                        new Set(((myHomes.data as { home_id: string }[] | null) ?? []).map((r) => r.home_id))
+                    );
                     if (ids.length) {
-                        const h = await supabase.from('homes')
-                            .select('id,name,company_id')
-                            .in('id', ids)
-                            .order('name');
-                        setHomes((h.data || []) as any);
+                        const h = await supabase.from('homes').select('id,name,company_id').in('id', ids).order('name');
+                        setHomes(((h.data as Home[]) || []));
                     } else {
                         setHomes([]);
                     }
@@ -505,7 +549,6 @@ function StartSupervision({
             } else {
                 setHomes([]);
             }
-
 
             // If Team Leader, lock to their current home (pick first)
             if (isTeamLeader) {
@@ -527,41 +570,59 @@ function StartSupervision({
         })();
     }, [isTeamLeader]);
 
-    // Load supervisee list when home changes: only Residential staff in that home
-    // Load supervisee list when home changes: only Residential staff in that home
     // Load candidates (HOME + BANK) when home or company changes
     useEffect(() => {
         (async () => {
             if (!companyId && !homeId) {
-                setPeople([]); setBankPeople([]); return;
+                setPeople([]);
+                setBankPeople([]);
+                return;
             }
             const { data, error } = await supabase.rpc('list_supervision_candidates', {
                 p_home_id: homeId || null,
                 p_company_id: companyId || null,
             });
-            if (error) { console.error(error); setPeople([]); setBankPeople([]); return; }
+            if (error) {
+                console.error(error);
+                setPeople([]);
+                setBankPeople([]);
+                return;
+            }
 
-            const rows = (data as any[]) || [];
-            const me = (await supabase.auth.getUser()).data.user?.id;
+            type CandidateRow = {
+                user_id: string;
+                full_name: string | null;
+                source: 'HOME' | 'BANK';
+            };
+
+            const rows = (data as CandidateRow[]) || [];
+            const { data: u } = await supabase.auth.getUser();
+            const me = u.user?.id;
+
             const homeList: Person[] = rows
-                .filter(r => r.source === 'HOME' && r.user_id !== me)
-                .map(r => ({ id: r.user_id, name: r.full_name || String(r.user_id).slice(0, 8), home_id: homeId || null }));
+                .filter((r) => r.source === 'HOME' && r.user_id !== me)
+                .map((r) => ({
+                    id: r.user_id,
+                    name: r.full_name || String(r.user_id).slice(0, 8),
+                    home_id: homeId || null,
+                }));
 
             const bankList: Person[] = rows
-                .filter(r => r.source === 'BANK' && r.user_id !== me)
-                .map(r => ({ id: r.user_id, name: r.full_name || String(r.user_id).slice(0, 8), home_id: null }));
+                .filter((r) => r.source === 'BANK' && r.user_id !== me)
+                .map((r) => ({
+                    id: r.user_id,
+                    name: r.full_name || String(r.user_id).slice(0, 8),
+                    home_id: null,
+                }));
 
             setPeople(homeList);
             setBankPeople(bankList);
 
             // if the currently selected supervisee is no longer in list, clear it
-            if (superviseeId && !homeList.find(p => p.id === superviseeId)) setSuperviseeId('');
-            if (bankSuperviseeId && !bankList.find(p => p.id === bankSuperviseeId)) setBankSuperviseeId('');
+            if (superviseeId && !homeList.find((p) => p.id === superviseeId)) setSuperviseeId('');
+            if (bankSuperviseeId && !bankList.find((p) => p.id === bankSuperviseeId)) setBankSuperviseeId('');
         })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [homeId, companyId]);
-
-
+    }, [homeId, companyId, superviseeId, bankSuperviseeId]);
 
     async function createDraft() {
         try {
@@ -585,7 +646,7 @@ function StartSupervision({
 
             const ins = await supabase.from('supervisions').insert({
                 company_id: companyId,
-                home_id: homeId || null,        // may be null if using bank staff
+                home_id: homeId || null, // may be null if using bank staff
                 supervisor_id: supervisor,
                 supervisee_id: chosen,
                 scheduled_for: scheduledFor,
@@ -595,8 +656,9 @@ function StartSupervision({
             if (ins.error) throw ins.error;
 
             onCreatedDraft();
-        } catch (e: any) {
-            setErr(e?.message || 'Failed to create supervision.');
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : 'Failed to create supervision.';
+            setErr(message);
         }
     }
 
@@ -616,7 +678,9 @@ function StartSupervision({
                     >
                         <option value="">— Select —</option>
                         {homes.map((h) => (
-                            <option key={h.id} value={h.id}>{h.name}</option>
+                            <option key={h.id} value={h.id}>
+                                {h.name}
+                            </option>
                         ))}
                     </select>
                     {lockingHome && <p className="text-[11px] text-gray-500 mt-1">As a Team Leader, your home is fixed.</p>}
@@ -631,17 +695,17 @@ function StartSupervision({
                             setSuperviseeId(v);
                             if (v) setBankSuperviseeId(''); // enforce mutual exclusivity
                         }}
-                        disabled={!!bankSuperviseeId}        // disable if bank is selected
+                        disabled={!!bankSuperviseeId} // disable if bank is selected
                     >
                         <option value="">— Pick person —</option>
                         {people.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
+                            <option key={p.id} value={p.id}>
+                                {p.name}
+                            </option>
                         ))}
                     </select>
                     {!!bankSuperviseeId && (
-                        <p className="text-[11px] text-amber-700 mt-1">
-                            Bank staff selected; clear it to pick a home member.
-                        </p>
+                        <p className="text-[11px] text-amber-700 mt-1">Bank staff selected; clear it to pick a home member.</p>
                     )}
                 </div>
                 {canPickBank && (
@@ -655,15 +719,18 @@ function StartSupervision({
                                 setBankSuperviseeId(v);
                                 if (v) setSuperviseeId(''); // enforce mutual exclusivity
                             }}
-                            disabled={!!superviseeId}         // disable if home member is selected
+                            disabled={!!superviseeId} // disable if home member is selected
                         >
                             <option value="">— (optional) Pick bank person —</option>
                             {bankPeople.map((p) => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
+                                <option key={p.id} value={p.id}>
+                                    {p.name}
+                                </option>
                             ))}
                         </select>
                         <p className="text-[11px] text-gray-500 mt-1">
-                            You can pick bank staff regardless of the selected home. You cannot pick both a bank staff member and a home member.
+                            You can pick bank staff regardless of the selected home. You cannot pick both a bank staff member and a home
+                            member.
                         </p>
                         {!!superviseeId && (
                             <p className="text-[11px] text-amber-700 mt-1">
@@ -713,7 +780,11 @@ function ActiveSupervisions({
             setLoading(true);
             const { data: u } = await supabase.auth.getUser();
             const me = u.user?.id || '';
-            if (!me) { setRows([]); setLoading(false); return; }
+            if (!me) {
+                setRows([]);
+                setLoading(false);
+                return;
+            }
 
             // Active = not SIGNED, not CANCELLED
             const list = await supabase
@@ -723,7 +794,7 @@ function ActiveSupervisions({
                 .not('status', 'in', ['("SIGNED")', '("CANCELLED")'])
                 .order('scheduled_for', { ascending: false });
 
-            if (!list.error) setRows((list.data as any[]) || []);
+            if (!list.error) setRows(((list.data as SupervisionV[]) || []));
             else setRows([]);
             setLoading(false);
 
@@ -756,7 +827,11 @@ function ActiveSupervisions({
                                     <td className="p-2">{r.home_name ?? '—'}</td>
                                     <td className="p-2">{r.supervisee_name ?? r.supervisee_id.slice(0, 8)}</td>
                                     <td className="p-2">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${chipTone(r.status)}`}>
+                                        <span
+                                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${chipTone(
+                                                r.status
+                                            )}`}
+                                        >
                                             {r.status === 'ISSUED' ? 'SUBMITTED' : r.status}
                                         </span>
                                     </td>
@@ -772,7 +847,7 @@ function ActiveSupervisions({
                                             <div className="flex gap-2">
                                                 <button
                                                     className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                                                    onClick={() => setOpenId(r.id)}   // opens read-only view
+                                                    onClick={() => setOpenId(r.id)} // opens read-only view
                                                 >
                                                     View
                                                 </button>
@@ -795,9 +870,10 @@ function ActiveSupervisions({
                                                                 .eq('supervisor_id', me)
                                                                 .not('status', 'in', ['("SIGNED")', '("CANCELLED")'])
                                                                 .order('scheduled_for', { ascending: false });
-                                                            if (!list.error) setRows((list.data as any[]) || []);
-                                                        } catch (e: any) {
-                                                            alert(e?.message || 'Failed to withdraw.');
+                                                            if (!list.error) setRows(((list.data as SupervisionV[]) || []));
+                                                        } catch (e: unknown) {
+                                                            const msg = e instanceof Error ? e.message : 'Failed to withdraw.';
+                                                            alert(msg);
                                                         }
                                                     }}
                                                 >
@@ -837,7 +913,7 @@ function ActiveSupervisions({
                             .eq('supervisor_id', me)
                             .not('status', 'in', ['("SIGNED")', '("CANCELLED")'])
                             .order('scheduled_for', { ascending: false });
-                        if (!list.error) setRows((list.data as any[]) || []);
+                        if (!list.error) setRows(((list.data as SupervisionV[]) || []));
                     }}
                     // NEW: lock when not a draft
                     readOnly={selected.status !== 'DRAFT'}
@@ -855,9 +931,9 @@ function SupervisionEditor({
     supervision,
     onClose,
     onSubmitted,
-    readOnly = false,         // NEW
-    canAccept = false,        // NEW (only for supervisee view)
-    onAccepted,               // NEW (callback after accept)
+    readOnly = false, // NEW
+    canAccept = false, // NEW (only for supervisee view)
+    onAccepted, // NEW (callback after accept)
 }: {
     supervision: SupervisionV;
     onClose: () => void;
@@ -868,8 +944,8 @@ function SupervisionEditor({
 }) {
     const [companyId, setCompanyId] = useState<string>('');
     const [form, setForm] = useState<FormMeta | null>(null);
-    const [questions, setQuestions] = useState<FormQuestion[]>([]);
-    const [answers, setAnswers] = useState<Map<string, any>>(new Map()); // question_id -> value(s)
+    const [questions, setQuestions] = useState<FormQuestionWithId[]>([]);
+    const [answers, setAnswers] = useState<Map<string, AnswerValue>>(new Map()); // question_id -> value(s)
 
     const [err, setErr] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -898,7 +974,7 @@ function SupervisionEditor({
                     setErr('No active supervision form found for this company.');
                     return;
                 }
-                setForm(f.data as any);
+                setForm(f.data as FormMeta);
 
                 const qs = await supabase
                     .from('supervision_form_questions')
@@ -908,38 +984,47 @@ function SupervisionEditor({
 
                 if (qs.error) throw qs.error;
 
-                const mapped: FormQuestion[] = (qs.data || []).map((q: any) => ({
+                const mapped: FormQuestionWithId[] = ((qs.data as Array<{
+                    id: string;
+                    order_index: number;
+                    label: string;
+                    type: QuestionType;
+                    options: string[] | null;
+                    required: boolean | null;
+                }>) || []).map((q) => ({
                     id: q.id,
                     order_index: q.order_index,
                     label: q.label,
                     type: (q.type as QuestionType) || 'TEXT',
-                    options: (q.options as string[]) || [],
-                    required: !!q.required,
+                    options: (q.options as string[] | null) ?? [],
+                    required: Boolean(q.required),
                 }));
                 setQuestions(mapped);
 
                 // Load previous answers if table exists
-                const a = await supabase
-                    .from('supervision_answers')
-                    .select('*')
-                    .eq('supervision_id', supervision.id);
+                const a = await supabase.from('supervision_answers').select('*').eq('supervision_id', supervision.id);
 
                 if (!a.error && a.data) {
-                    const m = new Map<string, any>();
-                    (a.data as any[]).forEach((row) => {
+                    const m = new Map<string, AnswerValue>();
+                    (a.data as Array<{
+                        question_id: string | null;
+                        answer_text: string | null;
+                        answer_multi: string[] | null;
+                    }>).forEach((row) => {
                         if (row.question_id && (row.answer_text || row.answer_multi)) {
                             m.set(row.question_id, row.answer_multi ?? row.answer_text ?? '');
                         }
                     });
                     setAnswers(m);
                 }
-            } catch (e: any) {
-                setErr(e?.message || 'Failed to load form.');
+            } catch (e: unknown) {
+                const message = e instanceof Error ? e.message : 'Failed to load form.';
+                setErr(message);
             }
         })();
     }, [supervision]);
 
-    function setAnswer(qid: string, val: any) {
+    function setAnswer(qid: string, val: AnswerValue) {
         setAnswers((prev) => {
             const m = new Map(prev);
             m.set(qid, val);
@@ -947,27 +1032,35 @@ function SupervisionEditor({
         });
     }
 
+    async function upsertAnswers(statusAfter: 'DRAFT' | 'ISSUED') {
+        if (!form) return;
+        // Upsert each answer (table optional)
+        for (const q of questions) {
+            const val = answers.get(q.id);
+            const payload: AnswerUpsert = {
+                supervision_id: supervision.id,
+                question_id: q.id,
+                answer_text: q.type === 'TEXT' ? ((val as string | null) ?? null) : null,
+                answer_multi: q.type !== 'TEXT' ? (Array.isArray(val) ? (val as string[]) : val ? [val as string] : []) : null,
+            };
+            // `onConflict` typing is not exposed by supabase-js; cast arguments object to unknown
+            await supabase.from('supervision_answers').upsert(payload as unknown as Record<string, unknown>, {
+                onConflict: 'supervision_id,question_id',
+            } as unknown as undefined);
+        }
+        await supabase.from('supervisions').update({ status: statusAfter }).eq('id', supervision.id);
+    }
+
     async function saveDraft() {
         if (!form) return;
         setSaving(true);
         setErr(null);
         try {
-            // Upsert each answer (table optional)
-            for (const q of questions) {
-                const val = answers.get(q.id as string);
-                const payload: any = {
-                    supervision_id: supervision.id,
-                    question_id: q.id,
-                    answer_text: q.type === 'TEXT' ? (val ?? null) : null,
-                    answer_multi: q.type !== 'TEXT' ? (Array.isArray(val) ? val : (val ? [val] : [])) : null,
-                };
-                await supabase.from('supervision_answers').upsert(payload, { onConflict: 'supervision_id,question_id' } as any);
-            }
-            // Ensure status remains DRAFT
-            await supabase.from('supervisions').update({ status: 'DRAFT' }).eq('id', supervision.id);
+            await upsertAnswers('DRAFT');
             onClose();
-        } catch (e: any) {
-            setErr(e?.message || 'Failed to save draft (ensure tables exist).');
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : 'Failed to save draft (ensure tables exist).';
+            setErr(message);
         } finally {
             setSaving(false);
         }
@@ -981,7 +1074,7 @@ function SupervisionEditor({
             // Basic required validation
             for (const q of questions) {
                 if (q.required) {
-                    const v = answers.get(q.id as string);
+                    const v = answers.get(q.id);
                     if (q.type === 'TEXT') {
                         if (!v || !String(v).trim()) throw new Error(`Please answer: ${q.label}`);
                     } else if (q.type === 'SINGLE') {
@@ -992,25 +1085,13 @@ function SupervisionEditor({
                 }
             }
 
-            // Upsert answers
-            for (const q of questions) {
-                const val = answers.get(q.id as string);
-                const payload: any = {
-                    supervision_id: supervision.id,
-                    question_id: q.id,
-                    answer_text: q.type === 'TEXT' ? (val ?? null) : null,
-                    answer_multi: q.type !== 'TEXT' ? (Array.isArray(val) ? val : (val ? [val] : [])) : null,
-                };
-                await supabase.from('supervision_answers').upsert(payload, { onConflict: 'supervision_id,question_id' } as any);
-            }
-
-            // Move to ISSUED (supervisee will see it in their list to Sign)
-            await supabase.from('supervisions').update({ status: 'ISSUED' }).eq('id', supervision.id);
+            await upsertAnswers('ISSUED');
 
             onClose();
             onSubmitted();
-        } catch (e: any) {
-            setErr(e?.message || 'Failed to submit supervision.');
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : 'Failed to submit supervision.';
+            setErr(message);
         } finally {
             setSaving(false);
         }
@@ -1020,12 +1101,16 @@ function SupervisionEditor({
         <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4">
             <div className="flex items-start justify-between">
                 <div>
-                    <h3 className="text-base font-semibold">Supervision: {supervision.supervisee_name ?? supervision.supervisee_id.slice(0, 8)}</h3>
+                    <h3 className="text-base font-semibold">
+                        Supervision: {supervision.supervisee_name ?? supervision.supervisee_id.slice(0, 8)}
+                    </h3>
                     <p className="text-xs text-gray-500">
                         Scheduled for {new Date(supervision.scheduled_for).toLocaleString()}
                     </p>
                 </div>
-                <button onClick={onClose} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">Close</button>
+                <button onClick={onClose} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">
+                    Close
+                </button>
             </div>
 
             {!form ? (
@@ -1042,24 +1127,24 @@ function SupervisionEditor({
                                 <textarea
                                     className="w-full border rounded-lg px-3 py-2"
                                     rows={3}
-                                    value={answers.get(q.id as string) ?? ''}
-                                    // NEW
+                                    value={(answers.get(q.id) as string) ?? ''}
                                     disabled={readOnly}
-                                    onChange={(e) => setAnswer(q.id as string, e.target.value)}
+                                    onChange={(e) => setAnswer(q.id, e.target.value)}
                                 />
                             )}
 
                             {q.type === 'SINGLE' && (
                                 <select
                                     className="w-full border rounded-lg px-3 py-2"
-                                    value={answers.get(q.id as string) ?? ''}
-                                    // NEW
+                                    value={(answers.get(q.id) as string) ?? ''}
                                     disabled={readOnly}
-                                    onChange={(e) => setAnswer(q.id as string, e.target.value)}
+                                    onChange={(e) => setAnswer(q.id, e.target.value)}
                                 >
                                     <option value="">— Select —</option>
                                     {q.options.map((opt, i) => (
-                                        <option key={i} value={opt}>{opt}</option>
+                                        <option key={i} value={opt}>
+                                            {opt}
+                                        </option>
                                     ))}
                                 </select>
                             )}
@@ -1067,19 +1152,23 @@ function SupervisionEditor({
                             {q.type === 'MULTI' && (
                                 <div className="flex flex-wrap gap-2">
                                     {q.options.map((opt, i) => {
-                                        const picked: string[] = (answers.get(q.id as string) as string[]) || [];
+                                        const picked: string[] = (answers.get(q.id) as string[]) || [];
                                         const checked = picked.includes(opt);
                                         return (
-                                            <label key={i} className={`inline-flex items-center gap-2 border rounded-lg px-3 py-1 text-sm ${checked ? 'bg-indigo-50 border-indigo-200' : ''}`}>
+                                            <label
+                                                key={i}
+                                                className={`inline-flex items-center gap-2 border rounded-lg px-3 py-1 text-sm ${checked ? 'bg-indigo-50 border-indigo-200' : ''
+                                                    }`}
+                                            >
                                                 <input
                                                     type="checkbox"
                                                     checked={checked}
-                                                    // NEW
                                                     disabled={readOnly}
                                                     onChange={() => {
                                                         const next = new Set(picked);
-                                                        if (checked) next.delete(opt); else next.add(opt);
-                                                        setAnswer(q.id as string, Array.from(next));
+                                                        if (checked) next.delete(opt);
+                                                        else next.add(opt);
+                                                        setAnswer(q.id, Array.from(next));
                                                     }}
                                                 />
                                                 <span>{opt}</span>
@@ -1091,59 +1180,65 @@ function SupervisionEditor({
                         </div>
                     ))}
 
-                        {err && <p className="text-sm text-rose-600">{err}</p>}
+                    {err && <p className="text-sm text-rose-600">{err}</p>}
 
-                        {readOnly ? (
-                            <div className="flex gap-2">
-                                {canAccept && supervision.status === 'ISSUED' && (
-                                    <button
-                                        className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
-                                        onClick={async () => {
-                                            try {
-                                                const { data: u } = await supabase.auth.getUser();
-                                                const me = u.user?.id;
-                                                if (!me) return;
-
-                                                // Record the supervisee signoff
-                                                const ins = await supabase
-                                                    .from('supervision_signoffs')
-                                                    .insert({ supervision_id: supervision.id, signed_by: me });
-                                                if (ins.error) throw ins.error;
-
-                                                // Finalize
-                                                const fin = await supabase
-                                                    .from('supervisions')
-                                                    .update({ status: 'SIGNED' })
-                                                    .eq('id', supervision.id);
-                                                if (fin.error) throw fin.error;
-
-                                                onClose();
-                                                onAccepted && onAccepted();
-                                            } catch (e: any) {
-                                                alert(e?.message || 'Failed to accept supervision.');
-                                            }
-                                        }}
-                                    >
-                                        Accept &amp; Sign
-                                    </button>
-                                )}
+                    {readOnly ? (
+                        <div className="flex gap-2">
+                            {canAccept && supervision.status === 'ISSUED' && (
                                 <button
-                                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
-                                    onClick={onClose}
+                                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                    onClick={async () => {
+                                        try {
+                                            const { data: u } = await supabase.auth.getUser();
+                                            const me = u.user?.id;
+                                            if (!me) return;
+
+                                            // Record the supervisee signoff
+                                            const ins = await supabase
+                                                .from('supervision_signoffs')
+                                                .insert({ supervision_id: supervision.id, signed_by: me });
+                                            if (ins.error) throw ins.error;
+
+                                            // Finalize
+                                            const fin = await supabase
+                                                .from('supervisions')
+                                                .update({ status: 'SIGNED' })
+                                                .eq('id', supervision.id);
+                                            if (fin.error) throw fin.error;
+
+                                            onClose();
+                                            onAccepted && onAccepted();
+                                        } catch (e: unknown) {
+                                            const msg = e instanceof Error ? e.message : 'Failed to accept supervision.';
+                                            alert(msg);
+                                        }
+                                    }}
                                 >
-                                    Close
+                                    Accept &amp; Sign
                                 </button>
-                            </div>
-                        ) : (
-                            <div className="flex gap-2">
-                                <button className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60" onClick={saveDraft} disabled={saving}>
-                                    {saving ? 'Saving…' : 'Save draft'}
-                                </button>
-                                <button className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60" onClick={submit} disabled={saving}>
-                                    {saving ? 'Submitting…' : 'Submit'}
-                                </button>
-                            </div>
-                        )}
+                            )}
+                            <button className="rounded border px-3 py-2 text-sm hover:bg-gray-50" onClick={onClose}>
+                                Close
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex gap-2">
+                            <button
+                                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                onClick={saveDraft}
+                                disabled={saving}
+                            >
+                                {saving ? 'Saving…' : 'Save draft'}
+                            </button>
+                            <button
+                                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                onClick={submit}
+                                disabled={saving}
+                            >
+                                {saving ? 'Submitting…' : 'Submit'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
@@ -1180,11 +1275,15 @@ function FormBuilder() {
 
                 if (isAdmin) {
                     const co = await supabase.from('companies').select('id,name').order('name');
-                    setCompanies((co.data || []) as any);
+                    setCompanies(((co.data as { id: string; name: string }[]) || []));
                     if (!companyId && co.data?.[0]?.id) setCompanyId(co.data[0].id);
                 } else {
                     // company via membership
-                    const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', me).maybeSingle();
+                    const cm = await supabase
+                        .from('company_memberships')
+                        .select('company_id')
+                        .eq('user_id', me)
+                        .maybeSingle();
                     const cid = cm.data?.company_id || '';
                     setCompanyId(cid);
                 }
@@ -1192,19 +1291,22 @@ function FormBuilder() {
                 setLoading(false);
             }
         })();
-    }, []);
+    }, [companyId]);
 
     // List forms when company changes
     useEffect(() => {
         (async () => {
-            if (!companyId) { setForms([]); return; }
+            if (!companyId) {
+                setForms([]);
+                return;
+            }
             const f = await supabase
                 .from('supervision_forms')
                 .select('*')
                 .eq('company_id', companyId)
                 .order('created_at', { ascending: false });
 
-            if (!f.error) setForms((f.data || []) as any);
+            if (!f.error) setForms(((f.data as FormMeta[]) || []));
             else setForms([]);
         })();
     }, [companyId]);
@@ -1221,21 +1323,35 @@ function FormBuilder() {
     }
 
     async function saveForm() {
-        if (!companyId || !name.trim()) { setErr('Enter a name and choose a company.'); return; }
+        if (!companyId || !name.trim()) {
+            setErr('Enter a name and choose a company.');
+            return;
+        }
         setSaving(true);
         setErr(null);
         try {
-            const f = await supabase.from('supervision_forms').insert({
-                company_id: companyId,
-                name: name.trim(),
-                is_active: false,
-            }).select('*').single();
+            const f = await supabase
+                .from('supervision_forms')
+                .insert({
+                    company_id: companyId,
+                    name: name.trim(),
+                    is_active: false,
+                })
+                .select('*')
+                .single();
 
             if (f.error) throw f.error;
 
             // Save questions
             for (const q of qs) {
-                const row = {
+                const row: {
+                    form_id: string;
+                    order_index: number;
+                    label: string;
+                    type: QuestionType;
+                    options: string[];
+                    required: boolean;
+                } = {
                     form_id: f.data.id,
                     order_index: q.order_index,
                     label: q.label || '',
@@ -1248,13 +1364,18 @@ function FormBuilder() {
             }
 
             // refresh
-            const list = await supabase.from('supervision_forms').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
-            if (!list.error) setForms((list.data || []) as any);
+            const list = await supabase
+                .from('supervision_forms')
+                .select('*')
+                .eq('company_id', companyId)
+                .order('created_at', { ascending: false });
+            if (!list.error) setForms(((list.data as FormMeta[]) || []));
 
             setName('');
             setQs([{ order_index: 1, label: 'How are things going?', type: 'TEXT', options: [], required: true }]);
-        } catch (e: any) {
-            setErr(e?.message || 'Failed to save form (ensure tables exist).');
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : 'Failed to save form (ensure tables exist).';
+            setErr(message);
         } finally {
             setSaving(false);
         }
@@ -1264,10 +1385,19 @@ function FormBuilder() {
         if (!companyId) return;
         // Set selected active, unset others
         await supabase.from('supervision_forms').update({ is_active: false }).eq('company_id', companyId);
-        const upd = await supabase.from('supervision_forms').update({ is_active: true }).eq('id', formId).select('*').single();
+        const upd = await supabase
+            .from('supervision_forms')
+            .update({ is_active: true })
+            .eq('id', formId)
+            .select('*')
+            .single();
         if (!upd.error) {
-            const list = await supabase.from('supervision_forms').select('*').eq('company_id', companyId).order('created_at', { ascending: false });
-            if (!list.error) setForms((list.data || []) as any);
+            const list = await supabase
+                .from('supervision_forms')
+                .select('*')
+                .eq('company_id', companyId)
+                .order('created_at', { ascending: false });
+            if (!list.error) setForms(((list.data as FormMeta[]) || []));
         }
     }
 
@@ -1282,8 +1412,16 @@ function FormBuilder() {
                     <div className="sm:col-span-1">
                         <label className="block text-sm mb-1">Company</label>
                         {companies.length > 0 ? (
-                            <select className="w-full border rounded-lg px-3 py-2" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-                                {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            <select
+                                className="w-full border rounded-lg px-3 py-2"
+                                value={companyId}
+                                onChange={(e) => setCompanyId(e.target.value)}
+                            >
+                                {companies.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name}
+                                    </option>
+                                ))}
                             </select>
                         ) : (
                             <input className="w-full border rounded-lg px-3 py-2 bg-gray-50" value="(Your company)" readOnly />
@@ -1291,14 +1429,21 @@ function FormBuilder() {
                     </div>
                     <div className="sm:col-span-2">
                         <label className="block text-sm mb-1">Form name</label>
-                        <input className="w-full border rounded-lg px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Standard Supervision v1" />
+                        <input
+                            className="w-full border rounded-lg px-3 py-2"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g. Standard Supervision v1"
+                        />
                     </div>
                 </div>
 
                 <div className="mt-4 space-y-3">
                     <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold">Questions</h3>
-                        <button onClick={addQuestion} className="rounded border px-3 py-1.5 text-sm hover:bg-gray-50">Add question</button>
+                        <button onClick={addQuestion} className="rounded border px-3 py-1.5 text-sm hover:bg-gray-50">
+                            Add question
+                        </button>
                     </div>
 
                     <div className="space-y-2">
@@ -1307,14 +1452,23 @@ function FormBuilder() {
                                 <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
                                     <div className="sm:col-span-4">
                                         <label className="block text-sm mb-1">Question text</label>
-                                        <input className="w-full border rounded-lg px-3 py-2" value={q.label} onChange={(e) => updQuestion(idx, { label: e.target.value })} />
+                                        <input
+                                            className="w-full border rounded-lg px-3 py-2"
+                                            value={q.label}
+                                            onChange={(e) => updQuestion(idx, { label: e.target.value })}
+                                        />
                                     </div>
                                     <div>
                                         <label className="block text-sm mb-1">Type</label>
                                         <select
                                             className="w-full border rounded-lg px-3 py-2"
                                             value={q.type}
-                                            onChange={(e) => updQuestion(idx, { type: e.target.value as QuestionType, options: e.target.value === 'TEXT' ? [] : q.options })}
+                                            onChange={(e) =>
+                                                updQuestion(idx, {
+                                                    type: e.target.value as QuestionType,
+                                                    options: e.target.value === 'TEXT' ? [] : q.options,
+                                                })
+                                            }
                                         >
                                             <option value="TEXT">Written answer</option>
                                             <option value="SINGLE">Single select</option>
@@ -1323,7 +1477,11 @@ function FormBuilder() {
                                     </div>
                                     <div className="flex items-end">
                                         <label className="inline-flex items-center gap-2 text-sm">
-                                            <input type="checkbox" checked={q.required} onChange={(e) => updQuestion(idx, { required: e.target.checked })} />
+                                            <input
+                                                type="checkbox"
+                                                checked={q.required}
+                                                onChange={(e) => updQuestion(idx, { required: e.target.checked })}
+                                            />
                                             <span>Required</span>
                                         </label>
                                     </div>
@@ -1332,22 +1490,28 @@ function FormBuilder() {
                                 {q.type !== 'TEXT' && (
                                     <div className="mt-2">
                                         <label className="block text-sm mb-1">Options</label>
-                                        <OptionsEditor
-                                            options={q.options}
-                                            onChange={(opts) => updQuestion(idx, { options: opts })}
-                                        />
+                                        <OptionsEditor options={q.options} onChange={(opts) => updQuestion(idx, { options: opts })} />
                                     </div>
                                 )}
 
                                 <div className="mt-2">
-                                    <button className="rounded border px-2 py-1 text-xs hover:bg-gray-50" onClick={() => delQuestion(idx)}>Remove</button>
+                                    <button
+                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                        onClick={() => delQuestion(idx)}
+                                    >
+                                        Remove
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
 
                     <div>
-                        <button onClick={saveForm} className="rounded border px-3 py-2 text-sm hover:bg-gray-50" disabled={saving}>
+                        <button
+                            onClick={saveForm}
+                            className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
+                            disabled={saving}
+                        >
                             {saving ? 'Saving…' : 'Save form'}
                         </button>
                         {err && <span className="ml-3 text-sm text-rose-600">{err}</span>}
@@ -1375,7 +1539,12 @@ function FormBuilder() {
                                     <td className="p-2">{f.is_active ? 'Yes' : 'No'}</td>
                                     <td className="p-2">
                                         {!f.is_active ? (
-                                            <button className="rounded border px-2 py-1 text-xs hover:bg-gray-50" onClick={() => setActive(f.id)}>Set active</button>
+                                            <button
+                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                onClick={() => setActive(f.id)}
+                                            >
+                                                Set active
+                                            </button>
                                         ) : (
                                             <span className="text-gray-500 text-xs">Current active</span>
                                         )}
@@ -1383,7 +1552,11 @@ function FormBuilder() {
                                 </tr>
                             ))}
                             {(!forms || forms.length === 0) && (
-                                <tr><td className="p-4 text-gray-500" colSpan={3}>No forms yet.</td></tr>
+                                <tr>
+                                    <td className="p-4 text-gray-500" colSpan={3}>
+                                        No forms yet.
+                                    </td>
+                                </tr>
                             )}
                         </tbody>
                     </table>
@@ -1404,7 +1577,12 @@ function OptionsEditor({
     return (
         <div className="space-y-2">
             <div className="flex gap-2">
-                <input className="flex-1 border rounded-lg px-3 py-2" value={val} onChange={(e) => setVal(e.target.value)} placeholder="Add option…" />
+                <input
+                    className="flex-1 border rounded-lg px-3 py-2"
+                    value={val}
+                    onChange={(e) => setVal(e.target.value)}
+                    placeholder="Add option…"
+                />
                 <button
                     type="button"
                     className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
@@ -1420,7 +1598,10 @@ function OptionsEditor({
             </div>
             <div className="flex flex-wrap gap-2">
                 {options.map((o, i) => (
-                    <span key={i} className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs bg-gray-50">
+                    <span
+                        key={i}
+                        className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs bg-gray-50"
+                    >
                         {o}
                         <button
                             type="button"

@@ -1,5 +1,6 @@
 // app/(app)/_components/Sidebar.tsx
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { getServerSupabase } from "@/supabase/server";
 
 /**
@@ -23,8 +24,8 @@ export default async function Sidebar() {
 
     if (user) {
         // 1) Effective level (via secured SQL function in your schema)
-        const { data: lvlData } = await supabase.rpc<string>("get_effective_level");
-        const raw = (lvlData ?? "").toString();
+        const { data: lvlData } = await supabase.rpc("get_effective_level");
+        const raw: string = typeof lvlData === "string" ? lvlData : "";
         level =
             raw === "1_ADMIN"
                 ? "1_ADMIN"
@@ -116,9 +117,7 @@ export default async function Sidebar() {
                         <Item href="/rotas" label="Rotas" icon={<IconRota />} tone="fuchsia" />
                         <Item href="/timesheets" label="Timesheets" icon={<IconClock />} tone="cyan" />
                         <Item href="/annual-leave" label="Annual leave" icon={<IconLeave />} tone="rose" />
-                        {showBudgets && (
-                            <Item href="/budgets" label="Budgets" icon={<IconBudget />} tone="emerald" />
-                        )}
+                        {showBudgets && <Item href="/budgets" label="Budgets" icon={<IconBudget />} tone="emerald" />}
                         <Item href="/supervisions" label="Supervisions" icon={<IconSupervision />} tone="sky" />
                         <Item href="/payslips" label="Payslips" icon={<IconPayslip />} tone="teal" />
                         {showAppointments && (
@@ -164,7 +163,7 @@ export default async function Sidebar() {
 /* --------------------------
    Building blocks
 --------------------------- */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
     return (
         <div className="space-y-2">
             <div className="px-1 flex items-center gap-2">
@@ -197,7 +196,7 @@ function Item({
 }: {
     href: string;
     label: string;
-    icon: React.ReactNode;
+    icon: ReactNode;
     tone?: Tone;
 }) {
     const t = getTone(tone);
@@ -403,16 +402,6 @@ function IconLeave() {
             <rect x="4" y="7" width="16" height="14" rx="2" />
             <path d="M8 12h5M14 16h2" />
             <path d="M6 18l3-3" />
-        </svg>
-    );
-}
-function IconUsers() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.6">
-            <circle cx="9" cy="7" r="3" />
-            <path d="M2 21v-1a6 6 0 0 1 6-6h2" />
-            <circle cx="17" cy="11" r="3" />
-            <path d="M22 21v-1a6 6 0 0 0-6-6h-1" />
         </svg>
     );
 }

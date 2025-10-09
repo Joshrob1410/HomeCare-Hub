@@ -250,16 +250,19 @@ function WeekStrip() {
             const monthFirsts = Array.from(new Set(weekDates.map(monthFirstISO)));
 
             // 1) Get LIVE rotas for the months in this week — include month_date
+            // 1) Get LIVE rotas for the months in this week — include month_date
             const ro = await supabase
                 .from('rotas')
                 .select('id, month_date')
                 .in('month_date', monthFirsts)
                 .eq('status', 'LIVE');
 
-            const rotaRows = ro.error ? [] : (ro.data || []);
-            const rotaIds: string[] = rotaRows.map((r: any) => r.id);
+            type RotaRow = { id: string; month_date: string };
+
+            const rotaRows: RotaRow[] = ro.error ? [] : ((ro.data ?? []) as RotaRow[]);
+            const rotaIds: string[] = rotaRows.map((r) => r.id);
             const rotaMonthById = new Map<string, string>();
-            rotaRows.forEach((r: any) => rotaMonthById.set(r.id, r.month_date));
+            rotaRows.forEach((r) => rotaMonthById.set(r.id, r.month_date));
 
             // 2) My entries for those rotas + day numbers — include rota_id
             const hasByMonthDay = new Set<string>(); // key: `${month_date}:${day}`
@@ -271,11 +274,14 @@ function WeekStrip() {
                     .eq('user_id', me)
                     .in('day_of_month', dayNos);
 
-                if (!re.error) {
-                    (re.data as any[]).forEach(r => {
+                type RotaEntryLite = { rota_id: string; day_of_month: number };
+
+                if (!re.error && Array.isArray(re.data)) {
+                    const entries = re.data as RotaEntryLite[];
+                    for (const r of entries) {
                         const m = rotaMonthById.get(r.rota_id);
                         if (m) hasByMonthDay.add(`${m}:${r.day_of_month}`);
-                    });
+                    }
                 }
             }
 
@@ -421,8 +427,14 @@ function TasksPanel() {
             let mySessionIds: string[] = [];
             const myByStatus = new Map<string, string>();
             if (!sa.error) {
-                mySessionIds = (sa.data || []).map((r: any) => r.session_id);
-                (sa.data || []).forEach((r: any) => myByStatus.set(r.session_id, r.status));
+                type SessionAssignment = {
+                    session_id: string;
+                    status: string;
+                };
+
+                const sessionAssignments: SessionAssignment[] = (sa.data ?? []) as SessionAssignment[];
+                mySessionIds = sessionAssignments.map((r) => r.session_id);
+                sessionAssignments.forEach((r) => myByStatus.set(r.session_id, r.status));
             }
 
             if (mySessionIds.length) {
@@ -433,16 +445,25 @@ function TasksPanel() {
                     .gte('starts_at', todayIso) // date comparison is fine; PG will cast
                     .lte('starts_at', cut14Iso);
 
+                type SessionRow = {
+                    id: string;
+                    title: string | null;
+                    starts_at: string;
+                    location: string | null;
+                };
+
                 if (!ss.error) {
-                    const sitems: SessionItem[] = (ss.data || [])
-                        .map((s: any) => ({
+                    const rows: SessionRow[] = (ss.data ?? []) as SessionRow[];
+                    const sitems: SessionItem[] = rows
+                        .map((s) => ({
                             id: s.id,
-                            title: s.title ?? null,
+                            title: s.title,
                             starts_at: s.starts_at,
-                            location: s.location ?? null,
-                            status: myByStatus.get(s.id) || ''
+                            location: s.location,
+                            status: myByStatus.get(s.id) || '',
                         }))
                         .sort((a, b) => (a.starts_at < b.starts_at ? -1 : 1));
+
                     setSessions(sitems);
                 }
             } else {
@@ -457,7 +478,19 @@ function TasksPanel() {
                 .eq('month_date', monthFirstIso)
                 .maybeSingle();
 
-            if (!ts.error) setTimesheet(ts.data as any);
+            // Reuse the existing Timesheet state shape
+            // type Timesheet = { id: string; status: 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'MANAGER_SUBMITTED'; month_date: string };
+
+            if (!ts.error) {
+                const row: Timesheet | null = ts.data
+                    ? {
+                        id: ts.data.id,
+                        status: ts.data.status as Timesheet['status'],
+                        month_date: ts.data.month_date,
+                    }
+                    : null;
+                setTimesheet(row);
+            }
 
             // 4) Leave in next 30 days (approved/pending)
             const lv = await supabase

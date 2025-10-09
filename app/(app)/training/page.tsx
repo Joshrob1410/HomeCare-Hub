@@ -202,14 +202,25 @@ function CertificateCell({ path }: { path?: string | null }) {
     async function getUrl() {
         try {
             setSigning(true);
+
+            // Narrow `path` for this closure so TS knows it's a string
+            if (typeof path !== 'string' || !path) {
+                throw new Error('Could not open certificate');
+            }
+
             const { data, error } = await supabase
                 .storage
                 .from('certificates')
                 .createSignedUrl(path, 60 * 10);
+
             if (error) throw error;
             setUrl(data.signedUrl);
-        } catch (e: any) {
-            alert(e.message || 'Could not open certificate');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Could not open certificate';
+            alert(message);
         } finally {
             setSigning(false);
         }
@@ -221,7 +232,7 @@ function CertificateCell({ path }: { path?: string | null }) {
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 underline text-indigo-700"
-            onClick={(e) => { /* keep link */ }}
+            onClick={() => { /* keep link */ }}
         >
             View
         </a>
@@ -306,7 +317,9 @@ function MyTraining() {
             const c = cid ? await cq.eq('company_id', cid) : await cq;
             if (c.error) setErr(c.error.message);
             else {
-                const list: Course[] = (c.data as any) || [];
+                const list: Course[] = Array.isArray(c.data)
+                    ? (c.data as Course[])
+                    : [];
                 setCourses(list);
 
                 // mark which courses have any individual targets
@@ -317,7 +330,11 @@ function MyTraining() {
                         .select('course_id')
                         .in('course_id', ids);
                     const set = new Set<string>();
-                    (t.data || []).forEach((row: any) => row.course_id && set.add(row.course_id));
+                    (t.data || []).forEach((row) => {
+                        if (typeof (row as { course_id?: string }).course_id === 'string') {
+                            set.add((row as { course_id: string }).course_id);
+                        }
+                    });
                     setCoursesWithTargets(set);
                 } else {
                     setCoursesWithTargets(new Set());
@@ -331,7 +348,13 @@ function MyTraining() {
                 .select('*')
                 .eq('user_id', me)
                 .order('date_completed', { ascending: false });
-            if (r.error) setErr(r.error.message); else setRecords((r.data as any) || []);
+            if (r.error) {
+                setErr(r.error.message);
+            } else {
+                setRecords(
+                    (Array.isArray(r.data) ? r.data : []) as typeof records
+                );
+            }
 
             // Targeted mandatory (conditional) that applies to ME
             const t = await supabase
@@ -339,7 +362,15 @@ function MyTraining() {
                 .select('course_id')
                 .eq('user_id', me);
             if (!t.error) {
-                const ids = new Set<string>((t.data || []).map((row: any) => row.course_id));
+                const ids = new Set<string>(
+                    Array.isArray(t.data)
+                        ? t.data
+                            .filter((row): row is { course_id: string } =>
+                                typeof (row as { course_id?: unknown }).course_id === 'string'
+                            )
+                            .map((row) => row.course_id)
+                        : []
+                );
                 setMyMandatoryCourseIds(ids);
             }
 
@@ -396,7 +427,9 @@ function MyTraining() {
             .select('*')
             .eq('user_id', uid)
             .order('date_completed', { ascending: false });
-        if (!r.error) setRecords((r.data as any) || []);
+        if (!r.error) {
+            setRecords(Array.isArray(r.data) ? (r.data as typeof records) : []);
+        }
     }
 
     // Add a training record for the selected course
@@ -437,8 +470,12 @@ function MyTraining() {
             // reset + refresh
             setCourseName(''); setDateCompleted(''); setFile(null);
             await refreshList();
-        } catch (e: any) {
-            setErr(e.message || 'Failed to add record');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Failed to add record';
+            setErr(message);
         } finally {
             setSaving(false);
         }
@@ -635,8 +672,12 @@ function MyRow({
                 setEditing(false);
                 await refresh();
             }
-        } catch (e: any) {
-            alert(e.message || 'Failed to save');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Failed to save';
+            alert(message);
         } finally {
             setBusy(false);
         }
@@ -650,8 +691,12 @@ function MyRow({
             if (del.error) throw del.error;
             setConfirmDelete(false); // close the inline box
             await refresh();
-        } catch (e: any) {
-            alert(e.message || 'Failed to delete');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Failed to delete';
+            alert(message);
         } finally {
             setBusy(false);
         }
@@ -1017,14 +1062,61 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         const res = await fetch('/api/self/members/list');
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || `Failed (${res.status})`);
+
         const map = new Map<string, Roles>();
-        (data.members || []).forEach((m: any) => {
-            map.set(m.id, {
-                bank: !!m.roles?.bank,
-                staff_home: m.roles?.staff_home || null,
-                manager_homes: m.roles?.manager_homes || [],
+
+        (Array.isArray(data.members) ? (data.members as unknown[]) : []).forEach((m: unknown) => {
+            const member = m as {
+                id?: unknown;
+                roles?: {
+                    bank?: unknown;
+                    staff_home?: unknown;            // could be string id or {id,name} or null
+                    manager_homes?: unknown;         // could be string[] or {id,name}[]
+                };
+            };
+
+            const id = typeof member.id === 'string' ? member.id : null;
+            if (!id) return;
+
+            const raw = member.roles ?? {};
+
+            // Normalize staff_home to {id,name} | null
+            let staff_home: { id: string; name: string } | null = null;
+            if (raw.staff_home && typeof raw.staff_home === 'object') {
+                const sh = raw.staff_home as { id?: unknown; name?: unknown };
+                if (typeof sh.id === 'string' && typeof sh.name === 'string') {
+                    staff_home = { id: sh.id, name: sh.name };
+                }
+            } else if (typeof raw.staff_home === 'string') {
+                // if API only returns an ID, keep name empty or resolve later
+                staff_home = { id: raw.staff_home, name: '' };
+            }
+
+            // Normalize manager_homes to Array<{id,name}>
+            let manager_homes: Array<{ id: string; name: string }> = [];
+            if (Array.isArray(raw.manager_homes)) {
+                // elements might be strings or objects
+                manager_homes = raw.manager_homes
+                    .map((h) => {
+                        if (typeof h === 'string') return { id: h, name: '' };
+                        if (h && typeof h === 'object') {
+                            const ho = h as { id?: unknown; name?: unknown };
+                            if (typeof ho.id === 'string' && typeof ho.name === 'string') {
+                                return { id: ho.id, name: ho.name };
+                            }
+                        }
+                        return null;
+                    })
+                    .filter((x): x is { id: string; name: string } => x !== null);
+            }
+
+            map.set(id, {
+                bank: Boolean(raw.bank),
+                staff_home,
+                manager_homes,
             });
         });
+
         return map;
     }
 
@@ -1056,7 +1148,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             try {
                 if (isAdmin) {
                     const co = await supabase.from('companies').select('id,name').order('name');
-                    const list = (co.data as any[]) || [];
+                    const list = Array.isArray(co.data) ? co.data : [];
                     setCompanies(list);
                     if (!companyId && list[0]?.id) setCompanyId(list[0].id);
                 } else if (isCompany) {
@@ -1074,8 +1166,12 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                     setPerUserRequired(new Map());
                     setCourseNameById(new Map());
                 }
-            } catch (e: any) {
-                setErr(e.message || 'Failed to load');
+            } catch (e) {
+                const message =
+                    e instanceof Error && typeof e.message === 'string'
+                        ? e.message
+                        : 'Failed to load';
+                setErr(message);
                 setHomes([]);
                 setList([]);
                 setCoursesWithTargets(new Set());
@@ -1107,15 +1203,18 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             setErr(null);
             try {
                 await loadForCompany(companyId);
-            } catch (e: any) {
-                setErr(e.message || 'Failed to load');
+            } catch (e) {
+                const message =
+                    e instanceof Error && typeof e.message === 'string'
+                        ? e.message
+                        : 'Failed to load';
+                setErr(message);
                 setHomes([]);
                 setList([]);
                 setCoursesWithTargets(new Set());
                 setRoster([]);
                 setPerUserRequired(new Map());
                 setCourseNameById(new Map());
-
             } finally {
                 setLoading(false);
             }
@@ -1126,7 +1225,11 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
     async function fetchCoursesWithTargetsForCompany(cid: string) {
         // find all courses in company
         const cs = await supabase.from('courses').select('id').eq('company_id', cid);
-        const ids = (cs.data || []).map((c: any) => c.id);
+        const ids = Array.isArray(cs.data)
+            ? cs.data
+                .filter((c): c is { id: string } => typeof (c as { id?: unknown }).id === 'string')
+                .map((c) => c.id)
+            : [];
         if (!ids.length) { setCoursesWithTargets(new Set()); return; }
 
         const t = await supabase
@@ -1135,7 +1238,11 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             .in('course_id', ids);
 
         const set = new Set<string>();
-        (t.data || []).forEach((row: any) => row.course_id && set.add(row.course_id));
+        (Array.isArray(t.data) ? t.data : []).forEach((row) => {
+            if (typeof (row as { course_id?: unknown }).course_id === 'string') {
+                set.add((row as { course_id: string }).course_id);
+            }
+        });
         setCoursesWithTargets(set);
     }
 
@@ -1144,7 +1251,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         // 1) Homes in company (for scoping + labels)
         const homesRes = await supabase.from('homes').select('id,name').eq('company_id', cid);
         if (homesRes.error) throw homesRes.error;
-        const homesArr = (homesRes.data as any[]) || [];
+        const homesArr = Array.isArray(homesRes.data) ? homesRes.data : [];
         setHomes(homesArr);
 
         const companyHomeIds = homesArr.map(h => h.id);
@@ -1154,12 +1261,33 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         const rosterRes = await supabase.rpc('list_company_people', { p_company_id: cid });
         if (rosterRes.error) throw rosterRes.error;
         const baseRoster: { id: string; name: string; home_id: string | null; is_bank: boolean }[] =
-            (rosterRes.data || []).map((r: any) => ({
-                id: r.user_id,
-                name: r.full_name || r.name || (r.user_id?.slice(0, 8) ?? ''),
-                home_id: r.home_id ?? null,
-                is_bank: !!r.is_bank,
-            }));
+            (Array.isArray(rosterRes.data) ? rosterRes.data : []).map((r) => {
+                const row = r as {
+                    user_id?: unknown;
+                    full_name?: unknown;
+                    name?: unknown;
+                    home_id?: unknown;
+                    is_bank?: unknown;
+                };
+
+                const user_id = typeof row.user_id === 'string' ? row.user_id : '';
+                const full_name =
+                    typeof row.full_name === 'string' && row.full_name ? row.full_name : undefined;
+                const alt_name =
+                    typeof row.name === 'string' && row.name ? row.name : undefined;
+
+                const name =
+                    full_name ??
+                    alt_name ??
+                    (user_id ? user_id.slice(0, 8) : '');
+
+                const home_id =
+                    typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
+
+                const is_bank = Boolean(row.is_bank);
+
+                return { id: user_id, name, home_id, is_bank };
+            });
 
         // 3) Add ALL managers of company homes (even with 0 records)
         let extraManagers: { id: string; home_id: string | null }[] = [];
@@ -1173,8 +1301,16 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
             // first home per manager (for a stable label)
             const firstHomeByUser = new Map<string, string | null>();
-            (mgrMemberships.data || []).forEach((m: any) => {
-                if (!firstHomeByUser.has(m.user_id)) firstHomeByUser.set(m.user_id, m.home_id ?? null);
+            (Array.isArray(mgrMemberships.data) ? mgrMemberships.data : []).forEach((m) => {
+                const user_id = (m as { user_id?: unknown }).user_id;
+                if (typeof user_id !== 'string') return;
+
+                const home_idVal = (m as { home_id?: unknown }).home_id;
+                const home_id = typeof home_idVal === 'string' ? home_idVal : null;
+
+                if (!firstHomeByUser.has(user_id)) {
+                    firstHomeByUser.set(user_id, home_id);
+                }
             });
 
             const already = new Set(baseRoster.map(p => p.id));
@@ -1186,7 +1322,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         // 4) Records for this company
         const recRes = await supabase.from('training_records_v').select('*').eq('company_id', cid);
         if (recRes.error) throw recRes.error;
-        const recRows = ((recRes.data as any[]) || []);
+        const recRows = Array.isArray(recRes.data) ? recRes.data : [];
 
         // 5) Merge roster: staff+bank + all managers
         const mergedRoster: { id: string; name: string; home_id: string | null; is_bank: boolean }[] = [
@@ -1202,19 +1338,38 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         // 6) Fetch profiles for EVERYONE we might display (roster ∪ records)
         const allUserIds = Array.from(
             new Set([
-                ...mergedRoster.map(p => p.id),
-                ...recRows.map((r: any) => r.user_id),
+                ...mergedRoster.map((p) => p.id),
+                ...(Array.isArray(recRows)
+                    ? recRows
+                        .filter(
+                            (r): r is { user_id: string } =>
+                                typeof (r as { user_id?: unknown }).user_id === 'string'
+                        )
+                        .map((r) => r.user_id)
+                    : []),
             ])
         ).filter(Boolean);
 
+        type ProfileRow = { user_id: string; full_name: string | null };
+
         const profiles = allUserIds.length
-            ? await supabase.from('profiles').select('user_id, full_name').in('user_id', allUserIds)
-            : { data: [] as any[], error: null as any };
+            ? await supabase
+                .from('profiles')
+                .select('user_id, full_name')
+                .in('user_id', allUserIds)
+            : { data: [] as ProfileRow[], error: null };
         if (profiles.error) throw profiles.error;
 
         const nameById = new Map<string, string>();
-        (profiles.data || []).forEach((p: any) => {
-            if (p?.user_id) nameById.set(p.user_id, (p.full_name || '').trim());
+        (Array.isArray(profiles.data) ? profiles.data : []).forEach((p) => {
+            const user_id = (p as { user_id?: unknown }).user_id;
+            if (typeof user_id !== 'string') return;
+
+            const full_nameVal = (p as { full_name?: unknown }).full_name;
+            const full_name =
+                typeof full_nameVal === 'string' ? full_nameVal.trim() : '';
+
+            nameById.set(user_id, full_name);
         });
 
         // 7) Final roster with proper names
@@ -1230,17 +1385,28 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         const isBankByUser = new Map<string, boolean>(finalRoster.map(p => [p.id, p.is_bank]));
 
         // 8) Decorated rows for TEAM table
-        const rows: Row[] = recRows.map((r: any) => {
-            const hid = homeIdByUser.get(r.user_id) ?? null;
+        const rows: Row[] = (Array.isArray(recRows) ? recRows : []).map((r) => {
+            const row = r as {
+                user_id?: unknown;
+                [key: string]: unknown;
+            };
+
+            const user_id = typeof row.user_id === 'string' ? row.user_id : '';
+            const hid = homeIdByUser.get(user_id) ?? null;
+
             return {
-                ...r,
-                user_name: nameByUser.get(r.user_id) || r.user_id?.slice(0, 8) || '',
+                ...row,
+                user_name:
+                    nameByUser.get(user_id) ||
+                    (user_id ? user_id.slice(0, 8) : ''),
                 home_id: hid,
                 home_label: hid
-                    ? (homeNameById.get(hid) || null)
-                    : (isBankByUser.get(r.user_id) ? 'Bank staff' : null),
-                is_bank: !!isBankByUser.get(r.user_id),
-            };
+                    ? homeNameById.get(hid) || null
+                    : isBankByUser.get(user_id)
+                        ? 'Bank staff'
+                        : null,
+                is_bank: Boolean(isBankByUser.get(user_id)),
+            } as Row;
         });
         setList(rows);
 
@@ -1255,46 +1421,98 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
     async function loadForManager(me: string) {
         // managed homes
         const mh = await supabase.from('home_memberships').select('home_id').eq('user_id', me).eq('role', 'MANAGER');
-        const managed = (mh.data || []).map((x: any) => x.home_id);
-        if (managed.length === 0) { setHomes([]); setList([]); setRoster([]); setPerUserRequired(new Map()); setCourseMeta(new Map()); return; }
+        const managed = Array.isArray(mh.data)
+            ? mh.data
+                .filter(
+                    (x): x is { home_id: string } =>
+                        typeof (x as { home_id?: unknown }).home_id === 'string'
+                )
+                .map((x) => x.home_id)
+            : [];
+        if (managed.length === 0) {
+            setHomes([]);
+            setList([]);
+            setRoster([]);
+            setPerUserRequired(new Map<string, Set<string>>());
+            setCourseNameById(new Map<string, string>());
+            return;
+        }
 
         const h = await supabase.from('homes').select('id,name,company_id').in('id', managed);
-        const hs = (h.data as any[]) || [];
+        const hs = Array.isArray(h.data) ? h.data : [];
         setHomes(hs.map(x => ({ id: x.id, name: x.name })));
         const cid = hs[0]?.company_id || '';
 
         // people ids for those homes
         const stf = await supabase.from('home_memberships').select('user_id').in('home_id', managed).eq('role', 'STAFF');
         const mgr = await supabase.from('home_memberships').select('user_id').in('home_id', managed).eq('role', 'MANAGER');
-        const ids = Array.from(new Set([...(stf.data || []).map((x: any) => x.user_id), ...(mgr.data || []).map((x: any) => x.user_id)]));
-        if (ids.length === 0) { setList([]); setRoster([]); setPerUserRequired(new Map()); setCourseMeta(new Map()); return; }
+        const ids = Array.from(
+            new Set([
+                ...(Array.isArray(stf.data)
+                    ? stf.data
+                        .filter(
+                            (x): x is { user_id: string } =>
+                                typeof (x as { user_id?: unknown }).user_id === 'string'
+                        )
+                        .map((x) => x.user_id)
+                    : []),
+                ...(Array.isArray(mgr.data)
+                    ? mgr.data
+                        .filter(
+                            (x): x is { user_id: string } =>
+                                typeof (x as { user_id?: unknown }).user_id === 'string'
+                        )
+                        .map((x) => x.user_id)
+                    : []),
+            ])
+        );
+        if (ids.length === 0) {
+            setList([]);
+            setRoster([]);
+            setPerUserRequired(new Map<string, Set<string>>());
+            setCourseNameById(new Map<string, string>());
+            return;
+        }
 
         // records
         const r = await supabase.from('training_records_v').select('*').in('user_id', ids);
-        const rows = ((r.data as any[]) || []) as RecordV[];
+        const rows: RecordV[] = Array.isArray(r.data) ? (r.data as RecordV[]) : [];
 
         // names
         const prof = await supabase.from('profiles').select('user_id, full_name').in('user_id', ids);
         const nameMap = new Map<string, string>();
-        (prof.data || []).forEach((p: any) => nameMap.set(p.user_id, p.full_name || ''));
+        (Array.isArray(prof.data) ? prof.data : []).forEach((p) => {
+            const user_id = (p as { user_id?: unknown }).user_id;
+            if (typeof user_id !== 'string') return;
+
+            const full_nameVal = (p as { full_name?: unknown }).full_name;
+            const full_name =
+                typeof full_nameVal === 'string' ? full_nameVal : '';
+
+            nameMap.set(user_id, full_name);
+        });
 
         // roles
         const rolesByUser = await fetchRoles();
 
-        const mapped: Row[] = rows.map(rec => {
+        const mapped: Row[] = rows.map((rec) => {
             const roles = rolesByUser.get(rec.user_id);
             const label =
-                roles?.staff_home?.name
-                ?? (roles?.manager_homes?.length
-                    ? roles.manager_homes.map(h => h.name).join(', ')
+                roles?.staff_home?.name ??
+                (roles?.manager_homes?.length
+                    ? roles.manager_homes.map((h) => h.name).join(', ')
                     : null);
+
             return {
                 ...rec,
                 user_name: nameMap.get(rec.user_id) || '',
                 home_label: label,
-                is_bank: !!roles?.bank && !roles?.staff_home && !(roles?.manager_homes?.length),
+                is_bank:
+                    !!roles?.bank &&
+                    !roles?.staff_home &&
+                    !(roles?.manager_homes?.length),
                 roles,
-            } as any;
+            } as Row;
         });
         setList(mapped);
 
@@ -1321,9 +1539,19 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
             const nameById = new Map<string, string>();
             const globalMandatory = new Set<string>();
-            (allCourses.data || []).forEach((c: any) => {
-                nameById.set(c.id, c.name);
-                if (c.mandatory) globalMandatory.add(c.id);
+            (Array.isArray(allCourses.data) ? allCourses.data : []).forEach((c) => {
+                const id = (c as { id?: unknown }).id;
+                if (typeof id !== 'string') return;
+
+                const nameVal = (c as { name?: unknown }).name;
+                const name = typeof nameVal === 'string' ? nameVal : '';
+
+                nameById.set(id, name);
+
+                const mandatory = (c as { mandatory?: unknown }).mandatory;
+                if (mandatory === true) {
+                    globalMandatory.add(id);
+                }
             });
             setCourseNameById(nameById);
 
@@ -1335,10 +1563,17 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                     .from('course_mandatory_targets')
                     .select('user_id,course_id')
                     .in('user_id', roster.map(p => p.id));
-                (t.data || []).forEach((row: any) => {
-                    if (!row.user_id || !row.course_id) return;
-                    if (!targetsByUser.has(row.user_id)) targetsByUser.set(row.user_id, new Set());
-                    targetsByUser.get(row.user_id)!.add(row.course_id);
+                (Array.isArray(t.data) ? t.data : []).forEach((row) => {
+                    const r = row as { user_id?: unknown; course_id?: unknown };
+
+                    const user_id = typeof r.user_id === 'string' ? r.user_id : null;
+                    const course_id = typeof r.course_id === 'string' ? r.course_id : null;
+                    if (!user_id || !course_id) return;
+
+                    if (!targetsByUser.has(user_id)) {
+                        targetsByUser.set(user_id, new Set<string>());
+                    }
+                    targetsByUser.get(user_id)!.add(course_id);
                 });
             }
 
@@ -1365,17 +1600,61 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
     ) {
         setComplianceLoading(true);
         try {
-            const stf = await supabase.from('home_memberships').select('user_id, home_id').in('home_id', managed).eq('role', 'STAFF');
-            const mgr = await supabase.from('home_memberships').select('user_id, home_id').in('home_id', managed).eq('role', 'MANAGER');
-            const allIds = Array.from(new Set([...(stf.data || []).map((x: any) => x.user_id), ...(mgr.data || []).map((x: any) => x.user_id)]));
+            type ProfileRow = { user_id: string; full_name: string | null };
+            type CourseRow = { id: string; name: string; mandatory: boolean };
+
+            const stf = await supabase
+                .from('home_memberships')
+                .select('user_id, home_id')
+                .in('home_id', managed)
+                .eq('role', 'STAFF');
+
+            const mgr = await supabase
+                .from('home_memberships')
+                .select('user_id, home_id')
+                .in('home_id', managed)
+                .eq('role', 'MANAGER');
+
+            // Avoid inline object type in a type predicate; instead pluck safely to strings
+            const stfIds = Array.isArray(stf.data)
+                ? stf.data
+                    .map((x) => {
+                        const uid = (x as { user_id?: unknown }).user_id;
+                        return typeof uid === 'string' ? uid : null;
+                    })
+                    .filter((v): v is string => v !== null)
+                : [];
+
+            const mgrIds = Array.isArray(mgr.data)
+                ? mgr.data
+                    .map((x) => {
+                        const uid = (x as { user_id?: unknown }).user_id;
+                        return typeof uid === 'string' ? uid : null;
+                    })
+                    .filter((v): v is string => v !== null)
+                : [];
+
+            const allIds = Array.from(new Set<string>([...stfIds, ...mgrIds]));
 
             const prof = allIds.length
-                ? await supabase.from('profiles').select('user_id, full_name').in('user_id', allIds)
-                : { data: [] as any[] };
-            const nameMap = new Map<string, string>();
-            (prof.data || []).forEach((p: any) => nameMap.set(p.user_id, p.full_name || ''));
+                ? await supabase
+                    .from('profiles')
+                    .select('user_id, full_name')
+                    .in('user_id', allIds)
+                : { data: [] as ProfileRow[] };
 
-            const people = allIds.map(id => {
+            const nameMap = new Map<string, string>();
+            (Array.isArray(prof.data) ? prof.data : []).forEach((p) => {
+                const user_id = (p as { user_id?: unknown }).user_id;
+                if (typeof user_id !== 'string') return;
+
+                const full_nameVal = (p as { full_name?: unknown }).full_name;
+                const full_name = typeof full_nameVal === 'string' ? full_nameVal : '';
+
+                nameMap.set(user_id, full_name);
+            });
+
+            const people = allIds.map((id) => {
                 const roles = rolesByUser.get(id);
                 const h = roles?.staff_home?.id || roles?.manager_homes?.[0]?.id || null;
                 return {
@@ -1389,27 +1668,49 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
             // Course names + global mandatory (for this company)
             const allCourses = cid
-                ? await supabase.from('courses').select('id,name,mandatory').eq('company_id', cid)
-                : { data: [] as any[] };
+                ? await supabase
+                    .from('courses')
+                    .select('id,name,mandatory')
+                    .eq('company_id', cid)
+                : { data: [] as CourseRow[] };
+
             const nameById = new Map<string, string>();
             const globalMandatory = new Set<string>();
-            (allCourses.data || []).forEach((c: any) => {
-                nameById.set(c.id, c.name);
-                if (c.mandatory) globalMandatory.add(c.id);
+            (Array.isArray(allCourses.data) ? allCourses.data : []).forEach((c) => {
+                const id = (c as { id?: unknown }).id;
+                if (typeof id !== 'string') return;
+
+                const nameVal = (c as { name?: unknown }).name;
+                const name = typeof nameVal === 'string' ? nameVal : '';
+
+                nameById.set(id, name);
+
+                const mandatory = (c as { mandatory?: unknown }).mandatory;
+                if (mandatory === true) {
+                    globalMandatory.add(id);
+                }
             });
             setCourseNameById(nameById);
 
             // Individual targets for these users (Conditional)
-            let targetsByUser = new Map<string, Set<string>>();
+            const targetsByUser = new Map<string, Set<string>>();
             if (people.length) {
                 const t = await supabase
                     .from('course_mandatory_targets')
                     .select('user_id,course_id')
-                    .in('user_id', people.map(p => p.id));
-                (t.data || []).forEach((row: any) => {
-                    if (!row.user_id || !row.course_id) return;
-                    if (!targetsByUser.has(row.user_id)) targetsByUser.set(row.user_id, new Set());
-                    targetsByUser.get(row.user_id)!.add(row.course_id);
+                    .in('user_id', people.map((p) => p.id));
+
+                (Array.isArray(t.data) ? t.data : []).forEach((row) => {
+                    const r = row as { user_id?: unknown; course_id?: unknown };
+
+                    const user_id = typeof r.user_id === 'string' ? r.user_id : null;
+                    const course_id = typeof r.course_id === 'string' ? r.course_id : null;
+                    if (!user_id || !course_id) return;
+
+                    if (!targetsByUser.has(user_id)) {
+                        targetsByUser.set(user_id, new Set<string>());
+                    }
+                    targetsByUser.get(user_id)!.add(course_id);
                 });
             }
 
@@ -1426,8 +1727,8 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             const required = new Map<string, Set<string>>();
             for (const p of people) {
                 const s = new Set<string>();
-                globalMandatory.forEach(id => s.add(id));
-                (targetsByUser.get(p.id) || new Set()).forEach(id => s.add(id));
+                globalMandatory.forEach((id) => s.add(id));
+                (targetsByUser.get(p.id) || new Set()).forEach((id) => s.add(id));
                 required.set(p.id, s);
             }
             setPerUserRequired(required);
@@ -1435,6 +1736,8 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             setComplianceLoading(false);
         }
     }
+
+
 
     const showHomeFilter = isAdmin || isCompany || level === '3_MANAGER';
 
@@ -1512,7 +1815,13 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                             </div>
                             <div>
                                 <label className="block text-xs text-gray-600 mb-1">Status</label>
-                                <select className="w-full border rounded-lg px-3 py-2" value={status} onChange={e => setStatus(e.target.value as any)}>
+                                <select
+                                    className="w-full border rounded-lg px-3 py-2"
+                                    value={status}
+                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                                        setStatus(e.target.value as 'ALL' | 'UP_TO_DATE' | 'DUE_SOON' | 'OVERDUE')
+                                    }
+                                >
                                     <option value="ALL">All</option>
                                     <option value="UP_TO_DATE">Up to date</option>
                                     <option value="DUE_SOON">Due soon</option>
@@ -1521,7 +1830,13 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                             </div>
                             <div>
                                 <label className="block text-xs text-gray-600 mb-1">Certificate</label>
-                                <select className="w-full border rounded-lg px-3 py-2" value={hasCert} onChange={e => setHasCert(e.target.value as any)}>
+                                <select
+                                    className="w-full border rounded-lg px-3 py-2"
+                                    value={hasCert}
+                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                                        setHasCert(e.target.value as 'ALL' | 'YES' | 'NO')
+                                    }
+                                >
                                     <option value="ALL">All</option>
                                     <option value="YES">Attached</option>
                                     <option value="NO">Missing</option>
@@ -1529,7 +1844,13 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                             </div>
                             <div>
                                 <label className="block text-xs text-gray-600 mb-1">Mandatory</label>
-                                <select className="w-full border rounded-lg px-3 py-2" value={mandatory} onChange={e => setMandatory(e.target.value as any)}>
+                                <select
+                                    className="w-full border rounded-lg px-3 py-2"
+                                    value={mandatory}
+                                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                                        setMandatory(e.target.value as 'ALL' | 'YES' | 'CONDITIONAL' | 'NO')
+                                    }
+                                >
                                     <option value="ALL">All</option>
                                     <option value="YES">Yes (global)</option>
                                     <option value="CONDITIONAL">Conditional (targets)</option>
@@ -1539,7 +1860,11 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                             {showHomeFilter && (
                                 <div>
                                     <label className="block text-xs text-gray-600 mb-1">Home</label>
-                                    <select className="w-full border rounded-lg px-3 py-2" value={homeId} onChange={e => setHomeId(e.target.value)}>
+                                    <select
+                                        className="w-full border rounded-lg px-3 py-2"
+                                        value={homeId}
+                                        onChange={e => setHomeId(e.target.value)}
+                                    >
                                         <option value="">All</option>
                                         <option value="BANK">Bank staff</option>
                                         {homes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
@@ -2132,7 +2457,7 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 if (isAdmin) {
                     const co = await supabase.from('companies').select('id,name').order('name');
                     if (co.error) throw co.error;
-                    setCompanies((co.data as any) || []);
+                    setCompanies(Array.isArray(co.data) ? co.data : []);
                     const defaultCid = companyId || (co.data?.[0]?.id ?? '');
                     if (!companyId && defaultCid) setCompanyId(defaultCid);
                     if (defaultCid) await loadAdminCompanyScope(defaultCid);
@@ -2146,8 +2471,12 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 } else {
                     setHomes([]); setPeople([]); setCourses([]);
                 }
-            } catch (e: any) {
-                setErr(e.message || 'Failed to load');
+            } catch (e) {
+                const message =
+                    e instanceof Error && typeof e.message === 'string'
+                        ? e.message
+                        : 'Failed to load';
+                setErr(message);
             } finally {
                 setLoading(false);
             }
@@ -2167,65 +2496,125 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     async function loadAdminCompanyScope(cid: string) {
         // homes in company
         const h = await supabase.from('homes').select('id,name').eq('company_id', cid);
-        if (!h.error) setHomes((h.data as any) || []);
+        if (!h.error) {
+            setHomes(Array.isArray(h.data) ? h.data : []);
+        }
 
         // people in company (incl bank)
         const roster = await supabase.rpc('list_company_people', { p_company_id: cid });
-        const ps: Person[] = (roster.data || []).map((r: any) => ({
-            id: r.user_id,
-            name: r.full_name || r.user_id.slice(0, 8),
-            home_id: r.home_id,
-            is_bank: r.is_bank,
-        }));
+        const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
+            const row = r as {
+                user_id?: unknown;
+                full_name?: unknown;
+                home_id?: unknown;
+                is_bank?: unknown;
+            };
+
+            const user_id = typeof row.user_id === 'string' ? row.user_id : '';
+            const full_name =
+                typeof row.full_name === 'string' && row.full_name.trim()
+                    ? row.full_name
+                    : user_id.slice(0, 8);
+            const home_id =
+                typeof row.home_id === 'string' || row.home_id === null
+                    ? (row.home_id as string | null)
+                    : null;
+            const is_bank = Boolean(row.is_bank);
+
+            return { id: user_id, name: full_name, home_id, is_bank };
+        });
         setPeople(ps);
 
         // courses
         const cs = await supabase.from('courses').select('id,name').eq('company_id', cid).order('name');
-        if (!cs.error) setCourses((cs.data as any) || []);
+        if (!cs.error) {
+            setCourses(Array.isArray(cs.data) ? cs.data : []);
+        }
     }
 
     async function loadCompanyScope(cid: string) {
         const h = await supabase.from('homes').select('id,name').eq('company_id', cid);
-        if (!h.error) setHomes((h.data as any) || []);
+        if (!h.error) {
+            setHomes(Array.isArray(h.data) ? h.data : []);
+        }
 
         const roster = await supabase.rpc('list_company_people', { p_company_id: cid });
-        const ps: Person[] = (roster.data || []).map((r: any) => ({
-            id: r.user_id,
-            name: r.full_name || r.user_id.slice(0, 8),
-            home_id: r.home_id,
-            is_bank: r.is_bank,
-        }));
+        const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
+            const row = r as {
+                user_id?: unknown;
+                full_name?: unknown;
+                home_id?: unknown;
+                is_bank?: unknown;
+            };
+
+            const user_id = typeof row.user_id === 'string' ? row.user_id : '';
+            const name =
+                typeof row.full_name === 'string' && row.full_name
+                    ? row.full_name
+                    : user_id.slice(0, 8);
+            const home_id =
+                typeof row.home_id === 'string' || row.home_id === null
+                    ? (row.home_id as string | null)
+                    : null;
+            const is_bank = Boolean(row.is_bank);
+
+            return { id: user_id, name, home_id, is_bank };
+        });
         setPeople(ps);
 
         const cs = await supabase.from('courses').select('id,name').eq('company_id', cid).order('name');
-        if (!cs.error) setCourses((cs.data as any) || []);
+        if (!cs.error) {
+            setCourses(Array.isArray(cs.data) ? cs.data : []);
+        }
     }
 
     async function loadManagerScope(me: string) {
         // managed homes
         const mh = await supabase.from('home_memberships').select('home_id').eq('user_id', me).eq('role', 'MANAGER');
-        const managedHomeIds = (mh.data || []).map((x: any) => x.home_id);
+        const managedHomeIds = Array.isArray(mh.data)
+            ? mh.data
+                .filter(
+                    (x): x is { home_id: string } =>
+                        typeof (x as { home_id?: unknown }).home_id === 'string'
+                )
+                .map((x) => x.home_id)
+            : [];
         if (managedHomeIds.length === 0) { setHomes([]); setPeople([]); setCourses([]); return; }
 
         const h = await supabase.from('homes').select('id,name,company_id').in('id', managedHomeIds);
-        const hs = (h.data as any[]) || [];
+        const hs = Array.isArray(h.data) ? h.data : [];
         setHomes(hs.map(x => ({ id: x.id, name: x.name })));
         const cid = hs[0]?.company_id || '';
         setCompanyId(cid);
 
         // people: staff in managed homes (no bank)
         const roster = await supabase.rpc('list_manager_people');
-        const ps: Person[] = (roster.data || []).map((r: any) => ({
-            id: r.user_id,
-            name: r.full_name || r.user_id.slice(0, 8),
-            home_id: r.home_id,
-            is_bank: false,
-        }));
+        const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
+            const row = r as {
+                user_id?: unknown;
+                full_name?: unknown;
+                home_id?: unknown;
+            };
+
+            const user_id = typeof row.user_id === 'string' ? row.user_id : '';
+            const name =
+                typeof row.full_name === 'string' && row.full_name
+                    ? row.full_name
+                    : user_id.slice(0, 8);
+            const home_id =
+                typeof row.home_id === 'string' || row.home_id === null
+                    ? (row.home_id as string | null)
+                    : null;
+
+            return { id: user_id, name, home_id, is_bank: false };
+        });
         setPeople(ps);
 
         if (cid) {
             const cs = await supabase.from('courses').select('id,name').eq('company_id', cid).order('name');
-            if (!cs.error) setCourses((cs.data as any) || []);
+            if (!cs.error) {
+                setCourses(Array.isArray(cs.data) ? cs.data : []);
+            }
         }
     }
 
@@ -2256,7 +2645,7 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
         // Managers cannot assign to themselves
         if (isManager && uid) target.delete(uid);
 
-        let recipients = Array.from(target);
+        const recipients: string[] = Array.from(target);
         if (recipients.length === 0) { setErr('No recipients found for the chosen scope.'); return; }
 
         setSaving(true);
@@ -2297,8 +2686,12 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 `Training set for ${okCount} recipient${okCount === 1 ? '' : 's'}`
                 + (skipped > 0 ? ` (skipped ${skipped} who already have this course).` : '.')
             );
-        } catch (e: any) {
-            setErr(e.message || 'Failed to set training');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Failed to set training';
+            setErr(message);
         } finally {
             setSaving(false);
         }
@@ -2445,7 +2838,9 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
 
             if (isAdmin) {
                 const co = await supabase.from('companies').select('id,name').order('name');
-                if (!co.error) setCompanies((co.data as any) || []);
+                if (!co.error) {
+                    setCompanies(Array.isArray(co.data) ? co.data : []);
+                }
             } else {
                 const [{ data: u }] = await Promise.all([supabase.auth.getUser()]);
                 const me = u?.user?.id;
@@ -2487,15 +2882,32 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
     // load roster (homes + people) for the selected company
     async function loadRoster(cid: string) {
         const h = await supabase.from('homes').select('id,name').eq('company_id', cid);
-        if (!h.error) setHomes((h.data as any) || []);
+        if (!h.error) {
+            setHomes(Array.isArray(h.data) ? h.data : []);
+        }
 
         const roster = await supabase.rpc('list_company_people', { p_company_id: cid });
-        const ps: Person[] = (roster.data || []).map((r: any) => ({
-            id: r.user_id,
-            name: r.full_name || r.user_id.slice(0, 8),
-            home_id: r.home_id,
-            is_bank: r.is_bank,
-        }));
+        const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
+            const row = r as {
+                user_id?: string;
+                full_name?: string | null;
+                home_id?: string | null;
+                is_bank?: boolean | null;
+            };
+
+            const user_id = typeof row.user_id === 'string' ? row.user_id : '';
+            const full_name =
+                typeof row.full_name === 'string' && row.full_name.trim()
+                    ? row.full_name
+                    : user_id.slice(0, 8);
+            const home_id =
+                typeof row.home_id === 'string' || row.home_id === null
+                    ? row.home_id
+                    : null;
+            const is_bank = Boolean(row.is_bank);
+
+            return { id: user_id, name: full_name, home_id, is_bank };
+        });
         setPeople(ps);
     }
 
@@ -2504,7 +2916,9 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
         const q = supabase.from('courses').select('*').order('name');
         const res = cid ? await q.eq('company_id', cid) : await q;
         if (res.error) setErr(res.error.message);
-        else setCourses((res.data as any) || []);
+        else {
+            setCourses(Array.isArray(res.data) ? res.data : []);
+        }
     }
 
     // Create course + initial audience (Everyone or People)
@@ -2561,8 +2975,12 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
             setAudPeople([]);
 
             await Promise.all([loadCourses(cid), loadRoster(cid)]);
-        } catch (e: any) {
-            setErr(e.message || 'Failed to create');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Failed to create';
+            setErr(message);
         } finally {
             setSaving(false);
         }
@@ -2808,8 +3226,12 @@ function CourseRow({
             if (del.error) throw del.error;
 
             await onSaved(c.company_id);
-        } catch (e: any) {
-            alert(e.message || 'Failed to delete course');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Failed to delete course';
+            alert(message);
         } finally {
             setBusy(false);
             setConfirmDelete(false);
@@ -2885,8 +3307,12 @@ function CourseRow({
 
             setEditing(false);
             await onSaved(c.company_id);
-        } catch (e: any) {
-            alert(e.message || 'Failed to update course');
+        } catch (e) {
+            const message =
+                e instanceof Error && typeof e.message === 'string'
+                    ? e.message
+                    : 'Failed to update course';
+            alert(message);
         } finally {
             setBusy(false);
         }

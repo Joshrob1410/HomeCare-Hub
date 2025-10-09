@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel } from '@/supabase/roles';
 
@@ -64,7 +64,7 @@ type LeaveRequest = {
 /* =========================
    Small UI helpers
    ========================= */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
     return (
         <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-3">
             <h2 className="text-base font-semibold">{title}</h2>
@@ -393,7 +393,7 @@ function ManageLeave() {
     useEffect(() => {
         (async () => {
             const rpc = await supabase.rpc('homes_list_for_ui', { p_company_id: null });
-            setHomes((rpc.data || []) as any[]);
+            setHomes(((rpc.data || []) as { id: string; name: string; company_id: string }[]));
             if (!homeId && rpc.data && rpc.data[0]) setHomeId(rpc.data[0].id);
         })();
     }, []);
@@ -419,16 +419,18 @@ function ManageLeave() {
             if (!homeId || !isManager) return;
 
             const staff = await supabase.rpc('home_staff_for_ui', { p_home_id: homeId, include_bank: true });
-            const ids: string[] = ((staff.data || []) as any[]).map((x) => x.user_id);
+            const ids: string[] = ((staff.data || []) as { user_id: string }[]).map(x => x.user_id);
             if (!ids.length) return;
 
             const prof = await supabase.from('profiles').select('user_id, full_name').in('user_id', ids);
-            const plist: Person[] = (prof.data || []).map((p: any) => ({ user_id: p.user_id, full_name: p.full_name })) as Person[];
+            const plist: Person[] = (prof.data || []).map((p: { user_id: string; full_name: string | null }) => ({
+                user_id: p.user_id, full_name: p.full_name
+            })) as Person[];
             setPeople(plist);
 
             const ov = await supabase.rpc('leave_overrides_for_home', { p_home: homeId });
             const map = new Map<string, OvRow>();
-            (ov.data || []).forEach((row: any) => {
+            (ov.data || []).forEach((row: { user_id: string; unit: 'HOURS' | 'DAYS'; opening_remaining: number }) => {
                 map.set(row.user_id, { unit: row.unit, opening_remaining: Number(row.opening_remaining) });
             });
             setOverrides(map);
@@ -470,7 +472,7 @@ function ManageLeave() {
             p_home: homeId,
             p_month: calMonth,
         });
-        if (!error) setCalendarEvents(((data || []) as any[]));
+        if (!error) setCalendarEvents(((data || []) as { user_id: string; full_name: string | null; start_date: string; end_date: string; status: LeaveStatus }[]));
     }
     useEffect(() => { if (calOpen) loadCalendar(); }, [calOpen, calMonth, homeId]);
 
@@ -493,8 +495,9 @@ function ManageLeave() {
             const next = new Map(overrides);
             next.set(userId, { unit: draft.unit, opening_remaining: amount });
             setOverrides(next);
-        } catch (e: any) {
-            alert(e?.message || 'Failed to save override');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to save override';
+            alert(msg);
         } finally {
             setOvBusy(null);
         }
@@ -516,8 +519,9 @@ function ManageLeave() {
             const cur = d.get(userId);
             d.set(userId, { unit: (cur?.unit ?? 'HOURS') as 'HOURS' | 'DAYS', remaining: '' });
             setOvDraft(d);
-        } catch (e: any) {
-            alert(e?.message || 'Failed to clear override');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to clear override';
+            alert(msg);
         } finally {
             setOvBusy(null);
         }
@@ -709,18 +713,13 @@ function RequestsTable({
         return p && p.trim().length ? p : id.slice(0, 8);
     };
 
-    const formatDMY = (iso: string) => {
-        try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB'); }
-        catch { return iso; }
-    };
-
     useEffect(() => {
         (async () => {
             if (!showUser || rows.length === 0) return;
             const ids = Array.from(new Set(rows.map((r) => r.user_id)));
             if (ids.length === 0) return;
             const { data } = await supabase.from('profiles').select('user_id, full_name').in('user_id', ids);
-            setProfiles((data || []) as any[]);
+            setProfiles(((data || []) as { user_id: string; full_name: string | null }[]));
         })();
     }, [rows, showUser]);
 
@@ -951,8 +950,8 @@ function LeaveCalendarModal({
                         {/* Always render 6 weeks to lock height */}
                         {(() => {
                             const startDow = new Date(year, month, 1).getDay();
-                            let cells: (number | null)[] = Array.from({ length: startDow }, () => null)
-                                .concat(Array.from({ length: daysInMonth }, (_, i) => i + 1));
+                            let cells: (number | null)[] = Array.from({ length: startDow }, () => null);
+                            for (let i = 1; i <= daysInMonth; i++) cells.push(i);
                             while (cells.length < 42) cells.push(null);
                             if (cells.length > 42) cells = cells.slice(0, 42);
 
@@ -1031,7 +1030,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
         (async () => {
             if (isAdmin) {
                 const co = await supabase.from('companies').select('id,name').order('name');
-                setCompanies((co.data || []) as any[]);
+                setCompanies(((co.data || []) as { id: string; name: string }[]));
                 if (co.data && co.data[0] && !companyId) setCompanyId(co.data[0].id);
             } else {
                 const { data: u } = await supabase.auth.getUser();
@@ -1070,7 +1069,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
 
             // homes for assignments
             const rpcHomes = await supabase.rpc('homes_list_for_ui', { p_company_id: companyId });
-            setHomes((rpcHomes.data || []) as any[]);
+            setHomes(((rpcHomes.data || []) as { id: string; name: string; company_id: string }[]));
             if (!assignHomeId && rpcHomes.data && rpcHomes.data[0]) setAssignHomeId(rpcHomes.data[0].id);
 
             // shift types (for rota link) — RPC first, fallback to table select
@@ -1095,11 +1094,13 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
             if (!assignHomeId || !companyId) return;
 
             const staff = await supabase.rpc('home_staff_for_ui', { p_home_id: assignHomeId, include_bank: true });
-            const ids: string[] = ((staff.data || []) as any[]).map((x) => x.user_id);
+            const ids: string[] = ((staff.data || []) as { user_id: string }[]).map(x => x.user_id);
             if (!ids.length) return;
 
             const prof = await supabase.from('profiles').select('user_id, full_name').in('user_id', ids);
-            const plist: Person[] = (prof.data || []).map((p: any) => ({ user_id: p.user_id, full_name: p.full_name })) as Person[];
+            const plist: Person[] = (prof.data || []).map((p: { user_id: string; full_name: string | null }) => ({
+                user_id: p.user_id, full_name: p.full_name
+            })) as Person[];
             setPeople(plist);
 
             const map = new Map<string, string | null>();
@@ -1108,13 +1109,13 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                 .select('user_id, rule_id')
                 .eq('company_id', companyId)
                 .in('user_id', ids);
-            (ur.data || []).forEach((row: any) => map.set(row.user_id, row.rule_id));
+            (ur.data || []).forEach((row: { user_id: string; rule_id: string | null }) => map.set(row.user_id, row.rule_id));
             setAssignments(map);
 
             const ov = await supabase.rpc('leave_overrides_for_home', { p_home: assignHomeId });
             const ovMap = new Map<string, OverrideRow>();
-            (ov.data || []).forEach((row: any) => {
-                ovMap.set(row.user_id, { user_id: row.user_id, unit: row.unit as 'HOURS' | 'DAYS', opening_remaining: Number(row.opening_remaining) });
+            (ov.data || []).forEach((row: { user_id: string; unit: 'HOURS' | 'DAYS'; opening_remaining: number }) => {
+                ovMap.set(row.user_id, { user_id: row.user_id, unit: row.unit, opening_remaining: Number(row.opening_remaining) });
             });
             setOverrides(ovMap);
 
@@ -1137,7 +1138,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
             p_unit: settings?.unit ?? 'HOURS',
             p_carry: patch.carryover_limit ?? settings?.carryover_limit ?? null,
             p_require_mgr: patch.require_manager_approval ?? settings?.require_manager_approval ?? true,
-            p_rota_shift: (patch as any).rota_shift_type_id ?? settings?.rota_shift_type_id ?? null, // NEW
+            p_rota_shift: ('rota_shift_type_id' in patch ? patch.rota_shift_type_id : settings?.rota_shift_type_id) ?? null,
         });
         setBusy(false);
         if (error) { alert(error.message); return; }
@@ -1161,7 +1162,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
         });
         setBusy(false);
         if (error) { alert(error.message); return; }
-        setRules([...(rules as any), data as LeaveRule]);
+        setRules(prev => [...prev, data as LeaveRule]);
         setNewRuleName(''); setNewRuleAmount(''); setNewRuleUnit('HOURS'); setNewRuleApplies('ALL');
     }
 
@@ -1193,8 +1194,9 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                 next.set(userId, ruleId);
                 setAssignments(next);
             }
-        } catch (e: any) {
-            alert(e?.message || 'Failed to save assignment');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to save assignment';
+            alert(msg);
         } finally {
             setAssignBusy(null);
         }
@@ -1219,8 +1221,9 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
             const next = new Map(overrides);
             next.set(userId, { user_id: userId, unit: draft.unit, opening_remaining: amount });
             setOverrides(next);
-        } catch (e: any) {
-            alert(e?.message || 'Failed to save override');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to save override';
+            alert(msg);
         } finally {
             setOvBusy(null);
         }
@@ -1243,8 +1246,9 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
             const cur = d.get(userId);
             d.set(userId, { unit: (cur?.unit ?? 'HOURS') as 'HOURS' | 'DAYS', remaining: '' });
             setOvDraft(d);
-        } catch (e: any) {
-            alert(e?.message || 'Failed to clear override');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to clear override';
+            alert(msg);
         } finally {
             setOvBusy(null);
         }
@@ -1309,8 +1313,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                             className="w-full border rounded-lg px-3 py-2"
                             value={settings?.rota_shift_type_id ?? ''}
                             onChange={async (e) => {
-                                const v = e.target.value || null;
-                                await saveSettings({ rota_shift_type_id: v as any });
+                                const v: string | null = e.target.value ? e.target.value : null;
+                                await saveSettings({ rota_shift_type_id: v });
                             }}
                             disabled={!companyId}
                         >

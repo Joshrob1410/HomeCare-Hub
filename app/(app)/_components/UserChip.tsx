@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useState as useStateReact } from 'react';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel } from '@/supabase/roles';
 
@@ -64,7 +64,7 @@ export default function UserChip() {
                         if (banks.length === 1 && homes.length === 0) {
                             positionLabel = 'Bank';
                         } else if (homes.length === 1) {
-                            const m = homes[0] as any;
+                            const m = homes[0] as { role?: string | null; staff_subrole?: string | null; manager_subrole?: string | null };
                             const role = (m.role || '').toUpperCase();
                             const staffSub = (m.staff_subrole || '').toUpperCase();
                             const mgrSub = (m.manager_subrole || '').toUpperCase();
@@ -155,8 +155,9 @@ export default function UserChip() {
             setName(newName);
             setNameOpen(false);
             showToast('success', 'Name updated');
-        } catch (e: any) {
-            showToast('error', e?.message || 'Failed to update name');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to update name';
+            showToast('error', msg);
         } finally {
             setBusy(false);
         }
@@ -169,8 +170,9 @@ export default function UserChip() {
             if (error) throw error;
             setEmailOpen(false);
             showToast('success', 'Email update requested. Check your inbox to confirm.');
-        } catch (e: any) {
-            showToast('error', e?.message || 'Failed to update email');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to update email';
+            showToast('error', msg);
         } finally {
             setBusy(false);
         }
@@ -200,8 +202,9 @@ export default function UserChip() {
             if (error) throw error;
             setPassOpen(false);
             showToast('success', 'Password updated');
-        } catch (e: any) {
-            showToast('error', e?.message || 'Failed to update password');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : 'Failed to update password';
+            showToast('error', msg);
         } finally {
             setBusy(false);
         }
@@ -363,8 +366,6 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
         </div>
     );
 }
-
-import { useState as useStateReact } from 'react';
 
 function NameForm({
     defaultName,
@@ -534,7 +535,7 @@ function Spinner() {
     );
 }
 
-function Toast({ toast }: { id?: number; type?: 'success' | 'error'; text?: string } | any) {
+function Toast({ toast }: { toast: { id: number; type: 'success' | 'error'; text: string } | null }) {
     if (!toast) return null;
     const tone =
         toast.type === 'success'

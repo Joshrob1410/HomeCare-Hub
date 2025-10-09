@@ -117,11 +117,13 @@ function Tabbed({
     );
 }
 
-function TabBtn({
-    active,
-    children,
-    ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
+function TabBtn(
+    {
+        active,
+        children,
+        ...props
+    }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
+) {
     return (
         <button
             className={`px-4 py-2 text-sm border-r last:border-r-0 transition ${active ? "bg-indigo-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"
@@ -132,6 +134,7 @@ function TabBtn({
         </button>
     );
 }
+
 
 /* =====================
    PEOPLE TAB
@@ -336,7 +339,15 @@ function PeopleTab({
             const f = from ?? nextFrom;
             if (f == null) return;
 
-            let base: any[] = [];
+            type PersonRecord = {
+                user_id: string;
+                full_name: string;
+                home_id: string | null;
+                is_bank: boolean;
+            };
+
+            let base: PersonRecord[] = [];
+
 
             if (isAdmin) {
                 const cid = filterCompany || myCompanyId || createCompanyId || companies[0]?.id || null;
@@ -352,12 +363,16 @@ function PeopleTab({
                 base = data || [];
             } else if (isCompany) {
                 const { data: me } = await supabase.auth.getUser();
+                const userId = me.user?.id;
+                if (!userId) return;
+
                 const cm = await supabase
                     .from("company_memberships")
                     .select("company_id")
-                    .eq("user_id", me.user?.id!)
+                    .eq("user_id", userId)
                     .maybeSingle();
-                const cid = cm.data?.company_id!;
+                const cid = cm.data?.company_id ?? "";
+                if (!cid) return;
                 const { data, error } = await supabase
                     .rpc("list_company_people", { p_company_id: cid })
                     .range(f, f + PAGE_SIZE - 1);
@@ -366,10 +381,17 @@ function PeopleTab({
             } else if (isManager) {
                 const { data, error } = await supabase.rpc("list_manager_people");
                 if (error) throw error;
-                base = (data || []) as any[];
+                type PersonRecord = {
+                    user_id: string;
+                    full_name: string;
+                    home_id: string | null;
+                    is_bank: boolean;
+                };
+
+                base = (data ?? []) as PersonRecord[];
             }
 
-            let list = uniqueByKey(base, (r: any) => `${r.user_id}:${r.home_id ?? "bank"}`);
+            let list = uniqueByKey<PersonRecord>(base, (r) => `${r.user_id}:${r.home_id ?? "bank"}`);
 
             if (filterHome) {
                 list = list.filter((r) => (filterHome === "BANK" ? r.is_bank : r.home_id === filterHome));
@@ -381,7 +403,7 @@ function PeopleTab({
 
             setRows((prev) => {
                 const merged = [...prev, ...list];
-                return uniqueByKey(merged, (r: any) => `${r.user_id}:${r.home_id ?? "bank"}`);
+                return uniqueByKey<PersonRecord>(merged, (r) => `${r.user_id}:${r.home_id ?? "bank"}`);
             });
 
             if (base.length < PAGE_SIZE || isManager) setNextFrom(null);
@@ -399,19 +421,37 @@ function PeopleTab({
 
             const isManagerManager = !isAdminRole && role === "3_MANAGER" && position === "MANAGER";
 
-            const payload: any = {
-                full_name: fullName,
-                email,
-                password: password || undefined,
-                role: isAdminRole ? "1_ADMIN" : role,
-                company_id: isAdmin ? createCompanyId || null : myCompanyId || null,
-                // single-home for Staff/Deputy, multi-home for Manager=MANAGER
-                home_id: isManagerManager ? null : (createHomeId || null),
-                manager_home_ids: isManagerManager ? createManagerHomeIds : undefined,
-                position,
-                company_positions: companyPositions,
+            // put these minimal types near the top of the component (or above createPerson)
+            type CreatePosition = "" | "BANK" | "RESIDENTIAL" | "TEAM_LEADER" | "MANAGER" | "DEPUTY_MANAGER";
+
+            type CreateUserPayload = {
+                full_name: string;
+                email: string;
+                password?: string;
+                role: AppLevel;                         // "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF"
+                company_id: string | null;
+                home_id: string | null;                 // null when manager with multiple homes or bank/no fixed home
+                manager_home_ids?: string[];            // only when role is manager=MANAGER (multi-home)
+                position: CreatePosition;
+                company_positions: string[];            // used for company-level role extras
             };
 
+            const payload: CreateUserPayload = {
+                full_name: fullName,
+                email,
+                ...(password ? { password } : {}),
+                role: (isAdminRole ? "1_ADMIN" : role) as AppLevel,
+                company_id: isAdmin ? (createCompanyId || null) : (myCompanyId || null),
+
+                // single-home for Staff/Deputy; null for Manager=MANAGER to signal multi-home
+                home_id: isManagerManager ? null : (createHomeId || null),
+
+                // only include when truly a multi-home manager
+                ...(isManagerManager ? { manager_home_ids: createManagerHomeIds } : {}),
+
+                position: position as CreatePosition,
+                company_positions: companyPositions,
+            };
 
             const res = await authFetch("/api/admin/create-user", {
                 method: "POST",
@@ -426,9 +466,14 @@ function PeopleTab({
             setCompanyPositions([]);
             setIsAdminRole(false);
             await resetAndLoad();
-        } catch (e: any) {
-            alert(e.message || "Failed");
-        } finally {
+        } catch (err) {
+            if (err instanceof Error) {
+                alert(err.message);
+            } else {
+                alert("Failed");
+            }
+        }
+         finally {
             setCreating(false);
         }
     }
@@ -747,64 +792,37 @@ function PersonRow({
     companyIdContext: string;
     onAfterSave?: () => Promise<void> | void;
 }) {
-    // Editable flags + state
     const [editing, setEditing] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    // Profile
     const [name, setName] = useState(row.full_name || "");
     const [email, setEmail] = useState<string>("");
     const [password, setPassword] = useState<string>("");
 
-    // Organization placement
     const [companyId, setCompanyId] = useState<string>("");
     const [homeId, setHomeId] = useState<string>(row.home_id || "");
     type PositionValue = "" | "BANK" | "RESIDENTIAL" | "TEAM_LEADER" | "MANAGER" | "DEPUTY_MANAGER";
     const [positionEdit, setPositionEdit] = useState<PositionValue>("");
 
-    // For Manager=MANAGER multi-home editing
     const [managerHomeIdsEdit, setManagerHomeIdsEdit] = useState<string[]>([]);
-    const [currentlyManager, setCurrentlyManager] = useState(false); // NEW
+    const [currentlyManager, setCurrentlyManager] = useState(false);
     const [companyPositionsEdit, setCompanyPositionsEdit] = useState<string[]>([]);
 
-    // App-level role change
     const [appRole, setAppRole] = useState<AppLevel | "">("");
     const [viewerId, setViewerId] = useState<string | null>(null);
 
-    // Normalize any role string to UPPERCASE (handles null/undefined too)
-    // Normalize any role string to UPPERCASE + trimmed
     const U = (s?: string | null) => (s ?? "").trim().toUpperCase();
-
-    // Coerce unknown -> string[], handling null, string, text[], jsonb
     const asStringArray = (v: unknown): string[] =>
         Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
 
-    // Map role variants to canonical values
-    function normalizeHomeRole(raw: string): "MANAGER" | "DEPUTY_MANAGER" | "TEAM_LEADER" | "STAFF" | "" {
-        const r = U(raw);
-
-        // very common variants/synonyms
-        if (r === "MANAGER" || r === "HOME_MANAGER" || r === "HOUSE_MANAGER") return "MANAGER";
-        if (r === "DEPUTY_MANAGER" || r === "DEPUTY" || r === "ASSISTANT_MANAGER") return "DEPUTY_MANAGER";
-        if (r === "TEAM_LEADER" || r === "LEAD" || r === "TEAMLEADER") return "TEAM_LEADER";
-        if (r === "STAFF" || r === "RESIDENTIAL" || r === "CARE_STAFF") return "STAFF";
-
-        return "";
-    }
-
-
-
-    // Keep local display name synced on refresh
     useEffect(() => {
         setName(row.full_name || "");
     }, [row.user_id, row.full_name]);
 
-    // Sync homeId when row changes
     useEffect(() => {
         setHomeId(row.home_id || "");
     }, [row.user_id, row.home_id, row.is_bank]);
 
-    // Who am I? (prevent changing own role)
     useEffect(() => {
         (async () => {
             const { data } = await supabase.auth.getUser();
@@ -812,7 +830,6 @@ function PersonRow({
         })();
     }, []);
 
-    // Initialize company select for admins when opening editor
     useEffect(() => {
         if (editing && isAdmin && !companyId) {
             setCompanyId(companies[0]?.id || "");
@@ -820,101 +837,75 @@ function PersonRow({
     }, [editing, isAdmin, companyId, companies]);
 
     useEffect(() => {
-        // Only fetch if we *need* to (first open, still empty), and key off "manager position"
         const load = async () => {
             if (!editing) return;
             const wantsManagerMulti = positionEdit === "MANAGER" || currentlyManager;
             if (!wantsManagerMulti) return;
-            if (managerHomeIdsEdit.length > 0) return; // already have them (prefilled or fetched)
-
+            if (managerHomeIdsEdit.length > 0) return;
             const { data, error } = await supabase
                 .from("home_memberships")
                 .select("home_id")
                 .eq("user_id", row.user_id)
                 .eq("role", "MANAGER");
-
             if (!error && data) {
-                const ids = data.map((d: any) => d.home_id);
+                const ids = (data as { home_id: string }[]).map((d) => d.home_id);
                 setManagerHomeIdsEdit(ids);
                 setCurrentlyManager(ids.length > 0);
             }
         };
         load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editing, positionEdit, currentlyManager, managerHomeIdsEdit.length, row.user_id]);
 
-
     async function prefillFromServer() {
-        // --- Company membership (for admins) ---
         try {
             const cm = await supabase
                 .from("company_memberships")
                 .select("company_id, positions")
                 .eq("user_id", row.user_id)
                 .maybeSingle();
-
-            if (cm.data?.company_id) {
-                setCompanyId(cm.data.company_id);
-            }
+            if (cm.data?.company_id) setCompanyId(cm.data.company_id);
             setCompanyPositionsEdit(asStringArray(cm.data?.positions));
-        } catch {
-            // ignore
-        }
+        } catch { }
 
-        // --- First, use RPC to get *manager homes* (bypasses RLS) ---
         try {
             const rpc = await supabase.rpc("home_ids_managed_by", { p_user: row.user_id });
             const managerIds: string[] = (rpc.data || []) as string[];
-
             if (managerIds.length > 0) {
                 setManagerHomeIdsEdit(managerIds);
                 setCurrentlyManager(true);
                 setAppRole("3_MANAGER");
                 setPositionEdit("MANAGER");
-                // home input switches to multi-select when positionEdit === "MANAGER"
-                return; // done; no need to probe other memberships
+                return;
             }
         } catch (e) {
-            // If the RPC itself fails, continue to best-effort probing below.
             console.error("prefill: home_ids_managed_by failed", e);
         }
 
-        // --- If not a manager, try to discover deputy/team-leader/staff via direct select ---
-        // NOTE: This select may be blocked by RLS depending on your policies.
-        let hmsRaw: any[] | null = null;
-        let hmsError: any = null;
-        try {
-            const { data, error } = await supabase
-                .from("home_memberships")
-                .select("home_id, role, manager_subrole, staff_subrole")
-                .eq("user_id", row.user_id);
-            hmsRaw = data || [];
-            hmsError = error || null;
-        } catch (e) {
-            hmsError = e;
-        }
-
-        if (hmsError) {
-            console.warn("prefill: home_memberships blocked/failed; falling back", hmsError);
-        }
-
-        type HM = {
+        type HomeMembership = {
             home_id: string;
             role: "MANAGER" | "STAFF" | null;
             manager_subrole: "MANAGER" | "DEPUTY_MANAGER" | null;
             staff_subrole: "RESIDENTIAL" | "TEAM_LEADER" | null;
         };
+        let hmsRaw: HomeMembership[] | null = null;
+        try {
+            const { data } = await supabase
+                .from("home_memberships")
+                .select("home_id, role, manager_subrole, staff_subrole")
+                .eq("user_id", row.user_id);
+            hmsRaw = data || [];
+        } catch (e) {
+            console.warn("prefill: home_memberships blocked/failed", e);
+        }
 
         const U = (s?: string | null) => (s ?? "").trim().toUpperCase();
-
-        const hms: HM[] = (hmsRaw ?? []).map((r: any) => ({
+        const hms = (hmsRaw ?? []).map((r) => ({
             home_id: r.home_id,
-            role: (U(r.role) as HM["role"]) || null,
-            manager_subrole: (U(r.manager_subrole) as HM["manager_subrole"]) || null,
-            staff_subrole: (U(r.staff_subrole) as HM["staff_subrole"]) || null,
+            role: (U(r.role) as "MANAGER" | "STAFF" | null) || null,
+            manager_subrole: (U(r.manager_subrole) as "MANAGER" | "DEPUTY_MANAGER" | null) || null,
+            staff_subrole: (U(r.staff_subrole) as "RESIDENTIAL" | "TEAM_LEADER" | null) || null,
         }));
 
-        // Try Deputy Manager (single-home)
         const deputy = hms.find((r) => r.role === "MANAGER" && r.manager_subrole === "DEPUTY_MANAGER");
         if (deputy) {
             setAppRole("3_MANAGER");
@@ -922,8 +913,6 @@ function PersonRow({
             setHomeId(deputy.home_id);
             return;
         }
-
-        // Try Team Leader (single-home)
         const teamLead = hms.find((r) => r.role === "STAFF" && r.staff_subrole === "TEAM_LEADER");
         if (teamLead) {
             setAppRole("4_STAFF");
@@ -931,8 +920,6 @@ function PersonRow({
             setHomeId(teamLead.home_id);
             return;
         }
-
-        // Try Staff / Residential (fallback)
         const staffAny = hms.find((r) => r.role === "STAFF");
         if (staffAny) {
             setAppRole("4_STAFF");
@@ -940,8 +927,6 @@ function PersonRow({
             setHomeId(staffAny.home_id);
             return;
         }
-
-        // Final fallback if the select was blocked and we know nothing:
         if (row.is_bank) {
             setAppRole("4_STAFF");
             setPositionEdit("BANK");
@@ -952,23 +937,15 @@ function PersonRow({
             setAppRole("4_STAFF");
             setPositionEdit("RESIDENTIAL");
             setHomeId(row.home_id);
-            return;
         }
-
-        // If truly nothing applies, leave as-is (no prefill change)
     }
 
-
-
-    // What can the current viewer edit?
     const canEditName = isAdmin || isCompany || isManager;
-    const canEditEmail = isAdmin || isCompany || isManager;
-    const canEditPassword = isAdmin || isCompany || isManager;
-
+    const canEditEmail = canEditName;
+    const canEditPassword = canEditName;
     const canChangeCompany = isAdmin;
     const canChangeHome = isAdmin || isCompany || isManager;
 
-    // App-level role permissions
     const LEVEL_RANK: Record<AppLevel, number> = {
         "1_ADMIN": 1,
         "2_COMPANY": 2,
@@ -987,75 +964,84 @@ function PersonRow({
         (l) => LEVEL_RANK[l] >= LEVEL_RANK[viewerCap]
     );
 
-    // Bank mode: Position set to BANK, or existing bank and no override chosen
     const bankMode =
         (appRole === "4_STAFF" && positionEdit === "BANK") || (!positionEdit && row.is_bank);
 
     useEffect(() => {
         if (bankMode && homeId) setHomeId("");
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [bankMode]);
 
     async function handleEditClick() {
-        await prefillFromServer(); // Fill everything first (company, homes, roles)
-        setEditing(true);          // Then open the editor
+        await prefillFromServer();
+        setEditing(true);
     }
-
 
     async function save() {
         setSaving(true);
         try {
-            const body: any = { user_id: row.user_id };
+            type UpdatePersonBody = {
+                user_id: string;
+                full_name?: string;
+                email?: string;
+                password?: string;
+                set_company?: { company_id: string };
+                set_bank?: { company_id: string; home_id?: string };
+                clear_home?: { home_id: string };
+                set_home?: { home_id: string; clear_bank_for_company?: string };
+                set_home_role?: { home_id: string; role: string };
+                set_manager_homes?: { home_ids: string[] };
+                set_level?: { level: AppLevel; company_id: string | null };
+                ensure_role_manager?: boolean;
+            };
 
-            // Profile
+            const body: UpdatePersonBody = { user_id: row.user_id };
+
             const trimmedName = (name || "").trim();
-            if (canEditName && trimmedName && trimmedName !== (row.full_name || "")) body.full_name = trimmedName;
-            if (canEditEmail && email.trim()) body.email = email.trim();
-            if (canEditPassword && password) body.password = password;
+            if (canEditName && trimmedName && trimmedName !== (row.full_name || "")) {
+                body.full_name = trimmedName;
+            }
+            if (canEditEmail && email.trim()) {
+                body.email = email.trim();
+            }
+            if (canEditPassword && password) {
+                body.password = password;
+            }
 
-            // Company (admin only)
             if (canChangeCompany && companyId) {
                 body.set_company = { company_id: companyId };
             }
 
-            // Membership intent (bank vs home vs no home)
-            // Membership intent (bank vs home vs no home OR multi-home manager)
             if (canChangeHome) {
                 const isManagerManager = appRole === "3_MANAGER" && positionEdit === "MANAGER";
-
                 if (isManagerManager) {
-                    // Absolute desired set of manager homes (backend will reconcile add/remove)
                     body.set_manager_homes = { home_ids: managerHomeIdsEdit };
                 } else if (bankMode) {
-                    if (!companyIdContext && !companyId && !row.is_bank) {
-                        throw new Error("Select a company before assigning Bank.");
-                    }
-                    const bankCompanyId = isAdmin && companyId ? companyId : companyIdContext;
+                    const bankCompanyId = (isAdmin && companyId ? companyId : companyIdContext) as string;
                     body.set_bank = {
                         company_id: bankCompanyId,
                         ...(row.home_id ? { home_id: row.home_id } : {}),
                     };
                 } else if (!homeId) {
-                    if (row.home_id) body.clear_home = { home_id: row.home_id };
+                    if (row.home_id) {
+                        body.clear_home = { home_id: row.home_id };
+                    }
                 } else if (row.home_id !== homeId) {
+                    const ensuredHomeId = homeId as string;
                     body.set_home = {
-                        home_id,
+                        home_id: ensuredHomeId,
                         ...(row.is_bank && (companyId || companyIdContext)
-                            ? { clear_bank_for_company: companyId || companyIdContext }
+                            ? { clear_bank_for_company: (companyId || companyIdContext) as string }
                             : {}),
                     };
                 }
             }
 
-            // Position → API role mapping
             if (positionEdit) {
                 if (positionEdit === "BANK") {
                     // no-op
                 } else if (positionEdit === "MANAGER") {
-                    // Multi-home already handled above; still assert role update
-                    body.ensure_role_manager = true; // (optional hint to backend)
+                    body.ensure_role_manager = true;
                 } else {
-                    // single-home roles (Residential / Team Leader / Deputy Manager)
                     const targetHome = homeId || row.home_id;
                     if (!targetHome) throw new Error("Select a home before assigning this position.");
                     let apiRole: "STAFF" | "TEAM_LEADER" | "MANAGER" | "DEPUTY_MANAGER";
@@ -1076,14 +1062,13 @@ function PersonRow({
                 }
             }
 
-
-            // App-level role
             if (canChangeAppRole && appRole) {
-                if (!allowedAppLevels.includes(appRole))
+                if (!allowedAppLevels.includes(appRole)) {
                     throw new Error("You are not allowed to assign that role.");
+                }
                 body.set_level = {
                     level: appRole,
-                    company_id: appRole === "2_COMPANY" ? companyId || companyIdContext || null : null,
+                    company_id: appRole === "2_COMPANY" ? (companyId || companyIdContext || null) : null,
                 };
             }
 
@@ -1092,21 +1077,23 @@ function PersonRow({
                 body: JSON.stringify(body),
             });
             if (!res.ok) {
-                const j = await res.json().catch(() => ({}));
-                throw new Error(j?.error || "Failed to update");
+                let message = "Failed to update";
+                try {
+                    const j = await res.json();
+                    if (j?.error) message = j.error;
+                } catch { }
+                throw new Error(message);
             }
 
             setEditing(false);
-            if (onAfterSave) await onAfterSave();
-
-            // Clear sensitive fields
+            if (onAfterSave) await onAfterSave?.();
             setEmail("");
             setPassword("");
             setPositionEdit("");
             setCompanyPositionsEdit([]);
             setAppRole("");
-        } catch (e: any) {
-            alert(e.message || "Failed to save");
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Failed to save");
         } finally {
             setSaving(false);
         }
@@ -1128,7 +1115,6 @@ function PersonRow({
                     </>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {/* Name */}
                         {canEditName && (
                             <div>
                                 <label className="block text-xs text-gray-600">Name</label>
@@ -1139,11 +1125,11 @@ function PersonRow({
                                 />
                             </div>
                         )}
-
-                        {/* Email */}
                         {canEditEmail && (
                             <div>
-                                <label className="block text-xs text-gray-600">Email (leave blank to keep)</label>
+                                <label className="block text-xs text-gray-600">
+                                    Email (leave blank to keep)
+                                </label>
                                 <input
                                     className="mt-1 w-full rounded-lg border p-2 text-sm"
                                     value={email}
@@ -1152,11 +1138,11 @@ function PersonRow({
                                 />
                             </div>
                         )}
-
-                        {/* Password */}
                         {canEditPassword && (
                             <div>
-                                <label className="block text-xs text-gray-600">Password (leave blank to keep)</label>
+                                <label className="block text-xs text-gray-600">
+                                    Password (leave blank to keep)
+                                </label>
                                 <input
                                     type="password"
                                     className="mt-1 w-full rounded-lg border p-2 text-sm"
@@ -1166,8 +1152,6 @@ function PersonRow({
                                 />
                             </div>
                         )}
-
-                        {/* Company (Admin only) */}
                         {canChangeCompany && (
                             <div>
                                 <label className="block text-xs text-gray-600">Company (admin only)</label>
@@ -1185,73 +1169,63 @@ function PersonRow({
                                 </select>
                             </div>
                         )}
-
-                        {/* Home (no "Bank" option here; disabled if bankMode) */}
-                            {canChangeHome && (
-                                <div>
-                                    <label className="block text-xs text-gray-600">
-                                        {(positionEdit === "MANAGER" || currentlyManager)
-                                            ? "Homes (select all that apply)"
-                                            : "Home"}
-                                    </label>
-
-
-                                    {(() => {
-                                        // Switch to multi-select as soon as we *know* they are a manager,
-                                        // either because their current position is MANAGER or they’re already a manager somewhere.
-                                        const showManagerMulti = positionEdit === "MANAGER" || currentlyManager;
-
-                                        // Union ensures all prefilled homes are visible (even if outside viewer scope)
-                                        const homesUnion = (() => {
-                                            const map = new Map<string, Home>();
-                                            homes.forEach(h => map.set(h.id, h));
-                                            managerHomeIdsEdit.forEach(id => {
-                                                if (!map.has(id)) {
-                                                    map.set(id, { id, name: "(out of scope)", company_id: "" } as Home);
-                                                }
-                                            });
-                                            return Array.from(map.values());
-                                        })();
-
-                                        return showManagerMulti ? (
-                                            <MultiSelect
-                                                value={managerHomeIdsEdit}
-                                                onChange={setManagerHomeIdsEdit}
-                                                options={homesUnion.map((h) => ({ value: h.id, label: h.name }))}
-                                            />
-                                        ) : (
-                                            <select
-                                                className="mt-1 w-full rounded-lg border p-2 text-sm"
-                                                value={homeId}
-                                                onChange={(e) => setHomeId(e.target.value)}
-                                                disabled={bankMode}
-                                                aria-disabled={bankMode}
-                                                title={bankMode ? "Home is locked when position is Bank" : undefined}
-                                            >
-                                                <option value="">(No fixed home)</option>
-                                                {homesUnion.map((h) => (
-                                                    <option key={h.id} value={h.id}>
-                                                        {h.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        );
-                                    })()}
-
-
-
-                                    {bankMode && (
-                                        <p className="text-[11px] text-gray-500 mt-1">
-                                            Position is <b>Bank</b>; home is not applicable.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-
-                        {/* Bottom row: App Role + Position */}
+                        {canChangeHome && (
+                            <div>
+                                <label className="block text-xs text-gray-600">
+                                    {positionEdit === "MANAGER" || currentlyManager
+                                        ? "Homes (select all that apply)"
+                                        : "Home"}
+                                </label>
+                                {(() => {
+                                    const showManagerMulti =
+                                        positionEdit === "MANAGER" || currentlyManager;
+                                    const homesUnion = (() => {
+                                        const map = new Map<string, Home>();
+                                        homes.forEach((h) => map.set(h.id, h));
+                                        managerHomeIdsEdit.forEach((id) => {
+                                            if (!map.has(id)) {
+                                                map.set(id, { id, name: "(out of scope)", company_id: "" });
+                                            }
+                                        });
+                                        return Array.from(map.values());
+                                    })();
+                                    return showManagerMulti ? (
+                                        <MultiSelect
+                                            value={managerHomeIdsEdit}
+                                            onChange={setManagerHomeIdsEdit}
+                                            options={homesUnion.map((h) => ({
+                                                value: h.id,
+                                                label: h.name,
+                                            }))}
+                                        />
+                                    ) : (
+                                        <select
+                                            className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                            value={homeId}
+                                            onChange={(e) => setHomeId(e.target.value)}
+                                            disabled={bankMode}
+                                            aria-disabled={bankMode}
+                                            title={
+                                                bankMode ? "Home is locked when position is Bank" : undefined
+                                            }
+                                        >
+                                            <option value="">(No fixed home)</option>
+                                            {homesUnion.map((h) => (
+                                                <option key={h.id} value={h.id}>
+                                                    {h.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    );
+                                })()}
+                                {bankMode && (
+                                    <p className="text-[11px] text-gray-500 mt-1">
+                                        Position is <b>Bank</b>; home is not applicable.
+                                    </p>
+                                )}
+                            </div>
+                        )}
                         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                            {/* App-level Role */}
                             <div className={`${canChangeAppRole ? "" : "opacity-60"}`}>
                                 <label className="block text-xs text-gray-600">
                                     Role {viewerId === row.user_id && "(you can’t change your own role)"}
@@ -1280,12 +1254,8 @@ function PersonRow({
                                     </p>
                                 )}
                             </div>
-
-                            {/* Position (dynamic) */}
                             <div>
                                 <label className="block text-xs text-gray-600">Position</label>
-
-                                {/* STAFF positions */}
                                 {appRole === "4_STAFF" && (
                                     <select
                                         className="mt-1 w-full rounded-lg border p-2 text-sm"
@@ -1298,8 +1268,6 @@ function PersonRow({
                                         <option value="TEAM_LEADER">Team Leader</option>
                                     </select>
                                 )}
-
-                                {/* MANAGER positions */}
                                 {appRole === "3_MANAGER" && (
                                     <select
                                         className="mt-1 w-full rounded-lg border p-2 text-sm"
@@ -1311,8 +1279,6 @@ function PersonRow({
                                         <option value="DEPUTY_MANAGER">Deputy Manager</option>
                                     </select>
                                 )}
-
-                                {/* COMPANY positions (info only) */}
                                 {appRole === "2_COMPANY" && (
                                     <div className="mt-1">
                                         <div className="rounded-lg border p-2 text-sm bg-gray-50 text-gray-500">
@@ -1320,8 +1286,6 @@ function PersonRow({
                                         </div>
                                     </div>
                                 )}
-
-                                {/* ADMIN has no position */}
                                 {appRole === "1_ADMIN" && (
                                     <div className="mt-1 rounded-lg border p-2 text-sm bg-gray-50 text-gray-500">
                                         Admin has no position.
@@ -1332,7 +1296,6 @@ function PersonRow({
                     </div>
                 )}
             </div>
-
             {!editing ? (
                 <button
                     onClick={handleEditClick}
@@ -1342,7 +1305,11 @@ function PersonRow({
                 </button>
             ) : (
                 <div className="flex items-center gap-2">
-                    <button onClick={save} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" disabled={saving}>
+                    <button
+                        onClick={save}
+                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                        disabled={saving}
+                    >
                         {saving ? "Saving…" : "Save"}
                     </button>
                     <button
@@ -1356,7 +1323,7 @@ function PersonRow({
                             setPositionEdit("");
                             setCompanyPositionsEdit([]);
                             setAppRole("");
-                            setManagerHomeIdsEdit([]); // clear multi-home edits
+                            setManagerHomeIdsEdit([]);
                         }}
                         className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
                     >
@@ -1367,6 +1334,7 @@ function PersonRow({
         </div>
     );
 }
+
 
 function MultiSelect({
     value,
@@ -1415,21 +1383,26 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
             if (!me) return;
 
             if (isAdmin) {
-                const co = await supabase.from("companies").select("id,name").order("name");
-                setCompanies((co.data || []) as any);
-                if (!companyId && co.data?.[0]?.id) setCompanyId(co.data[0].id);
+                const { data: co } = await supabase.from("companies").select("id,name").order("name");
+                setCompanies(co ?? []);
+                if (!companyId && co?.[0]?.id) setCompanyId(co[0].id);
             } else if (isCompany) {
-                const cm = await supabase
+                const { data: cm } = await supabase
                     .from("company_memberships")
                     .select("company_id")
                     .eq("user_id", me)
                     .maybeSingle();
-                const cid = cm.data?.company_id || "";
+
+                const cid = cm?.company_id || "";
                 setCompanyId(cid);
 
                 if (cid) {
-                    const co = await supabase.from("companies").select("name").eq("id", cid).maybeSingle();
-                    setCompanyName(co.data?.name || "");
+                    const { data: co } = await supabase
+                        .from("companies")
+                        .select("name")
+                        .eq("id", cid)
+                        .maybeSingle();
+                    setCompanyName(co?.name || "");
                 } else {
                     setCompanyName("");
                 }
@@ -1443,12 +1416,12 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
                 setHomes([]);
                 return;
             }
-            const list = await supabase
+            const { data: list } = await supabase
                 .from("homes")
                 .select("id,name,company_id")
                 .eq("company_id", companyId)
                 .order("name");
-            setHomes((list.data || []) as any);
+            setHomes(list ?? []);
         })();
     }, [companyId]);
 
@@ -1466,14 +1439,15 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
                 throw new Error(j?.error || "Failed to create home");
             }
             setName("");
-            const list = await supabase
+            const { data: list } = await supabase
                 .from("homes")
                 .select("id,name,company_id")
                 .eq("company_id", companyId)
                 .order("name");
-            setHomes((list.data || []) as any);
-        } catch (e: any) {
-            alert(e.message || "Failed to create home");
+            setHomes(list ?? []);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : "Failed to create home";
+            alert(msg);
         } finally {
             setSaving(false);
         }
@@ -1489,12 +1463,12 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
             alert(j?.error || "Failed to rename home");
             return;
         }
-        const list = await supabase
+        const { data: list } = await supabase
             .from("homes")
             .select("id,name,company_id")
             .eq("company_id", companyId)
             .order("name");
-        setHomes((list.data || []) as any);
+        setHomes(list ?? []);
     }
 
     return (
@@ -1553,6 +1527,7 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
     );
 }
 
+
 /* =====================
    COMPANIES TAB (Admin)
    ===================== */
@@ -1563,8 +1538,8 @@ function CompaniesTab() {
 
     useEffect(() => {
         (async () => {
-            const co = await supabase.from("companies").select("id,name").order("name");
-            setCompanies((co.data || []) as any);
+            const { data: co } = await supabase.from("companies").select("id,name").order("name");
+            setCompanies(co ?? []);
         })();
     }, []);
 
@@ -1582,10 +1557,11 @@ function CompaniesTab() {
                 throw new Error(j?.error || "Failed to create company");
             }
             setName("");
-            const co = await supabase.from("companies").select("id,name").order("name");
-            setCompanies((co.data || []) as any);
-        } catch (e: any) {
-            alert(e.message || "Failed to create company");
+            const { data: co } = await supabase.from("companies").select("id,name").order("name");
+            setCompanies(co ?? []);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : "Failed to create company";
+            alert(msg);
         } finally {
             setSaving(false);
         }
@@ -1601,8 +1577,8 @@ function CompaniesTab() {
             alert(j?.error || "Failed to rename company");
             return;
         }
-        const co = await supabase.from("companies").select("id,name").order("name");
-        setCompanies((co.data || []) as any);
+        const { data: co } = await supabase.from("companies").select("id,name").order("name");
+        setCompanies(co ?? []);
     }
 
     return (
@@ -1638,6 +1614,7 @@ function CompaniesTab() {
         </div>
     );
 }
+
 
 /* =====================
    Small editable row

@@ -46,7 +46,6 @@ type AttendeeStatus =
     | 'ATTENDED'
     | 'NO_SHOW';
 
-
 type Attendee = {
     session_id: string;
     user_id: string;
@@ -60,7 +59,6 @@ type Attendee = {
     noshow_at: string | null;    // still present in schema; harmless to keep
 };
 
-
 type MyAttendeeRow = Attendee & {
     training_sessions: Session & { courses?: Course | null };
 };
@@ -73,10 +71,9 @@ type MemberFromAPI = {
         bank: boolean;
         manager_homes?: { id: string; name: string }[];
         staff_home?: { id: string; name: string } | null;
-        company?: boolean; // present on company users, harmless if omitted
+        company?: boolean;
     };
 };
-
 
 /* ========= Page (Tabs) ========= */
 
@@ -204,7 +201,7 @@ async function getProfilesNameMap(ids: string[]): Promise<Map<string, string | n
     if (!ids.length) return map;
     const q = await supabase.from('profiles').select('user_id, full_name').in('user_id', ids);
     if (!q.error) {
-        (q.data || []).forEach((p: any) => map.set(p.user_id, p.full_name ?? null));
+        (q.data || []).forEach((p: { user_id: string; full_name: string | null }) => map.set(p.user_id, p.full_name ?? null));
     }
     return map;
 }
@@ -241,7 +238,7 @@ function MyBookings() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
-    // staged action per session: 'confirm' | 'decline' | undefined
+    // staged action per session: 'confirm' | 'decline' | 'cancel' | undefined
     const [pendingAction, setPendingAction] = useState<Record<string, 'confirm' | 'decline' | 'cancel' | undefined>>({});
 
     useEffect(() => {
@@ -262,9 +259,10 @@ function MyBookings() {
                     .select('*, training_sessions(*, courses(name))')
                     .eq('user_id', uid);
                 if (res.error) throw res.error;
-                setRows((res.data as any) || []);
-            } catch (e: any) {
-                setErr(e.message || 'Failed to load');
+                setRows((res.data as unknown as MyAttendeeRow[]) || []);
+            } catch (e) {
+                const msg = (e as { message?: string })?.message ?? 'Failed to load';
+                setErr(msg);
             } finally {
                 setLoading(false);
             }
@@ -293,38 +291,40 @@ function MyBookings() {
         const fresh = await supabase
             .from('training_session_attendees')
             .select('*, training_sessions(*, courses(name))')
-            .eq('user_id', uid!);
-        if (!fresh.error) setRows((fresh.data as any) || []);
+            .eq('user_id', uid);
+        if (!fresh.error) setRows((fresh.data as unknown as MyAttendeeRow[]) || []);
     }
 
     // Decline booking (with param fallback p_session -> p_session_id)
     async function decline(session_id: string) {
-        let { error } = await supabase.rpc('cancel_my_training_booking', { p_session: session_id });
-        if (error) {
-            const { error: err2 } = await supabase.rpc('cancel_my_training_booking', { p_session_id: session_id });
-            if (err2) { alert(err2.message); return; }
+        const res1 = await supabase.rpc('cancel_my_training_booking', { p_session: session_id });
+        if (res1.error) {
+            const res2 = await supabase.rpc('cancel_my_training_booking', { p_session_id: session_id });
+            if (res2.error) { alert(res2.error.message); return; }
         }
         setPendingAction(p => ({ ...p, [session_id]: undefined }));
         await reload();
     }
+
 
     // Confirm place (try p_session first, then p_session_id)
     async function confirmPlace(session_id: string) {
-        let { error } = await supabase.rpc('confirm_my_training_booking', { p_session: session_id });
-        if (error) {
-            const { error: err2 } = await supabase.rpc('confirm_my_training_booking', { p_session_id: session_id });
-            if (err2) { alert(err2.message); return; }
+        const res1 = await supabase.rpc('confirm_my_training_booking', { p_session: session_id });
+        if (res1.error) {
+            const res2 = await supabase.rpc('confirm_my_training_booking', { p_session_id: session_id });
+            if (res2.error) { alert(res2.error.message); return; }
         }
         setPendingAction(p => ({ ...p, [session_id]: undefined }));
         await reload();
     }
 
+
     async function cancelAttendance(session_id: string) {
         // same RPC as decline; try both param names for compatibility
-        let { error } = await supabase.rpc('cancel_my_training_booking', { p_session: session_id });
-        if (error) {
-            const { error: err2 } = await supabase.rpc('cancel_my_training_booking', { p_session_id: session_id });
-            if (err2) { alert(err2.message); return; }
+        const res1 = await supabase.rpc('cancel_my_training_booking', { p_session: session_id });
+        if (res1.error) {
+            const res2 = await supabase.rpc('cancel_my_training_booking', { p_session_id: session_id });
+            if (res2.error) { alert(res2.error.message); return; }
         }
         setPendingAction(p => ({ ...p, [session_id]: undefined }));
         await reload();
@@ -499,8 +499,6 @@ function MyBookings() {
 
 /* ========================= SESSIONS — Create/manage + invite ========================= */
 
-/* ========================= SESSIONS — Create/manage + invite (company-only invite list) ========================= */
-
 function SessionsAdmin({
     isAdmin, isCompany, isManager
 }: { isAdmin: boolean; isCompany: boolean; isManager: boolean }) {
@@ -587,21 +585,18 @@ function SessionsAdmin({
 
                 if (cid) {
                     const cr = await supabase.from('courses').select('*').eq('company_id', cid).order('name');
-                    if (!cr.error) setCourses((cr.data as any) || []);
+                    if (!cr.error) setCourses((cr.data as unknown as Course[]) || []);
                 }
 
                 await loadSessions(cid || null);
 
-                // ...after await loadSessions(cid || null);
-                // ...after await loadSessions(cid || null);
                 if (isAdmin || isCompany) {
                     // === COMPANY VIEW ===
-                    // 1) Homes for this company (used for both labels and scoping)
                     const h = await supabase
                         .from('homes')
                         .select('id,name')
                         .eq('company_id', cid || '');
-                    const companyHomes = ((h.data as any[]) || []).map(x => ({ id: x.id, name: x.name }));
+                    const companyHomes = ((h.data as unknown as { id: string; name: string }[]) || []).map(x => ({ id: x.id, name: x.name }));
                     setHomes(companyHomes);
                     const companyHomeIds = new Set(companyHomes.map(x => x.id));
 
@@ -609,28 +604,15 @@ function SessionsAdmin({
                     const dirRes = await fetch('/api/self/members/list');
                     if (dirRes.ok) {
                         const data = await dirRes.json();
-                        const members = (data?.members || []) as Array<{
-                            id: string;
-                            full_name?: string | null;
-                            email?: string | null;
-                            roles: {
-                                bank: boolean;
-                                manager_homes?: { id: string; name: string }[];
-                                staff_home?: { id: string; name: string } | null;
-                            };
-                        }>;
-
-                        // Keep staff whose staff_home is in this company,
-                        // managers with any managed home in this company,
-                        // and bank staff (company-level).
+                        const members = (data?.members || []) as MemberFromAPI[];
                         const filtered = members.filter(m => {
                             const staffIn = m.roles.staff_home?.id && companyHomeIds.has(m.roles.staff_home.id);
                             const managerIn = (m.roles.manager_homes || []).some(hh => companyHomeIds.has(hh.id));
-                            const bankIn = !!m.roles.bank; // bank staff belong to the company
+                            const bankIn = !!m.roles.bank;
                             return staffIn || managerIn || bankIn;
                         });
 
-                        const ps = filtered.map(m => ({
+                        const ps: Person[] = filtered.map(m => ({
                             id: m.id,
                             name: m.full_name || m.email || m.id.slice(0, 8),
                             home_id: m.roles.staff_home?.id || m.roles.manager_homes?.[0]?.id || null,
@@ -640,54 +622,40 @@ function SessionsAdmin({
                     } else {
                         // 3) Fallback: RPC already scoped to company
                         const roster = await supabase.rpc('list_company_people', { p_company_id: cid || '' });
-                        const ps: { id: string; name: string; home_id?: string | null; is_bank?: boolean }[] =
-                            (roster.data || []).map((r: any) => ({
+                        const ps: Person[] =
+                            (roster.data as unknown as Array<{ user_id: string; full_name: string | null; home_id: string | null; is_bank: boolean }> | null)?.map((r) => ({
                                 id: r.user_id,
                                 name: r.full_name || r.user_id.slice(0, 8),
                                 home_id: r.home_id,
                                 is_bank: r.is_bank,
-                            }));
+                            })) ?? [];
                         setPeople(ps);
                     }
                 } else if (isManager && uid) {
                     // === MANAGER VIEW ===
-                    // Homes this manager controls
                     const mh = await supabase
                         .from('home_memberships')
                         .select('home_id')
                         .eq('user_id', uid)
                         .eq('role', 'MANAGER');
 
-                    const managedHomeIds = (mh.data || []).map((x: any) => x.home_id);
+                    const managedHomeIds = (mh.data as unknown as Array<{ home_id: string }> | null)?.map(x => x.home_id) ?? [];
 
-                    // Label homes in UI (and implicitly scope to company via these homes)
                     const h = await supabase
                         .from('homes')
                         .select('id,name')
                         .in('id', managedHomeIds);
 
-                    setHomes(((h.data as any[]) || []).map(x => ({ id: x.id, name: x.name })));
+                    setHomes(((h.data as unknown as { id: string; name: string }[]) || []).map(x => ({ id: x.id, name: x.name })));
 
-                    // Prefer the same "directory" API the People page uses, then filter to the homes I manage.
-                    // Fallback (if the API isn't available) to reading home_memberships directly.
                     let ps: Person[] = [];
                     try {
                         const dirRes = await fetch('/api/self/members/list');
                         if (dirRes.ok) {
                             const data = await dirRes.json();
-                            const members = (data?.members || []) as Array<{
-                                id: string;
-                                full_name?: string | null;
-                                email?: string | null;
-                                roles: {
-                                    bank: boolean;
-                                    manager_homes?: { id: string; name: string }[];
-                                    staff_home?: { id: string; name: string } | null;
-                                };
-                            }>;
+                            const members = (data?.members || []) as MemberFromAPI[];
                             const mset = new Set(managedHomeIds);
 
-                            // Only people attached to *my* homes: staff in my homes, or managers of my homes.
                             const filtered = members.filter(m =>
                                 (m.roles.staff_home?.id && mset.has(m.roles.staff_home.id)) ||
                                 (m.roles.manager_homes || []).some(hh => mset.has(hh.id))
@@ -697,20 +665,18 @@ function SessionsAdmin({
                                 id: m.id,
                                 name: m.full_name || m.email || m.id.slice(0, 8),
                                 home_id: m.roles.staff_home?.id || m.roles.manager_homes?.[0]?.id || null,
-                                is_bank: false, // managers don't invite bank staff per your rule
+                                is_bank: false,
                             }));
                         } else {
-                            // Fallback: pull users by home_memberships for homes I manage
                             const hm2 = await supabase
                                 .from('home_memberships')
                                 .select('user_id, home_id, role')
                                 .in('home_id', managedHomeIds);
 
-                            const rows = (hm2.data as any[]) || [];
+                            const rows = (hm2.data as unknown as Array<{ user_id: string; home_id: string; role: string }> | null) ?? [];
                             const ids = Array.from(new Set(rows.map(r => r.user_id)));
                             const nameMap = await getProfilesNameMap(ids);
 
-                            // Dedupe by user_id and keep one representative home_id for label
                             const seen = new Set<string>();
                             ps = [];
                             for (const r of rows) {
@@ -725,8 +691,7 @@ function SessionsAdmin({
                             }
                         }
                     } catch {
-                        // If directory fetch explodes, we already covered the fallback above;
-                        // nothing else to do here.
+                        // ignore
                     }
 
                     // Always allow inviting myself (explicit requirement)
@@ -736,11 +701,9 @@ function SessionsAdmin({
 
                     setPeople(ps);
                 }
-
-
-
-            } catch (e: any) {
-                setErr(e.message || 'Failed to load');
+            } catch (e) {
+                const msg = (e as { message?: string })?.message ?? 'Failed to load';
+                setErr(msg);
             } finally {
                 setLoading(false);
             }
@@ -760,9 +723,9 @@ function SessionsAdmin({
 
         const r = await qy;
         if (!r.error) {
-            const list = (r.data as any) || [];
+            const list = (r.data as unknown as (Session & { courses?: Course | null })[]) || [];
             setSessions(list);
-            await loadCounts(list.map((s: any) => s.id));
+            await loadCounts(list.map((s) => s.id));
         }
     }
 
@@ -778,8 +741,8 @@ function SessionsAdmin({
         if (att.error) return;
 
         const next: typeof counts = {};
-        (att.data || []).forEach(a => {
-            const sid = a.session_id as string;
+        (att.data as unknown as Array<{ session_id: string; status: AttendeeStatus }> | null)?.forEach(a => {
+            const sid = a.session_id;
             if (!next[sid]) next[sid] = { confirmed: 0, pending: 0, waitlist: 0 };
             if (a.status === 'CONFIRMED') next[sid].confirmed++;
             else if (a.status === 'WAITLISTED') next[sid].waitlist++;
@@ -788,7 +751,6 @@ function SessionsAdmin({
         setCounts(next);
     }
 
-    // AFTER
     const {
         upcomingFiltered,
         pastFiltered
@@ -858,8 +820,8 @@ function SessionsAdmin({
 
             setOpenNew(false);
             await loadSessions(companyId);
-        } catch (e: any) {
-            alert(e.message || 'Failed to create session');
+        } catch (e) {
+            alert((e as { message?: string })?.message || 'Failed to create session');
         } finally {
             setSaving(false);
         }
@@ -884,7 +846,8 @@ function SessionsAdmin({
             return;
         }
 
-        const ids = Array.from(new Set((att.data || []).map((a: any) => a.user_id)));
+        const rawAtt = (att.data as unknown as Attendee[]) || [];
+        const ids = Array.from(new Set(rawAtt.map((a) => a.user_id)));
 
         // 1) Directory (names + emails)
         const directory = await getPeopleDirectoryMap();
@@ -893,7 +856,7 @@ function SessionsAdmin({
         const missingForNames = ids.filter(id => !directory.get(id)?.full_name);
         const nameFallback = await getProfilesNameMap(missingForNames);
 
-        const rows = (att.data || []).map((a: any) => {
+        const rows = rawAtt.map((a) => {
             const d = directory.get(a.user_id);
             const full_name = (d?.full_name ?? nameFallback.get(a.user_id)) || '';
             const email = d?.email || '';
@@ -912,12 +875,9 @@ function SessionsAdmin({
                 BookedAt: a.booked_at || '',
                 ConfirmedAt: a.confirmed_at || '',
                 CancelledAt: a.cancelled_at || '',
-                CompletedAt: a.completed_at || '',
-                NoShowAt: a.noshow_at || '',
                 AttendedAt: a.attended_at || '',
                 CompletedAt: a.completed_at || '',
                 NoShowAt: a.noshow_at || '',
-
             };
         });
 
@@ -928,10 +888,9 @@ function SessionsAdmin({
             AttendedAt: '', CompletedAt: '', NoShowAt: '',
         });
 
-
         const csv = [
             header.join(','),
-            ...rows.map(r => header.map(h => `"${String((r as any)[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+            ...rows.map(r => header.map(h => `"${String((r as Record<string, unknown>)[h] ?? '').replace(/"/g, '""')}"`).join(',')),
         ].join('\n');
 
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -961,10 +920,9 @@ function SessionsAdmin({
             return;
         }
 
-        // data is JSON like { attendees_inserted, reinvited, notifications }
-        const a = (data as any)?.attendees_inserted ?? 0;
-        const r = (data as any)?.reinvited ?? 0;
-        const n = (data as any)?.notifications ?? 0;
+        const a = (data as Record<string, unknown> | null)?.['attendees_inserted'] as number | undefined ?? 0;
+        const r = (data as Record<string, unknown> | null)?.['reinvited'] as number | undefined ?? 0;
+        const n = (data as Record<string, unknown> | null)?.['notifications'] as number | undefined ?? 0;
 
         setFlash(`Invites sent: ${n} (new ${a}${r ? `, reinvited ${r}` : ''})`);
         // auto clear after 4s
@@ -974,11 +932,7 @@ function SessionsAdmin({
         await loadSessions(companyId);
     }
 
-
-
-
     if (loading) return <p>Loading…</p>;
-
 
     return (
         <div className="space-y-4">
@@ -1090,7 +1044,7 @@ function SessionsAdmin({
                                         </div>
                                     </td>
                                     <td className="p-2">
-                                        <RosterButton session={s} onChanged={() => { loadSessions(companyId); }} />
+                                        <RosterButton session={s} onChanged={() => { void loadSessions(companyId); }} />
                                     </td>
                                 </tr>
                             );
@@ -1143,7 +1097,7 @@ function SessionsAdmin({
                                         <td className="p-2">{c.pending}</td>
                                         <td className="p-2">{c.waitlist}</td>
                                         <td className="p-2">
-                                            <RosterButton session={s} onChanged={() => { loadSessions(companyId); }} />
+                                            <RosterButton session={s} onChanged={() => { void loadSessions(companyId); }} />
                                         </td>
                                     </tr>
                                 );
@@ -1159,7 +1113,6 @@ function SessionsAdmin({
                     </table>
                 </div>
             </div>
-
 
             {/* Create modal */}
             {openNew && (
@@ -1180,61 +1133,91 @@ function SessionsAdmin({
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div>
                                 <label className="block text-sm mb-1">Date</label>
-                                <input type="date" className="w-full border rounded-lg px-3 py-2"
+                                <input
+                                    type="date"
+                                    className="w-full border rounded-lg px-3 py-2"
                                     value={form.date}
                                     onChange={e => setForm({ ...form, date: e.target.value })}
-                                    required />
+                                    required
+                                />
                             </div>
                             <div>
                                 <label className="block text-sm mb-1">Start time</label>
-                                <input type="time" className="w-full border rounded-lg px-3 py-2"
+                                <input
+                                    type="time"
+                                    className="w-full border rounded-lg px-3 py-2"
                                     value={form.start_time}
                                     onChange={e => setForm({ ...form, start_time: e.target.value })}
-                                    required />
+                                    required
+                                />
                             </div>
                             <div>
                                 <label className="block text-sm mb-1">End time (optional)</label>
-                                <input type="time" className="w-full border rounded-lg px-3 py-2"
+                                <input
+                                    type="time"
+                                    className="w-full border rounded-lg px-3 py-2"
                                     value={form.end_time}
-                                    onChange={e => setForm({ ...form, end_time: e.target.value })} />
+                                    onChange={e => setForm({ ...form, end_time: e.target.value })}
+                                />
                             </div>
                             <div>
                                 <label className="block text-sm mb-1">Confirm by (optional)</label>
-                                <input type="date" className="w-full border rounded-lg px-3 py-2"
+                                <input
+                                    type="date"
+                                    className="w-full border rounded-lg px-3 py-2"
                                     value={form.confirm_deadline}
-                                    onChange={e => setForm({ ...form, confirm_deadline: e.target.value })} />
+                                    onChange={e => setForm({ ...form, confirm_deadline: e.target.value })}
+                                />
                             </div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-sm mb-1">Capacity</label>
                                 <input
-                                    type="number" min={1}
+                                    type="number"
+                                    min={1}
                                     className="w-full border rounded-lg px-3 py-2"
                                     value={form.capacity}
-                                    onChange={e => setForm({ ...form, capacity: e.target.value === '' ? '' : Number(e.target.value) })}
+                                    onChange={e =>
+                                        setForm({
+                                            ...form,
+                                            capacity: e.target.value === '' ? '' : Number(e.target.value),
+                                        })
+                                    }
                                     placeholder="e.g., 30"
                                     required
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm mb-1">Location</label>
-                                <input className="w-full border rounded-lg px-3 py-2"
+                                <input
+                                    className="w-full border rounded-lg px-3 py-2"
                                     value={form.location}
-                                    onChange={e => setForm({ ...form, location: e.target.value })} />
+                                    onChange={e => setForm({ ...form, location: e.target.value })}
+                                />
                             </div>
                         </div>
                         <div>
                             <label className="block text-sm mb-1">Notes</label>
-                            <textarea className="w-full border rounded-lg px-3 py-2" rows={3}
+                            <textarea
+                                className="w-full border rounded-lg px-3 py-2"
+                                rows={3}
                                 value={form.notes}
-                                onChange={e => setForm({ ...form, notes: e.target.value })} />
+                                onChange={e => setForm({ ...form, notes: e.target.value })}
+                            />
                         </div>
                         <div className="flex gap-2">
-                            <button disabled={saving} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">
+                            <button
+                                disabled={saving}
+                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                            >
                                 {saving ? 'Creating…' : 'Create session'}
                             </button>
-                            <button type="button" onClick={() => setOpenNew(false)} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">
+                            <button
+                                type="button"
+                                onClick={() => setOpenNew(false)}
+                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                            >
                                 Cancel
                             </button>
                         </div>
@@ -1244,7 +1227,10 @@ function SessionsAdmin({
 
             {/* Invite modal */}
             {inviteOpen && (
-                <Modal title={`Invite to: ${inviteOpen.courses?.name || 'Session'}`} onClose={() => setInviteOpen(null)}>
+                <Modal
+                    title={`Invite to: ${inviteOpen.courses?.name || 'Session'}`}
+                    onClose={() => setInviteOpen(null)}
+                >
                     <div className="space-y-3">
                         <PeoplePicker
                             people={people}
@@ -1255,18 +1241,22 @@ function SessionsAdmin({
                         />
                         <div className="flex gap-2">
                             <button
-                                onClick={sendInvites}
+                                onClick={() => void sendInvites()}
                                 disabled={inviteSelected.length === 0}
                                 className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
                             >
                                 Send invites ({inviteSelected.length})
                             </button>
-                            <button onClick={() => setInviteOpen(null)} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">
+                            <button
+                                onClick={() => setInviteOpen(null)}
+                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                            >
                                 Close
                             </button>
                         </div>
                         <p className="text-xs text-gray-600">
-                            Invites create <code>INVITED</code> rows. Staff/managers confirm via “My bookings”. Capacity enforced on confirm; extras go to waitlist.
+                            Invites create <code>INVITED</code> rows. Staff/managers confirm via “My bookings”.
+                            Capacity is enforced on confirm; extras go to waitlist.
                         </p>
                     </div>
                 </Modal>
@@ -1275,10 +1265,15 @@ function SessionsAdmin({
     );
 }
 
-
 /* === Roster drawer (confirmed attendees only; names + emails; no popups) === */
 
-function RosterButton({ session, onChanged }: { session: Session, onChanged: () => void }) {
+function RosterButton({
+    session,
+    onChanged,
+}: {
+    session: Session;
+    onChanged: () => void;
+}) {
     type RosterRow = Attendee & { full_name?: string | null; email?: string | null };
     const [open, setOpen] = useState(false);
     const [rows, setRows] = useState<RosterRow[]>([]);
@@ -1295,13 +1290,13 @@ function RosterButton({ session, onChanged }: { session: Session, onChanged: () 
             // Only show confirmed attendees
             const att = await supabase
                 .from('training_session_attendees')
-                .select('session_id,user_id,status,confirmed_at')
+                .select('session_id,user_id,status,confirmed_at,invited_at,booked_at,cancelled_at,attended_at,completed_at,noshow_at')
                 .eq('session_id', session.id)
                 .eq('status', 'CONFIRMED');
 
             if (att.error) throw att.error;
 
-            const list = (att.data as Attendee[]) || [];
+            const list = (att.data as unknown as Attendee[]) || [];
             const ids = Array.from(new Set(list.map(a => a.user_id)));
 
             // 1) Directory (email + name)
@@ -1322,8 +1317,9 @@ function RosterButton({ session, onChanged }: { session: Session, onChanged: () 
 
             setRows(merged);
             setStagedRemove({});
-        } catch (e: any) {
-            setErr(e.message || 'Failed to load roster');
+        } catch (e) {
+            const msg = (e as { message?: string })?.message ?? 'Failed to load roster';
+            setErr(msg);
         } finally {
             setLoading(false);
         }
@@ -1335,7 +1331,10 @@ function RosterButton({ session, onChanged }: { session: Session, onChanged: () 
             .update({ status: 'CANCELLED', cancelled_at: new Date().toISOString() })
             .eq('session_id', session.id)
             .eq('user_id', user_id);
-        if (error) { alert(error.message); return; }
+        if (error) {
+            alert(error.message);
+            return;
+        }
         await load();
         onChanged();
     }
@@ -1343,14 +1342,19 @@ function RosterButton({ session, onChanged }: { session: Session, onChanged: () 
     return (
         <>
             <button
-                onClick={async () => { setOpen(true); await load(); }}
+                onClick={async () => {
+                    setOpen(true);
+                    await load();
+                }}
                 className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
             >
                 View roster
             </button>
             {open && (
                 <Modal title={`Roster — ${session.courses?.name || ''}`} onClose={() => setOpen(false)}>
-                    {loading ? <p>Loading…</p> : (
+                    {loading ? (
+                        <p>Loading…</p>
+                    ) : (
                         <div className="space-y-3">
                             <div className="overflow-x-auto rounded border">
                                 <table className="min-w-full text-sm">
@@ -1382,7 +1386,7 @@ function RosterButton({ session, onChanged }: { session: Session, onChanged: () 
                                                             ) : (
                                                                 <>
                                                                     <button
-                                                                        onClick={() => removeFinal(a.user_id)}
+                                                                        onClick={() => void removeFinal(a.user_id)}
                                                                         className="rounded px-2 py-1 text-xs text-white bg-rose-600 hover:bg-rose-700"
                                                                     >
                                                                         Remove
@@ -1401,7 +1405,11 @@ function RosterButton({ session, onChanged }: { session: Session, onChanged: () 
                                             );
                                         })}
                                         {rows.length === 0 && (
-                                            <tr><td colSpan={4} className="p-3 text-sm text-gray-600">No confirmed attendees yet.</td></tr>
+                                            <tr>
+                                                <td colSpan={4} className="p-3 text-sm text-gray-600">
+                                                    No confirmed attendees yet.
+                                                </td>
+                                            </tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -1418,9 +1426,7 @@ function RosterButton({ session, onChanged }: { session: Session, onChanged: () 
     );
 }
 
-
 /* ========================= SETTINGS — monitored courses (unchanged) ========================= */
-
 
 function SettingsSection() {
     const [uid, setUid] = useState<string | null>(null);
@@ -1467,7 +1473,6 @@ function SettingsSection() {
     const [suggested, setSuggested] = useState<SuggestedGroup[]>([]);
     const [sgLoading, setSgLoading] = useState(false);
     const [sgErr, setSgErr] = useState<string | null>(null);
-    const [sgCourseFilter, setSgCourseFilter] = useState<string>(''); // optional filter by course
 
     // create-session modal for a selected suggestion
     const [createOpen, setCreateOpen] = useState<null | SuggestedGroup>(null);
@@ -1513,131 +1518,97 @@ function SettingsSection() {
                 // All courses
                 const cr = await supabase.from('courses').select('*').eq('company_id', cid).order('name');
                 if (cr.error) throw cr.error;
-                setCourses((cr.data as any) || []);
+                setCourses((cr.data as unknown as Course[]) || []);
 
                 // Monitored course settings (company-level)
-                // Uses training_monitored_courses: is_monitored, threshold, suggest_capacity, lookahead_days
                 const ms = await supabase
                     .from('training_monitored_courses')
                     .select('course_id, is_monitored, threshold, suggest_capacity, lookahead_days')
                     .eq('company_id', cid);
 
-                if (ms.error && ms.error.code !== '42P01') throw ms.error;
+                if (ms.error && (ms.error as { code?: string }).code !== '42P01') throw ms.error;
 
-                // Build quick lookup maps for UI
-                const monitoredByCourse = new Map<string, {
-                    is_monitored: boolean;
+                const monitoredByCourse = new Map<
+                    string,
+                    { is_monitored: boolean; threshold: number | null; suggest_capacity: number | null; lookahead_days: number | null }
+                >();
+                (ms.data as unknown as Array<{
+                    course_id: string;
+                    is_monitored: boolean | null;
                     threshold: number | null;
                     suggest_capacity: number | null;
                     lookahead_days: number | null;
-                }>();
-                (ms.data || []).forEach((r: any) => {
+                }> | null)?.forEach(r => {
                     monitoredByCourse.set(r.course_id, {
                         is_monitored: !!r.is_monitored,
-                        threshold: (r.threshold ?? null),
-                        suggest_capacity: (r.suggest_capacity ?? null),
-                        lookahead_days: (r.lookahead_days ?? null),
+                        threshold: r.threshold ?? null,
+                        suggest_capacity: r.suggest_capacity ?? null,
+                        lookahead_days: r.lookahead_days ?? null,
                     });
                 });
-                setCohort(Object.fromEntries(
-                    Array.from(monitoredByCourse.entries()).map(([cid, v]) => [cid, (v.suggest_capacity ?? 10)])
-                ));
 
+                setCohort(
+                    Object.fromEntries(
+                        Array.from(monitoredByCourse.entries()).map(([cid2, v]) => [cid2, v.suggest_capacity ?? 10]),
+                    ),
+                );
 
                 /* ---- Suggestions loader (ALL suggestions, no monitored/course filter) ---- */
                 setSgLoading(true);
                 setSgErr(null);
                 try {
-                    // 1) Pull suggested groups (prefer v2 with group_num; fallback to v1)
-                    let sRes = await supabase
+                    const sRes = await supabase
                         .from('training_demand_groups_v2')
                         .select('*')
                         .eq('company_id', cid)
                         .order('earliest_due', { ascending: true });
 
                     let rows: SuggestedGroup[] = [];
-                    if (sRes.error && sRes.error.code === '42P01') {
-                        const old = await supabase
-                            .from('training_demand_groups_v')
-                            .select('*')
-                            .eq('company_id', cid);
-
+                    if ((sRes.error as { code?: string } | null)?.code === '42P01') {
+                        const old = await supabase.from('training_demand_groups_v').select('*').eq('company_id', cid);
                         if (!old.error) {
-                            rows = (old.data as any[])
+                            rows = ((old.data as unknown[]) || [])
                                 .sort((a, b) => {
-                                    const ad = a.earliest_due || '';
-                                    const bd = b.earliest_due || '';
-                                    return ad.localeCompare(bd) || String(a.course_id).localeCompare(String(b.course_id));
+                                    const ad = (a as { earliest_due?: string | null }).earliest_due || '';
+                                    const bd = (b as { earliest_due?: string | null }).earliest_due || '';
+                                    return ad.localeCompare(bd) ||
+                                        String((a as { course_id: string }).course_id).localeCompare(
+                                            String((b as { course_id: string }).course_id),
+                                        );
                                 })
                                 .map((r, i) => ({
-                                    company_id: r.company_id,
-                                    course_id: r.course_id,
+                                    company_id: (r as { company_id: string }).company_id,
+                                    course_id: (r as { course_id: string }).course_id,
                                     group_num: i + 1,
-                                    earliest_due: r.earliest_due ?? null,
-                                    latest_due: r.latest_due ?? null,
-                                    user_ids: r.user_ids ?? [],
-                                    count: r.count ?? 0,
+                                    earliest_due: (r as { earliest_due?: string | null }).earliest_due ?? null,
+                                    latest_due: (r as { latest_due?: string | null }).latest_due ?? null,
+                                    user_ids: ((r as { user_ids?: string[] | null }).user_ids ?? []) as string[],
+                                    count: Number((r as { count?: number | null }).count ?? 0),
                                 })) as SuggestedGroup[];
                         } else {
                             setSuggested([]);
-                            setSgErr(old.error.message);
-                            return;
+                            setSgErr((old.error as { message?: string }).message ?? 'Failed to load suggestions');
                         }
                     } else if (!sRes.error) {
-                        rows = (sRes.data as any[]) as SuggestedGroup[];
+                        rows = (sRes.data as unknown as SuggestedGroup[]) || [];
                     } else {
                         setSuggested([]);
-                        setSgErr(sRes.error.message);
-                        return;
+                        setSgErr((sRes.error as { message?: string }).message ?? 'Failed to load suggestions');
                     }
 
-                    // 2) Overlay course names (optional thresholds still added if present, but we DO NOT filter)
-                    const courseNameById = new Map<string, string>();
-                    (courses || []).forEach(c => courseNameById.set((c as any).id, (c as any).name));
-
-                    const ms = await supabase
-                        .from('training_monitored_courses')
-                        .select('course_id, threshold, suggest_capacity')
-                        .eq('company_id', cid);
-
-                    const thresholds = new Map<string, { threshold: number | null; suggest_capacity: number | null }>();
-                    if (!ms.error) {
-                        (ms.data || []).forEach((r: any) =>
-                            thresholds.set(r.course_id, {
-                                threshold: r.threshold ?? null,
-                                suggest_capacity: r.suggest_capacity ?? null
-                            })
-                        );
-                    }
-
-                    const finalized = rows.map(r => {
-                        const cfg = thresholds.get(r.course_id);
-                        return {
-                            ...r,
-                            course_name: courseNameById.get(r.course_id) || r.course_id,
-                            threshold: cfg?.threshold ?? null,
-                            suggest_capacity: cfg?.suggest_capacity ?? null,
-                            over_threshold: (cfg?.threshold ?? Infinity) !== Infinity && r.count >= (cfg?.threshold ?? 0),
-                        };
-                    });
-
-                    setSuggested(finalized as any); // NO filtering here
+                    setSuggested(rows);
                 } finally {
                     setSgLoading(false);
                 }
-                /* ---- end suggestions ---- */
-
-
-
-            } catch (e: any) {
-                setErr(e.message || 'Failed to load settings');
+            } catch (e) {
+                const msg = (e as { message?: string })?.message ?? 'Failed to load settings';
+                setErr(msg);
             } finally {
                 setLoading(false);
             }
         })();
     }, [uid, level]);
 
-    // ---------- Helpers ----------
     function availableCoursesForAdd() {
         const monitored = new Set(Object.keys(cohort));
         return courses.filter(c => !monitored.has(c.id));
@@ -1653,33 +1624,28 @@ function SettingsSection() {
     }
 
     async function tryRebuild(course_id: string, group_size: number) {
-        // Preferred RPC
         let r = await supabase.rpc('rebuild_training_cohorts_for_course', {
             p_company_id: companyId,
             p_course_id: course_id,
             p_group_size: group_size,
-        } as any);
-        if (!r.error) return;
+        } as unknown);
+        if (!('error' in r) || !r.error) return;
 
-        // Fallback RPC name
         r = await supabase.rpc('build_training_cohorts', {
             p_company_id: companyId,
             p_course_id: course_id,
             p_group_size: group_size,
-        } as any);
-        // If still errors (e.g., not created yet), swallow and let UI proceed.
+        } as unknown);
+        // swallow errors
     }
 
     async function tryClear(course_id: string) {
-        const r = await supabase.rpc('clear_training_cohorts_for_course', {
+        await supabase.rpc('clear_training_cohorts_for_course', {
             p_company_id: companyId,
             p_course_id: course_id,
-        } as any);
-        // Ignore errors (function may not exist yet)
+        } as unknown);
     }
 
-    // ---------- Add monitored course ----------
-    // ---------- Add monitored course ----------
     async function addMonitoredCourse() {
         if (!companyId || !addCourseId || addGroupSize === '' || Number(addGroupSize) < 2) {
             setOk(null);
@@ -1692,81 +1658,74 @@ function SettingsSection() {
         try {
             const size = Number(addGroupSize);
 
-            // Write to training_monitored_courses (current table)
             const up = await supabase
                 .from('training_monitored_courses')
-                .upsert({
-                    company_id: companyId,          // <- was cid (undefined)
-                    course_id: addCourseId,
-                    is_monitored: true,
-                    threshold: size,               // using size for threshold & suggest_capacity
-                    suggest_capacity: size,
-                }, { onConflict: 'company_id,course_id' });
+                .upsert(
+                    {
+                        company_id: companyId,
+                        course_id: addCourseId,
+                        is_monitored: true,
+                        threshold: size,
+                        suggest_capacity: size,
+                    },
+                    { onConflict: 'company_id,course_id' },
+                );
 
-            if (up.error && up.error.code !== '42P01') throw up.error;
+            if ((up.error as { code?: string } | null)?.code && up.error?.code !== '42P01') throw up.error;
 
-            // Update UI state immediately
             setCohort(prev => ({ ...prev, [addCourseId]: size }));
 
-            // Trigger cohort build right away (graceful if RPC missing)
             await tryRebuild(addCourseId, size);
 
             setAddCourseId('');
             setAddGroupSize(10);
             setOk('Monitored course added & cohorts built.');
-        } catch (e: any) {
-            setErr(e.message || 'Failed to add monitored course');
+        } catch (e) {
+            setErr((e as { message?: string })?.message ?? 'Failed to add monitored course');
         } finally {
             setAdding(false);
         }
     }
 
-
-    // ---------- Update group size ----------
-    // ---------- Update group size ----------
     async function saveRow(course_id: string) {
         const group_size = Math.max(2, Number(cohort[course_id]) || 10);
         setRowBusy(course_id, true);
         setRowMessage(course_id, null, null);
         try {
-            // Update monitored-course config (new table)
             const up = await supabase
                 .from('training_monitored_courses')
-                .upsert({
-                    company_id: companyId,
-                    course_id,
-                    is_monitored: true,
-                    suggest_capacity: group_size,
-                    threshold: group_size, // keep threshold aligned with group size in this UI
-                }, { onConflict: 'company_id,course_id' });
-            if (up.error && up.error.code !== '42P01') throw up.error;
+                .upsert(
+                    {
+                        company_id: companyId,
+                        course_id,
+                        is_monitored: true,
+                        suggest_capacity: group_size,
+                        threshold: group_size,
+                    },
+                    { onConflict: 'company_id,course_id' },
+                );
+            if ((up.error as { code?: string } | null)?.code && up.error?.code !== '42P01') throw up.error;
 
-            // Rebuild right away
             await tryRebuild(course_id, group_size);
             setRowMessage(course_id, 'Saved & rebuilt.');
-        } catch (e: any) {
-            setRowMessage(course_id, null, e.message || 'Failed to save');
+        } catch (e) {
+            setRowMessage(course_id, null, (e as { message?: string })?.message ?? 'Failed to save');
         } finally {
             setRowBusy(course_id, false);
         }
     }
 
-
-    // ---------- Delete monitored course (inline confirm) ----------
-    // ---------- Delete monitored course (inline confirm) ----------
     async function deleteRowFinal(course_id: string) {
         setRowBusy(course_id, true);
         setRowMessage(course_id, null, null);
         try {
-            // Remove from training_monitored_courses
             const del = await supabase
                 .from('training_monitored_courses')
                 .delete()
                 .eq('company_id', companyId)
                 .eq('course_id', course_id);
-            if (del.error && del.error.code !== '42P01') throw del.error;
+            if ((del.error as { code?: string } | null)?.code && del.error?.code !== '42P01') throw del.error;
 
-            // Optional: clear existing cohorts for this course
             await tryClear(course_id);
 
             setCohort(prev => {
@@ -1776,17 +1735,14 @@ function SettingsSection() {
             });
             setPendingDelete(null);
             setRowMessage(course_id, 'Deleted.');
-        } catch (e: any) {
-            setRowMessage(course_id, null, e.message || 'Failed to delete');
+        } catch (e) {
+            setRowMessage(course_id, null, (e as { message?: string })?.message ?? 'Failed to delete');
         } finally {
             setRowBusy(course_id, false);
         }
     }
 
-
-    /* ===== NEW: create session from suggestion helpers ===== */
     function openCreateFromSuggestion(sg: SuggestedGroup) {
-        // default: 14 days before earliest_due @ 10:00
         let datePref = '';
         if (sg.earliest_due) {
             const d = new Date(sg.earliest_due);
@@ -1811,7 +1767,7 @@ function SettingsSection() {
         setCreateSaving(true);
         try {
             const starts_at = new Date(`${createForm.date}T${createForm.time}:00`).toISOString();
-            const { data, error } = await supabase.rpc('create_training_session_for_group', {
+            const { error } = await supabase.rpc('create_training_session_for_group', {
                 p_company_id: companyId,
                 p_course_id: createOpen.course_id,
                 p_group_num: createOpen.group_num,
@@ -1819,11 +1775,10 @@ function SettingsSection() {
                 p_location: createForm.location || null,
                 p_capacity: createForm.capacity === '' ? null : Number(createForm.capacity),
                 p_confirm_days: createForm.confirmDays === '' ? null : Number(createForm.confirmDays),
-            } as any);
+            } as unknown);
 
             if (error) throw error;
 
-            // refresh suggestions
             setCreateOpen(null);
             setSgLoading(true);
             const sRes = await supabase
@@ -1831,12 +1786,12 @@ function SettingsSection() {
                 .select('*')
                 .eq('company_id', companyId)
                 .order('earliest_due', { ascending: true });
-            if (!sRes.error) setSuggested((sRes.data as any) as SuggestedGroup[]);
+            if (!sRes.error) setSuggested((sRes.data as unknown as SuggestedGroup[]) || []);
             setSgLoading(false);
 
             alert('Session created and invites sent.');
-        } catch (e: any) {
-            alert(e.message || 'Failed to create session');
+        } catch (e) {
+            alert((e as { message?: string })?.message ?? 'Failed to create session');
         } finally {
             setCreateSaving(false);
         }
@@ -1845,9 +1800,7 @@ function SettingsSection() {
     if (loading) return <p>Loading…</p>;
 
     const addChoices = availableCoursesForAdd();
-    // No client-side filter; use all suggestions
-    const suggestedFiltered = suggested;
-
+    const suggestedFiltered = suggested; // no client-side filtering
 
     return (
         <section className="space-y-4">
@@ -1889,7 +1842,7 @@ function SettingsSection() {
                     </div>
                     <div>
                         <button
-                            onClick={addMonitoredCourse}
+                            onClick={() => void addMonitoredCourse()}
                             disabled={adding || !addCourseId || addGroupSize === '' || Number(addGroupSize) < 2}
                             className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
                         >
@@ -1931,7 +1884,10 @@ function SettingsSection() {
                                                 onChange={e =>
                                                     setCohort(prev => ({
                                                         ...prev,
-                                                        [course_id]: e.target.value === '' ? 2 : Math.max(2, Number(e.target.value) || 2),
+                                                        [course_id]:
+                                                            e.target.value === ''
+                                                                ? 2
+                                                                : Math.max(2, Number(e.target.value) || 2),
                                                     }))
                                                 }
                                             />
@@ -1941,7 +1897,7 @@ function SettingsSection() {
                                                 {!deleting ? (
                                                     <>
                                                         <button
-                                                            onClick={() => saveRow(course_id)}
+                                                            onClick={() => void saveRow(course_id)}
                                                             disabled={!!rowSaving[course_id]}
                                                             className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
                                                         >
@@ -1957,7 +1913,7 @@ function SettingsSection() {
                                                 ) : (
                                                     <>
                                                         <button
-                                                            onClick={() => deleteRowFinal(course_id)}
+                                                            onClick={() => void deleteRowFinal(course_id)}
                                                             className="rounded px-2 py-1 text-xs text-white bg-rose-600 hover:bg-rose-700"
                                                         >
                                                             Delete
@@ -1973,10 +1929,14 @@ function SettingsSection() {
                                             </div>
                                             {/* Row messages */}
                                             {rowErr[course_id] && (
-                                                <div className="mt-1 text-xs text-rose-600">{rowErr[course_id]}</div>
+                                                <div className="mt-1 text-xs text-rose-600">
+                                                    {rowErr[course_id]}
+                                                </div>
                                             )}
                                             {rowOk[course_id] && (
-                                                <div className="mt-1 text-xs text-emerald-700">{rowOk[course_id]}</div>
+                                                <div className="mt-1 text-xs text-emerald-700">
+                                                    {rowOk[course_id]}
+                                                </div>
                                             )}
                                         </td>
                                     </tr>
@@ -2005,7 +1965,6 @@ function SettingsSection() {
                     <h2 className="text-base font-semibold">Suggested booking groups</h2>
                 </div>
 
-
                 {sgErr && <div className="mb-2 text-sm text-rose-600">{sgErr}</div>}
 
                 <div className="overflow-x-auto rounded-xl border bg-white ring-1 ring-gray-50">
@@ -2021,39 +1980,42 @@ function SettingsSection() {
                         </thead>
                         <tbody>
                             {sgLoading ? (
-                                <tr><td colSpan={5} className="p-3 text-sm text-gray-600">Loading…</td></tr>
+                                <tr>
+                                    <td colSpan={5} className="p-3 text-sm text-gray-600">
+                                        Loading…
+                                    </td>
+                                </tr>
+                            ) : suggestedFiltered.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="p-3 text-sm text-gray-600">
+                                        No suggested groups.
+                                    </td>
+                                </tr>
                             ) : (
-                                (() => {
-                                        const data = suggested; // (or keep suggestedFiltered after the small change above)
-                                    if (data.length === 0) {
-                                        return <tr><td colSpan={5} className="p-3 text-sm text-gray-600">No suggested groups.</td></tr>;
-                                    }
-                                    return data.map(sg => {
-                                        const course = courses.find(c => c.id === sg.course_id);
-                                        const name = course?.name || sg.course_id;
-                                        const win = [
-                                            sg.earliest_due ? new Date(sg.earliest_due).toLocaleDateString() : '—',
-                                            sg.latest_due ? new Date(sg.latest_due).toLocaleDateString() : '—',
-                                        ].join(' → ');
-
-                                        return (
-                                            <tr key={`${sg.course_id}-${sg.group_num}`} className="border-t">
-                                                <td className="p-2">{name}</td>
-                                                <td className="p-2">#{sg.group_num}</td>
-                                                <td className="p-2">{sg.count}</td>
-                                                <td className="p-2">{win}</td>
-                                                <td className="p-2 text-center">
-                                                    <button
-                                                        onClick={() => openCreateFromSuggestion(sg)}
-                                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                                                    >
-                                                        Create session
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    });
-                                })()
+                                suggestedFiltered.map(sg => {
+                                    const course = courses.find(c => c.id === sg.course_id);
+                                    const name = course?.name || sg.course_id;
+                                    const win = [
+                                        sg.earliest_due ? new Date(sg.earliest_due).toLocaleDateString() : '—',
+                                        sg.latest_due ? new Date(sg.latest_due).toLocaleDateString() : '—',
+                                    ].join(' → ');
+                                    return (
+                                        <tr key={`${sg.course_id}-${sg.group_num}`} className="border-t">
+                                            <td className="p-2">{name}</td>
+                                            <td className="p-2">#{sg.group_num}</td>
+                                            <td className="p-2">{sg.count}</td>
+                                            <td className="p-2">{win}</td>
+                                            <td className="p-2 text-center">
+                                                <button
+                                                    onClick={() => openCreateFromSuggestion(sg)}
+                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                >
+                                                    Create session
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
@@ -2095,20 +2057,32 @@ function SettingsSection() {
                             <div>
                                 <label className="block text-sm mb-1">Capacity (optional)</label>
                                 <input
-                                    type="number" min={1}
+                                    type="number"
+                                    min={1}
                                     className="w-full border rounded-lg px-3 py-2"
                                     value={createForm.capacity}
-                                    onChange={e => setCreateForm({ ...createForm, capacity: e.target.value === '' ? '' : Number(e.target.value) })}
+                                    onChange={e =>
+                                        setCreateForm({
+                                            ...createForm,
+                                            capacity: e.target.value === '' ? '' : Number(e.target.value),
+                                        })
+                                    }
                                     placeholder="Leave blank to use suggested"
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm mb-1">Confirm days (optional)</label>
                                 <input
-                                    type="number" min={0}
+                                    type="number"
+                                    min={0}
                                     className="w-full border rounded-lg px-3 py-2"
                                     value={createForm.confirmDays}
-                                    onChange={e => setCreateForm({ ...createForm, confirmDays: e.target.value === '' ? '' : Number(e.target.value) })}
+                                    onChange={e =>
+                                        setCreateForm({
+                                            ...createForm,
+                                            confirmDays: e.target.value === '' ? '' : Number(e.target.value),
+                                        })
+                                    }
                                     placeholder="Blank = default"
                                 />
                             </div>
@@ -2124,7 +2098,7 @@ function SettingsSection() {
                         </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={createSessionFromSuggestion}
+                                onClick={() => void createSessionFromSuggestion()}
                                 disabled={createSaving}
                                 className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
                             >
@@ -2148,11 +2122,17 @@ function SettingsSection() {
     );
 }
 
-
-
 /* ========================= Small UI pieces ========================= */
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({
+    title,
+    onClose,
+    children,
+}: {
+    title: string;
+    onClose: () => void;
+    children: React.ReactNode;
+}) {
     return (
         <div className="fixed inset-0 z-[200]">
             <div className="absolute inset-0 bg-black/20" onClick={onClose} />
@@ -2160,8 +2140,15 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
                 <div className="w-full max-w-2xl rounded-2xl border bg-white shadow-lg ring-1 ring-gray-50 p-4">
                     <div className="flex items-center justify-between mb-2">
                         <h3 className="text-base font-semibold">{title}</h3>
-                        <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-50" aria-label="Close" type="button">
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                        <button
+                            onClick={onClose}
+                            className="rounded-lg p-1 hover:bg-gray-50"
+                            aria-label="Close"
+                            type="button"
+                        >
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2}>
+                                <path d="M6 6l12 12M18 6L6 18" />
+                            </svg>
                         </button>
                     </div>
                     {children}
@@ -2215,12 +2202,19 @@ function PeoplePicker({
                 {selected.map(id => {
                     const p = people.find(x => x.id === id);
                     const label = p ? p.name : id.slice(0, 8);
-                    const ctx = p?.home_id ? homesById.get(p.home_id) : (p?.is_bank ? 'Bank staff' : '—');
+                    const ctx = p?.home_id ? homesById.get(p.home_id) : p?.is_bank ? 'Bank staff' : '—';
                     return (
                         <span key={id} className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs">
                             <span className="font-medium">{label}</span>
                             <span className="text-gray-500">({ctx || '—'})</span>
-                            <button type="button" className="rounded border px-1" onClick={() => remove(id)} disabled={disabled}>×</button>
+                            <button
+                                type="button"
+                                className="rounded border px-1"
+                                onClick={() => remove(id)}
+                                disabled={disabled}
+                            >
+                                ×
+                            </button>
                         </span>
                     );
                 })}
@@ -2234,16 +2228,30 @@ function PeoplePicker({
                     className="w-full border rounded-lg px-3 py-2"
                     placeholder={placeholder}
                     value={query}
-                    onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+                    onChange={e => {
+                        setQuery(e.target.value);
+                        setOpen(true);
+                    }}
                     onFocus={() => setOpen(true)}
                     onBlur={() => requestAnimationFrame(() => setOpen(false))}
-                    onKeyDown={(e) => {
+                    onKeyDown={e => {
                         if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) setOpen(true);
                         if (!open) return;
-                        if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, list.length - 1)); }
-                        if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
-                        if (e.key === 'Enter') { e.preventDefault(); if (list[highlight]) add(list[highlight].id); }
-                        if (e.key === 'Escape') { setOpen(false); }
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            setHighlight(h => Math.min(h + 1, list.length - 1));
+                        }
+                        if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            setHighlight(h => Math.max(h - 1, 0));
+                        }
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (list[highlight]) add(list[highlight].id);
+                        }
+                        if (e.key === 'Escape') {
+                            setOpen(false);
+                        }
                     }}
                 />
                 {open && list.length > 0 && (
@@ -2252,13 +2260,14 @@ function PeoplePicker({
                             <button
                                 key={p.id}
                                 type="button"
-                                onMouseDown={(e) => e.preventDefault()}
+                                onMouseDown={e => e.preventDefault()}
                                 onClick={() => add(p.id)}
-                                className={`w-full text-left px-3 py-2 text-sm ${i === highlight ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                                className={`w-full text-left px-3 py-2 text-sm ${i === highlight ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                                    }`}
                             >
                                 <div className="font-medium text-gray-900">{p.name}</div>
                                 <div className="text-xs text-gray-500">
-                                    {p.home_id ? homesById.get(p.home_id) : (p.is_bank ? 'Bank staff' : '—')}
+                                    {p.home_id ? homesById.get(p.home_id) : p.is_bank ? 'Bank staff' : '—'}
                                 </div>
                             </button>
                         ))}
@@ -2268,3 +2277,5 @@ function PeoplePicker({
         </div>
     );
 }
+
+

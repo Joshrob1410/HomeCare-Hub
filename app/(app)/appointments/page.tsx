@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel, type AppLevel } from '@/supabase/roles';
 
@@ -30,6 +30,10 @@ type AppointmentException = {
     created_by: string;
     created_at: string;
 };
+
+// Membership helper row types
+type CompanyMembershipRow = { company_id: string };
+type HomeMembershipRow = { home_id: string; role?: string };
 
 /** ===== Date helpers (month grid) ===== */
 function startOfMonth(d: Date) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)); }
@@ -69,7 +73,6 @@ function expandForMonth(appt: Appointment, mStart: string, mEnd: string): string
             case 'YEARLY': cur = addMonthsISO(cur, 12); break;
             default: return out;
         }
-
     }
     return out;
 }
@@ -126,13 +129,20 @@ export default function Page() {
 
     // NEW (inline banner instead of alert popups)
     const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+    // In the browser, setTimeout returns a number; using window.setTimeout keeps types simple.
+    const noticeTimerRef = useRef<number | null>(null);
+
     function pushNotice(text: string, type: 'success' | 'error' | 'info' = 'info') {
         setNotice({ type, text });
-        // auto-hide after 3s
-        (pushNotice as any)._t && clearTimeout((pushNotice as any)._t);
-        (pushNotice as any)._t = setTimeout(() => setNotice(null), 3000);
+        if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = window.setTimeout(() => setNotice(null), 3000);
     }
-
+    // cleanup timer on unmount
+    useEffect(() => {
+        return () => {
+            if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+        };
+    }, []);
 
     /** ===== Load session + scope (companies/homes) ===== */
     useEffect(() => {
@@ -152,46 +162,89 @@ export default function Page() {
                     supabase.from('companies').select('id,name').order('name'),
                     supabase.from('homes').select('id,name,company_id').order('name'),
                 ]);
-                companies = (cs as any) ?? [];
-                homes = (hs as any) ?? [];
+                companies = (cs ?? []) as Company[];
+                homes = (hs ?? []) as Home[];
             } else if (lvl === '2_COMPANY') {
-                const { data: cm } = await supabase.from('company_memberships').select('company_id').eq('user_id', uid);
-                const cids = (cm ?? []).map((r: any) => r.company_id);
+                const { data: cm } = await supabase
+                    .from('company_memberships')
+                    .select('company_id')
+                    .eq('user_id', uid);
+                const companyRows = (cm ?? []) as CompanyMembershipRow[];
+                const cids = companyRows.map(r => r.company_id);
+
                 if (cids.length) {
                     const [{ data: cs }, { data: hs }] = await Promise.all([
                         supabase.from('companies').select('id,name').in('id', cids).order('name'),
                         supabase.from('homes').select('id,name,company_id').in('company_id', cids).order('name'),
                     ]);
-                    companies = (cs as any) ?? [];
-                    homes = (hs as any) ?? [];
+                    companies = (cs ?? []) as Company[];
+                    homes = (hs ?? []) as Home[];
                 }
             } else if (lvl === '3_MANAGER') {
-                const { data: hm } = await supabase.from('home_memberships').select('home_id').eq('user_id', uid).eq('role', 'MANAGER');
-                const hids = (hm ?? []).map((r: any) => r.home_id);
+                const { data: hm } = await supabase
+                    .from('home_memberships')
+                    .select('home_id')
+                    .eq('user_id', uid)
+                    .eq('role', 'MANAGER');
+
+                const homeRows = (hm ?? []) as HomeMembershipRow[];
+                const hids = homeRows.map(r => r.home_id);
+
                 if (hids.length) {
-                    const { data: hs } = await supabase.from('homes').select('id,name,company_id').in('id', hids).order('name');
-                    homes = (hs as any) ?? [];
+                    const { data: hs } = await supabase
+                        .from('homes')
+                        .select('id,name,company_id')
+                        .in('id', hids)
+                        .order('name');
+
+                    homes = (hs ?? []) as Home[];
+
                     const cids = Array.from(new Set(homes.map(h => h.company_id)));
                     if (cids.length) {
-                        const { data: cs } = await supabase.from('companies').select('id,name').in('id', cids).order('name');
-                        companies = (cs as any) ?? [];
+                        const { data: cs } = await supabase
+                            .from('companies')
+                            .select('id,name')
+                            .in('id', cids)
+                            .order('name');
+                        companies = (cs ?? []) as Company[];
                     }
                 }
             } else {
                 // Staff: just their single home
-                const { data: hm } = await supabase.from('home_memberships').select('home_id').eq('user_id', uid).limit(1).maybeSingle();
-                const hid = hm?.home_id ?? null;
+                const { data: hm } = await supabase
+                    .from('home_memberships')
+                    .select('home_id')
+                    .eq('user_id', uid)
+                    .limit(1)
+                    .maybeSingle();
+
+                const hid = (hm ? (hm as HomeMembershipRow).home_id : null);
+
                 let hs: Home[] = [];
                 let cs: Company[] = [];
+
                 if (hid) {
-                    const { data: h } = await supabase.from('homes').select('id,name,company_id').eq('id', hid).single();
+                    const { data: h } = await supabase
+                        .from('homes')
+                        .select('id,name,company_id')
+                        .eq('id', hid)
+                        .single();
+
                     if (h) {
-                        hs = [h as any];
-                        const { data: c } = await supabase.from('companies').select('id,name').eq('id', (h as any).company_id).single();
-                        if (c) cs = [c as any];
+                        const home = h as Home;
+                        hs = [home];
+
+                        const { data: c } = await supabase
+                            .from('companies')
+                            .select('id,name')
+                            .eq('id', home.company_id)
+                            .single();
+
+                        if (c) cs = [c as Company];
                     }
                 }
-                homes = hs; companies = cs;
+                homes = hs;
+                companies = cs;
             }
 
             // defaults
@@ -210,8 +263,12 @@ export default function Page() {
     }, []);
 
     /** Reload appointments when month/home changes */
+    // Narrow once, then use the narrowed values inside the callback and deps
+    const viewStatus = view.status;
+    const selectedHomeId = viewStatus === 'ready' ? view.selectedHomeId : null;
+
     const loadAppointments = useCallback(async () => {
-        if (view.status !== 'ready' || !view.selectedHomeId) return;
+        if (viewStatus !== 'ready' || !selectedHomeId) return;
         setLoading(true);
 
         const from = fmtISO(new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() - 1, 1)));
@@ -221,7 +278,7 @@ export default function Page() {
             supabase
                 .from('appointments')
                 .select('*')
-                .eq('home_id', view.selectedHomeId)
+                .eq('home_id', selectedHomeId)
                 .lte('start_date', to),
             supabase
                 .from('appointment_exceptions')
@@ -230,12 +287,12 @@ export default function Page() {
                 .lte('skip_date', to),
         ]);
 
-        setAppts((ap as any) ?? []);
-        setExceptions((ex as any) ?? []);
+        setAppts(((ap ?? []) as unknown as Appointment[]));
+        setExceptions(((ex ?? []) as unknown as AppointmentException[]));
         setLoading(false);
-    }, [view, monthDate]);
+    }, [viewStatus, selectedHomeId, monthDate]);
 
-    useEffect(() => { loadAppointments(); }, [loadAppointments]);
+    useEffect(() => { void loadAppointments(); }, [loadAppointments]);
 
     /** Derived: month grid (Mon-Sun) + events by day */
     const days = useMemo(() => {
@@ -312,14 +369,16 @@ export default function Page() {
         setSaving(true);
         try {
             if (!editing) {
-                const ins = await supabase.from('appointments').insert({
+                const insertPayload: Omit<Appointment, 'id' | 'created_at' | 'updated_at'> = {
                     home_id: view.selectedHomeId,
                     start_date: formDate,
                     description: formDesc.trim() || 'Untitled',
                     recurrence: formRec,
                     reminders_enabled: formRem,
                     created_by: view.uid,
-                }).select('*').single();
+                };
+
+                const ins = await supabase.from('appointments').insert(insertPayload).select('*').single();
                 if (ins.error) throw ins.error;
 
                 // 🔔 Fire reminders only when a brand-new appointment is created.
@@ -339,22 +398,24 @@ export default function Page() {
             closeForm();
             await loadAppointments();
             pushNotice('Saved', 'success');
-        } catch (err: any) {
-            pushNotice(err?.message || 'Save failed', 'error');
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Save failed';
+            pushNotice(msg, 'error');
         } finally {
             setSaving(false);
         }
     }
 
-
     // Delete just this occurrence by writing an exception for the clicked day
     async function deleteOccurrence(a: Appointment) {
         if (!occurrenceISO) return; // safety
-        const ins = await supabase.from('appointment_exceptions').insert({
+        const excPayload: { appointment_id: string; skip_date: string; created_by?: string } = {
             appointment_id: a.id,
             skip_date: occurrenceISO,
-            created_by: view.status === 'ready' ? view.uid : undefined,
-        });
+        };
+        if (view.status === 'ready') excPayload.created_by = view.uid;
+
+        const ins = await supabase.from('appointment_exceptions').insert(excPayload);
         if (ins.error) { pushNotice(ins.error.message, 'error'); return; }
         setShowForm(false);
         await loadAppointments();
@@ -385,17 +446,20 @@ export default function Page() {
         }
     }
 
-
     /** Homes list for selected company (admin/company) */
+    const hv_status = view.status;
+    const hv_level = hv_status === 'ready' ? view.level : null;
+    const hv_homes = hv_status === 'ready' ? view.homes : ([] as Home[]);
+    const hv_companyId = hv_status === 'ready' ? view.selectedCompanyId : null;
+
     const homesForCompany = useMemo(() => {
-        if (view.status !== 'ready') return [];
-        const { level, homes, selectedCompanyId } = view;
-        if (level === '1_ADMIN') {
-            if (!selectedCompanyId) return homes;
-            return homes.filter(h => h.company_id === selectedCompanyId);
+        if (hv_status !== 'ready') return [] as Home[];
+        if (hv_level === '1_ADMIN') {
+            if (!hv_companyId) return hv_homes;
+            return hv_homes.filter(h => h.company_id === hv_companyId);
         }
-        return homes;
-    }, [view]);
+        return hv_homes;
+    }, [hv_status, hv_level, hv_homes, hv_companyId]);
 
     if (view.status === 'loading') return <div className="p-4">Loading…</div>;
     if (view.status === 'signed_out') return null;
@@ -407,10 +471,10 @@ export default function Page() {
                 {notice && (
                     <div
                         className={`rounded-md px-3 py-2 text-sm border ${notice.type === 'error'
-                                ? 'bg-rose-50 border-rose-200 text-rose-800'
-                                : notice.type === 'success'
-                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                    : 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                            ? 'bg-rose-50 border-rose-200 text-rose-800'
+                            : notice.type === 'success'
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                : 'bg-indigo-50 border-indigo-200 text-indigo-800'
                             }`}
                     >
                         {notice.text}
@@ -509,7 +573,7 @@ export default function Page() {
                                 <div className="space-y-1">
                                     {list.map(a => (
                                         <button
-                                            key={a.id}
+                                            key={`${a.id}-${iso}`}
                                             onClick={() => openEdit(a, iso)}
                                             className="block w-full text-left text-[12px] px-2 py-1 rounded border bg-indigo-50 hover:bg-indigo-100"
                                             title="Edit"

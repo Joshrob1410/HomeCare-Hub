@@ -37,17 +37,31 @@ type TSEntry = {
     notes: string | null;
 };
 
+// Helpers for joined rows we read from Supabase
+type RotaJoin = {
+    rotas: { id: string; home_id: string; month_date: string; status: string };
+    day_of_month?: number;
+    shift_type_id?: string | null;
+    hours?: number | null;
+    user_id?: string;
+};
+
+type TimesheetWithHomeName = Timesheet & { home_name: string };
+
 /* ===================================
    Helpers / Small UI bits
    =================================== */
 
-// cache across renders (module-level)
-const profileCache = new Map<string, Profile>();
-
+// cache across renders (module-level) — intentionally unused for now
+// (prefixed to satisfy no-unused-vars)
+const _profileCache = new Map<string, Profile>();
 
 const KIND_LABEL: Record<string, string> = {
-    'SLEEP': 'Sleep', 'ANNUAL_LEAVE': 'Annual leave', 'SICKNESS': 'Sickness',
-    'WAKING_NIGHT': 'Waking night', 'OTHER_LEAVE': 'Other leave'
+    SLEEP: 'Sleep',
+    ANNUAL_LEAVE: 'Annual leave',
+    SICKNESS: 'Sickness',
+    WAKING_NIGHT: 'Waking night',
+    OTHER_LEAVE: 'Other leave',
 };
 
 function firstOfMonthLocalISO() {
@@ -56,7 +70,9 @@ function firstOfMonthLocalISO() {
     const m = now.getMonth() + 1;
     return `${y}-${String(m).padStart(2, '0')}-01`;
 }
-function ym(iso: string) { return iso.slice(0, 7); }
+function ym(iso: string) {
+    return iso.slice(0, 7);
+}
 
 function initialsFor(list: Profile[], id: string) {
     const full = list.find(p => p.user_id === id)?.full_name?.trim();
@@ -69,8 +85,17 @@ function initialsFor(list: Profile[], id: string) {
     return id.slice(0, 2).toUpperCase();
 }
 
-function TabBtn({ active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
-    return <button className={`px-4 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`} {...props}>{children}</button>;
+function TabBtn(
+    { active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
+) {
+    return (
+        <button
+            className={`px-4 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`}
+            {...props}
+        >
+            {children}
+        </button>
+    );
 }
 function Stat({ label, value }: { label: string; value: string | number }) {
     return (
@@ -88,8 +113,10 @@ function CalendarGrid({
     const y = base.getFullYear(), m = base.getMonth();
     const days = new Date(y, m + 1, 0).getDate();
     const startDow = new Date(y, m, 1).getDay();
-    const cells: (number | null)[] = Array.from({ length: startDow }, () => null)
-        .concat(Array.from({ length: days }, (_, i) => i + 1));
+    const cells: (number | null)[] = [
+        ...Array.from({ length: startDow }, () => null),
+        ...Array.from({ length: days }, (_, i) => i + 1 as number),
+    ];
     while (cells.length % 7) cells.push(null);
 
     const title = base.toLocaleString(undefined, { month: 'long', year: 'numeric' });
@@ -133,7 +160,11 @@ function Toolbar({
             {companies && setCompanyId && (
                 <div>
                     <label className="block text-xs text-gray-600 mb-1">Company</label>
-                    <select className="w-full border rounded-lg px-3 py-2" value={companyId || ''} onChange={e => setCompanyId(e.target.value)}>
+                    <select
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={companyId || ''}
+                        onChange={e => setCompanyId(e.target.value)}
+                    >
                         <option value="">Select company…</option>
                         {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
@@ -143,7 +174,11 @@ function Toolbar({
             {homes && setHomeId && (
                 <div>
                     <label className="block text-xs text-gray-600 mb-1">Home</label>
-                    <select className="w-full border rounded-lg px-3 py-2" value={homeId || ''} onChange={e => setHomeId(e.target.value)}>
+                    <select
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={homeId || ''}
+                        onChange={e => setHomeId(e.target.value)}
+                    >
                         {/* Only show the placeholder when there ISN'T an “All homes” item */}
                         {!hasAllHomesOption && (
                             <option value="">{homes.length ? 'Select home…' : 'No homes'}</option>
@@ -157,14 +192,18 @@ function Toolbar({
 
             <div>
                 <label className="block text-xs text-gray-600 mb-1">Month</label>
-                <input type="month" className="w-full border rounded-lg px-3 py-2" value={ym(month)} onChange={e => setMonth(e.target.value + '-01')} />
+                <input
+                    type="month"
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={ym(month)}
+                    onChange={e => setMonth(e.target.value + '-01')}
+                />
             </div>
 
             <div className="sm:justify-self-end">{rightExtra}</div>
         </div>
     );
 }
-
 
 /* ===================================
    Root
@@ -173,7 +212,9 @@ export default function TimesheetsPage() {
     const [level, setLevel] = useState<Level>('4_STAFF');
     const [tab, setTab] = useState<'MY' | 'MANAGER' | 'COMPANY'>('MY');
 
-    useEffect(() => { (async () => setLevel(await getEffectiveLevel() as Level))(); }, []);
+    useEffect(() => {
+        (async () => setLevel(await getEffectiveLevel() as Level))();
+    }, []);
     const isAdmin = level === '1_ADMIN';
     const isCompany = level === '2_COMPANY';
     const isManager = level === '3_MANAGER';
@@ -226,7 +267,6 @@ function MyTimesheet() {
         return m;
     }, [shiftTypes]);
 
-
     // Editor state (used in both modes)
     const [editingDay, setEditingDay] = useState<number | null>(null);
     const [editEntryId, setEditEntryId] = useState<string | undefined>(undefined);
@@ -238,7 +278,7 @@ function MyTimesheet() {
 
     // Aggregated (bank) view data
     const [isBankMode, setIsBankMode] = useState<boolean>(false);
-    const [allHomes, setAllHomes] = useState<Home[]>([]);                 // all homes in my company (for editor dropdown)
+    const [allHomes, setAllHomes] = useState<Home[]>([]); // all homes in my company (for editor dropdown)
     const [aggEntries, setAggEntries] = useState<(TSEntry & { home_id: string; home_name: string })[]>([]);
     const [timesheetByHome, setTimesheetByHome] = useState<Map<string, Timesheet>>(new Map());
 
@@ -272,8 +312,8 @@ function MyTimesheet() {
         !!t && (t.status === 'DRAFT' || t.status === 'RETURNED');
 
     // Bank: per-home lock and overall lock
-    const bankHomeLocked = (homeId: string) => {
-        const t = timesheetByHome.get(homeId);
+    const bankHomeLocked = (hid: string) => {
+        const t = timesheetByHome.get(hid);
         return !isTSEditable(t);
     };
     // "All locked" = every timesheet in month is not editable (submitted/forwarded)
@@ -289,10 +329,16 @@ function MyTimesheet() {
     useEffect(() => {
         (async () => {
             const { data } = await supabase.auth.getUser();
-            const me = data.user?.id; if (!me) return; setUid(me);
+            const me = data.user?.id;
+            if (!me) return;
+            setUid(me);
 
             // initials
-            const prof = await supabase.from('profiles').select('full_name').eq('user_id', me).maybeSingle();
+            const prof = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('user_id', me)
+                .maybeSingle();
             const full = prof.data?.full_name?.trim() || '';
             if (full) {
                 const parts = full.split(/\s+/);
@@ -312,27 +358,52 @@ function MyTimesheet() {
                 .eq('rotas.month_date', monthISO)
                 .eq('user_id', me);
 
-            const rotaHomeIds = Array.from(new Set(((rota.data || []) as any[]).map(r => r.rotas.home_id))) as string[];
+            const rotaRows: RotaJoin[] = Array.isArray(rota.data) ? (rota.data as unknown as RotaJoin[]) : [];
+
+            const rotaHomeIds = Array.from(
+                new Set(
+                    rotaRows
+                        .map(r => r.rotas.home_id)
+                        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+                )
+            );
 
             let discoveredHomes: Home[] = [];
             if (rotaHomeIds.length) {
-                const hs = await supabase.from('homes')
-                    .select('id,name,company_id')
-                    .in('id', rotaHomeIds);
+                const hs = await supabase.from('homes').select('id,name,company_id').in('id', rotaHomeIds);
                 discoveredHomes = (hs.data || []) as Home[];
             }
 
             // Try memberships only if rota didn’t give us anything (RLS may still allow your own rows)
+            // Try memberships only if rota didn’t give us anything (RLS may still allow your own rows)
             let staffHomes = discoveredHomes;
+
             if (!staffHomes.length) {
                 const hm = await supabase
                     .from('home_memberships')
                     .select('home_id, homes!inner(id,name,company_id)')
                     .eq('user_id', me)
                     .eq('role', 'STAFF');
-                staffHomes = (hm.data || []).map((x: any) => ({
-                    id: x.homes.id, name: x.homes.name, company_id: x.homes.company_id
-                })) as Home[];
+
+                // --- Type guard for Supabase join rows ---
+                // --- Type guard for Supabase join rows ---
+                function hasHomes(row: unknown): row is { homes: Home } {
+                    if (!row || typeof row !== 'object' || !('homes' in row)) return false;
+                    const h = (row as { homes?: Partial<Home> }).homes;
+                    return !!h
+                        && typeof h.id === 'string'
+                        && typeof h.name === 'string'
+                        && typeof h.company_id === 'string';
+                }
+
+                const rawHM: unknown[] = Array.isArray(hm.data) ? (hm.data as unknown[]) : [];
+                const hmRows: Array<{ homes: Home }> = rawHM.filter(hasHomes);
+
+                staffHomes = hmRows.map(({ homes }) => ({
+                    id: homes.id,
+                    name: homes.name,
+                    company_id: homes.company_id,
+                }));
             }
 
             setMyHomes(staffHomes);
@@ -343,10 +414,7 @@ function MyTimesheet() {
                 cid = staffHomes[0].company_id;
             } else {
                 // fall back to company membership (if any)
-                const cm = await supabase.from('company_memberships')
-                    .select('company_id')
-                    .eq('user_id', me)
-                    .maybeSingle();
+                const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', me).maybeSingle();
                 cid = cm.data?.company_id || '';
             }
 
@@ -368,56 +436,81 @@ function MyTimesheet() {
             }
             setIsBankMode(bank || staffHomes.length === 0);
 
-
             // admin convenience
             const lvl = await getEffectiveLevel() as Level;
             if (lvl === '1_ADMIN') {
                 const co = await supabase.from('companies').select('id,name').order('name');
-                setCompanies((co.data || []) as any[]);
+                setCompanies((co.data || []) as Company[]);
             }
         })();
     }, []);
 
     // Shift types by company + All homes (for bank editor)
-    // Shift types by company + All homes (for bank editor)
     useEffect(() => {
         (async () => {
-            if (!companyId) { setShiftTypes([]); setAllHomes([]); return; }
+            if (!companyId) {
+                setShiftTypes([]);
+                setAllHomes([]);
+                return;
+            }
 
             // ✅ SECURITY DEFINER: guaranteed visibility for eligible users
             const st = await supabase.rpc('shift_types_for_ui', {
                 p_company_id: companyId,
-                p_include_inactive: false
+                p_include_inactive: false,
             });
-            setShiftTypes((st.data || []) as any[]);
+            setShiftTypes(((st.data as ShiftType[]) || []) as ShiftType[]);
 
             // For bank editors we should also fetch homes via an RPC that respects bank/company membership
             const { data: hh } = await supabase.rpc('homes_list_for_bank_timesheet', {
                 p_user_id: (await supabase.auth.getUser()).data.user?.id,
-                p_company_id: companyId
+                p_company_id: companyId,
             });
-            setAllHomes((hh || []) as any[]);
+            setAllHomes(((hh as Home[]) || []) as Home[]);
         })();
     }, [companyId]);
-
 
     /* ---------- HOUSE STAFF: load/create per-home timesheet + entries (fast auto-fill via RPC) ---------- */
     useEffect(() => {
         (async () => {
-            if (isBankMode) return;          // handled by bank block
-            setTS(null); setEntries([]);
+            if (isBankMode) return; // handled by bank block
+            setTS(null);
+            setEntries([]);
             if (!uid || !homeId || !month) return;
 
             // find or create timesheet
-            let res = await supabase.from('timesheets').select('*')
-                .eq('home_id', homeId).eq('user_id', uid).eq('month_date', month).maybeSingle();
+            const { data: tsRow, error: tsFetchError } = await supabase
+                .from('timesheets')
+                .select('*')
+                .eq('home_id', homeId)
+                .eq('user_id', uid)
+                .eq('month_date', month)
+                .maybeSingle();
 
-            if (!res.data) {
-                const ins = await supabase.from('timesheets').insert({
-                    home_id: homeId, user_id: uid, month_date: month, status: 'DRAFT'
-                }).select('*').single();
-                if (ins.error) { console.warn(ins.error.message); return; }
-                res = { data: ins.data } as any;
+            if (tsFetchError) {
+                console.warn(tsFetchError.message);
+            }
+
+            let tsCurrent = (tsRow as Timesheet) ?? null;
+
+            if (!tsCurrent) {
+                const { data: insRow, error: insError } = await supabase
+                    .from('timesheets')
+                    .insert({
+                        home_id: homeId,
+                        user_id: uid,
+                        month_date: month,
+                        status: 'DRAFT',
+                    })
+                    .select('*')
+                    .single();
+
+                if (insError) {
+                    console.warn(insError.message);
+                    return;
+                }
+
+                tsCurrent = insRow as Timesheet;
 
                 // On first creation: let the DB populate from LIVE rota in one go
                 await supabase.rpc('refresh_timesheets_for_live_rota', {
@@ -426,13 +519,18 @@ function MyTimesheet() {
                 });
             }
 
-            setTS(res.data as any);
+            setTS(tsCurrent);
 
             // load entries
-            const e = await supabase.from('timesheet_entries').select('*').eq('timesheet_id', res.data!.id);
-            setEntries((e.data || []) as any[]);
+            const { data: entryRows } = await supabase
+                .from('timesheet_entries')
+                .select('*')
+                .eq('timesheet_id', tsCurrent.id);
+
+            setEntries((entryRows ?? []) as TSEntry[]);
         })();
     }, [isBankMode, uid, homeId, month]);
+
 
     /* ---------- BANK: aggregated timesheet across homes ---------- */
     useEffect(() => {
@@ -450,11 +548,20 @@ function MyTimesheet() {
                 .eq('rotas.status', 'LIVE')
                 .eq('user_id', uid);
 
-            const homeIds = Array.from(new Set(((live.data || []) as any[]).map(x => x.rotas.home_id))) as string[];
+            const homeIds = Array.from(
+                new Set<string>(
+                    (Array.isArray(live.data) ? (live.data as unknown as RotaJoin[]) : [])
+                        .map(r => r.rotas.home_id)
+                )
+            );
 
             // If there are rota homes, load them and set companyId from them (if not already set)
             if (homeIds.length) {
-                const hs = await supabase.from('homes').select('id,name,company_id').in('id', homeIds);
+                const hs = await supabase
+                    .from('homes')
+                    .select('id,name,company_id')
+                    .in('id', homeIds)
+                    .returns<Home[]>();
                 const homesList = (hs.data || []) as Home[];
                 setAllHomes(homesList);
 
@@ -464,29 +571,40 @@ function MyTimesheet() {
                 }
             }
 
-            // If company is still unknown (e.g., no LIVE rota yet), derive from company_memberships and load all homes
+            // If company is still unknown, derive from company_memberships and load all homes
             if (!companyId) {
-                const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', uid).maybeSingle();
+                const cm = await supabase
+                    .from('company_memberships')
+                    .select('company_id')
+                    .eq('user_id', uid)
+                    .maybeSingle();
                 const cid = cm.data?.company_id || '';
                 if (cid) {
                     setCompanyId(cid);
-                    const hh = await supabase.from('homes').select('id,name,company_id').eq('company_id', cid).order('name');
+                    const hh = await supabase
+                        .from('homes')
+                        .select('id,name,company_id')
+                        .eq('company_id', cid)
+                        .order('name')
+                        .returns<Home[]>();
                     setAllHomes((hh.data || []) as Home[]);
                 }
             } else {
-                // If we already know the company, load all homes for that company
-                // If we already know the company, load homes via SECURITY DEFINER RPC
+                // SECURITY DEFINER RPC
                 const { data: hh } = await supabase.rpc('homes_list_for_bank_timesheet', {
                     p_user_id: uid,
-                    p_company_id: companyId
+                    p_company_id: companyId,
                 });
-                setAllHomes((hh || []) as Home[]);
+                setAllHomes(((hh as Home[]) || []) as Home[]);
             }
 
             // Load ALL my timesheets for this month (across homes)
-            const tsAll = await supabase.from('timesheets').select('*')
+            const tsAll = await supabase
+                .from('timesheets')
+                .select('*')
                 .eq('user_id', uid)
-                .eq('month_date', month);
+                .eq('month_date', month)
+                .returns<Timesheet[]>();
 
             const list = (tsAll.data || []) as Timesheet[];
             const byHome = new Map<string, Timesheet>();
@@ -495,16 +613,25 @@ function MyTimesheet() {
 
             // Entries for those sheets
             const ids = list.map(t => t.id);
-            let rows: (TSEntry & { home_id: string; home_name: string })[] = [];
+            const rows: (TSEntry & { home_id: string; home_name: string })[] = [];
             if (ids.length) {
-                const en = await supabase.from('timesheet_entries').select('*').in('timesheet_id', ids);
+                const en = await supabase
+                    .from('timesheet_entries')
+                    .select('*')
+                    .in('timesheet_id', ids)
+                    .returns<TSEntry[]>();
 
                 // Name lookups for homes shown in the grid
-                const hs2 = await supabase.from('homes').select('id,name,company_id').in('id', list.map(t => t.home_id));
-                const homesMap = new Map<string, Home>();
-                (hs2.data || []).forEach((h: any) => homesMap.set(h.id, h as Home));
+                const hs2 = await supabase
+                    .from('homes')
+                    .select('id,name,company_id')
+                    .in('id', list.map(t => t.home_id))
+                    .returns<Home[]>();
 
-                (en.data || []).forEach((e: any) => {
+                const homesMap = new Map<string, Home>();
+                (hs2.data || []).forEach(h => homesMap.set(h.id, h));
+
+                (en.data || []).forEach(e => {
                     const t = list.find(x => x.id === e.timesheet_id);
                     if (t) {
                         const h = homesMap.get(t.home_id);
@@ -512,14 +639,14 @@ function MyTimesheet() {
                             ...(e as TSEntry),
                             home_id: t.home_id,
                             home_name: h?.name || '(home)',
-                        } as any);
+                        });
                     }
                 });
             }
             setAggEntries(rows);
         })();
-        // IMPORTANT: don't depend on companyId here; we set it inside.
-    }, [isBankMode, uid, month]);
+        // We intentionally include companyId; the logic above handles both unknown and known cases.
+    }, [isBankMode, uid, month, companyId]);
 
     // Summary (both modes)
     const summary = useMemo(() => {
@@ -539,8 +666,7 @@ function MyTimesheet() {
 
     const editable = isBankMode ? !bankAllLocked : isTSEditable(ts);
 
-
-    // ADD THIS (for house view)
+    // House view grouping
     const entriesByDay = useMemo(() => {
         const m = new Map<number, TSEntry[]>();
         for (const e of entries) {
@@ -550,7 +676,7 @@ function MyTimesheet() {
         return m;
     }, [entries]);
 
-    // ADD THIS (for bank view)
+    // Bank view grouping
     const aggByDay = useMemo(() => {
         const m = new Map<number, (TSEntry & { home_id: string; home_name: string })[]>();
         for (const e of aggEntries) {
@@ -559,7 +685,6 @@ function MyTimesheet() {
         }
         return m;
     }, [aggEntries]);
-
 
     // Open editor (house vs bank)
     function openEditor(day: number, entry?: TSEntry & { home_id?: string }) {
@@ -571,7 +696,7 @@ function MyTimesheet() {
             setEditShiftId(entry.shift_type_id || '');
             setEditHours(entry.hours);
             setEditNotes(entry.notes || '');
-            setEditOriginalHomeId((entry as any).home_id ?? null);
+            setEditOriginalHomeId((entry as (TSEntry & { home_id?: string })).home_id ?? null);
         } else {
             setEditEntryId(undefined);
             setEditShiftId('');
@@ -589,7 +714,7 @@ function MyTimesheet() {
 
     // Save editor (BANK mode) — move/add across homes with status guard
     async function saveEditorBank(pickedHomeId: string) {
-        if (isAutofilling) return;   
+        if (isAutofilling) return;
         if (!editingDay || !uid || !pickedHomeId) return;
         if (isSaving) return;
 
@@ -606,7 +731,8 @@ function MyTimesheet() {
                     .eq('home_id', pickedHomeId)
                     .eq('user_id', uid)
                     .eq('month_date', month)
-                    .maybeSingle();
+                    .maybeSingle()
+                    .returns<Timesheet>();
 
                 if (found.data) {
                     t = found.data as Timesheet;
@@ -621,7 +747,9 @@ function MyTimesheet() {
                             status: 'DRAFT',
                         })
                         .select('*')
-                        .single();
+                        .single()
+                        .returns<Timesheet>();
+
                     if (ins.error) {
                         console.error(ins.error.message);
                         return;
@@ -641,7 +769,6 @@ function MyTimesheet() {
                 console.warn('Target home timesheet is not editable:', t.status);
                 return;
             }
-
 
             // 3) Server-side upsert with guard (same RPC as house path)
             const { data, error } = await supabase.rpc('staff_upsert_timesheet_entry_v2', {
@@ -667,9 +794,7 @@ function MyTimesheet() {
             } as TSEntry & { home_id: string; home_name: string };
 
             setAggEntries(prev => {
-                // if we were editing an existing row, remove that old id
                 const withoutOld = editEntryId ? prev.filter(e => e.id !== editEntryId) : prev;
-                // also remove any accidental duplicate of the newly returned id
                 const withoutDup = withoutOld.filter(e => e.id !== row.id);
                 return [...withoutDup, row];
             });
@@ -683,9 +808,10 @@ function MyTimesheet() {
         }
     }
 
+
     // Save editor (HOUSE mode) — RPC upsert + hard guard on status
     async function saveEditorHouse() {
-        if (isAutofilling) return; 
+        if (isAutofilling) return;
         if (!ts || !editingDay) return;
         if (isSaving) return;
 
@@ -727,8 +853,6 @@ function MyTimesheet() {
         }
     }
 
-
-
     // House delete with row-level lock detection (returns row when allowed)
     async function delEntryHouse(id: string) {
         if (isAutofilling) return;               // 🔒
@@ -768,10 +892,9 @@ function MyTimesheet() {
         setIsDeletingAny(false);
     }
 
-
     // Bank delete: check parent timesheet status for the specific home
     async function delEntryBank(id: string) {
-        if (isAutofilling) return;  
+        if (isAutofilling) return;
         const entry = aggEntries.find(e => e.id === id);
         if (!entry) return;
 
@@ -812,7 +935,6 @@ function MyTimesheet() {
         setIsDeletingAny(false);
     }
 
-
     // Submit
     async function submitHouse() {
         if (!month) return;
@@ -821,22 +943,42 @@ function MyTimesheet() {
             const { error } = await supabase.rpc('submit_my_timesheets_month', {
                 p_month_date: month,
             });
-            if (error) { console.error(error.message); return; }
+            if (error) {
+                console.error(error.message);
+                return;
+            }
 
             // refresh current per-home sheet + entries
             if (homeId && uid) {
-                const found = await supabase.from('timesheets').select('*')
-                    .eq('home_id', homeId).eq('user_id', uid).eq('month_date', month).maybeSingle();
-                setTS((found.data || null) as any);
-                if (found.data) {
-                    const e = await supabase.from('timesheet_entries').select('*').eq('timesheet_id', found.data.id);
-                    setEntries((e.data || []) as any[]);
+                const { data: tsData, error: tsErr } = await supabase
+                    .from('timesheets')
+                    .select('*')
+                    .eq('home_id', homeId)
+                    .eq('user_id', uid)
+                    .eq('month_date', month)
+                    .maybeSingle();
+
+                if (tsErr) console.warn(tsErr.message);
+
+                const ts = (tsData ?? null) as Timesheet | null;
+                setTS(ts);
+
+                if (ts) {
+                    const { data: entriesData, error: eErr } = await supabase
+                        .from('timesheet_entries')
+                        .select('*')
+                        .eq('timesheet_id', ts.id)
+                        .returns<TSEntry[]>();
+
+                    if (eErr) console.warn(eErr.message);
+                    setEntries(entriesData ?? []);
                 }
             }
         } finally {
             setIsSubmittingHouse(false);
         }
     }
+
 
     async function submitBank() {
         if (!month) return;
@@ -845,33 +987,68 @@ function MyTimesheet() {
             const { error } = await supabase.rpc('submit_my_timesheets_month', {
                 p_month_date: month,
             });
-            if (error) { console.error(error.message); return; }
-
-            // quick refresh of aggregated state
-            const tsAll = await supabase.from('timesheets').select('*').eq('user_id', uid).eq('month_date', month);
-            const list = (tsAll.data || []) as Timesheet[];
-            setTimesheetByHome(new Map(list.map(t => [t.home_id, t])));
-
-            const ids = list.map(t => t.id);
-            if (ids.length) {
-                const en = await supabase.from('timesheet_entries').select('*').in('timesheet_id', ids);
-                const hs2 = await supabase.from('homes').select('id,name,company_id').in('id', list.map(t => t.home_id));
-                const hmap = new Map<string, Home>(); (hs2.data || []).forEach((h: any) => hmap.set(h.id, h as Home));
-                const rows = (en.data || []).map((e: any) => {
-                    const t = list.find(x => x.id === e.timesheet_id)!;
-                    return { ...(e as TSEntry), home_id: t.home_id, home_name: hmap.get(t.home_id)?.name || '(home)' } as any;
-                });
-                setAggEntries(rows);
-            } else {
-                setAggEntries([]);
+            if (error) {
+                console.error(error.message);
+                return;
             }
+
+            // Get all timesheets for this user/month
+            const tsAll = await supabase
+                .from('timesheets')
+                .select('*')
+                .eq('user_id', uid)
+                .eq('month_date', month);
+
+            const tsList: Timesheet[] = Array.isArray(tsAll.data) ? (tsAll.data as Timesheet[]) : [];
+
+            // Build map: home_id -> timesheet
+            setTimesheetByHome(() => {
+                const m = new Map<string, Timesheet>();
+                for (const t of tsList) {
+                    if (t?.home_id) m.set(t.home_id, t);
+                }
+                return m;
+            });
+
+            const ids: string[] = tsList.map(t => t.id).filter(Boolean);
+            if (!ids.length) {
+                setAggEntries([]);
+                return;
+            }
+
+            // Load entries + home names
+            const [enRes, hs2Res] = await Promise.all([
+                supabase.from('timesheet_entries').select('*').in('timesheet_id', ids),
+                supabase.from('homes').select('id,name,company_id').in('id', tsList.map(t => t.home_id).filter(Boolean)),
+            ]);
+
+            const enData: TSEntry[] = Array.isArray(enRes.data) ? (enRes.data as TSEntry[]) : [];
+            const homesData: Home[] = Array.isArray(hs2Res.data) ? (hs2Res.data as Home[]) : [];
+
+            const hmap = new Map<string, Home>();
+            for (const h of homesData) {
+                if (h?.id) hmap.set(h.id, h);
+            }
+
+            const rows: (TSEntry & { home_id: string; home_name: string })[] = [];
+            for (const e of enData) {
+                const parent = tsList.find(x => x.id === e.timesheet_id);
+                if (!parent) continue; // defensive: entry without parent
+                const home = hmap.get(parent.home_id);
+                rows.push({
+                    ...e,
+                    home_id: parent.home_id,
+                    home_name: home?.name ?? '(home)',
+                });
+            }
+
+            setAggEntries(rows);
         } finally {
             setIsSubmittingBank(false);
         }
     }
 
-    // ---- FAST RPC: Auto-fill (bank) ----
-    // replace your autoFillBankFromLive with this
+
     // ---- FAST RPC: Auto-fill (bank) ----
     async function autoFillBankFromLive() {
         if (!isBankMode || !uid || !month) return;
@@ -913,45 +1090,66 @@ function MyTimesheet() {
         }
     }
 
-
-
     // factor the reloading logic you already have into a re-usable function
     async function reloadBankAggregated() {
         if (!uid || !month) return;
 
+        // Timesheets for this user/month
         const tsAll = await supabase
             .from('timesheets')
             .select('*')
             .eq('user_id', uid)
             .eq('month_date', month);
 
-        const list = (tsAll.data || []) as Timesheet[];
-        setTimesheetByHome(new Map(list.map(t => [t.home_id, t])));
+        const tsList: Timesheet[] = Array.isArray(tsAll.data) ? (tsAll.data as Timesheet[]) : [];
 
-        const ids = list.map(t => t.id);
+        // Map home_id -> timesheet (defensive about nulls)
+        setTimesheetByHome(() => {
+            const m = new Map<string, Timesheet>();
+            for (const t of tsList) {
+                if (t?.home_id) m.set(t.home_id, t);
+            }
+            return m;
+        });
+
+        const ids = tsList.map(t => t.id).filter(Boolean);
         if (!ids.length) {
             setAggEntries([]);
             return;
         }
 
-        const [en, hs] = await Promise.all([
+        // Load entries + homes
+        const [enRes, hsRes] = await Promise.all([
             supabase.from('timesheet_entries').select('*').in('timesheet_id', ids),
-            supabase.from('homes').select('id,name,company_id').in('id', list.map(t => t.home_id)),
+            supabase.from('homes').select('id,name,company_id').in('id', tsList.map(t => t.home_id).filter(Boolean)),
         ]);
 
-        const hmap = new Map<string, Home>();
-        (hs.data || []).forEach((h: any) => hmap.set(h.id, h as Home));
+        const enData: TSEntry[] = Array.isArray(enRes.data) ? (enRes.data as TSEntry[]) : [];
+        const homesData: Home[] = Array.isArray(hsRes.data) ? (hsRes.data as Home[]) : [];
 
-        const rows = (en.data || []).map((e: any) => {
-            const t = list.find(x => x.id === e.timesheet_id)!;
-            return {
-                ...(e as TSEntry),
-                home_id: t.home_id,
-                home_name: hmap.get(t.home_id)?.name || '(home)',
-            } as TSEntry & { home_id: string; home_name: string };
-        });
+        const hmap = new Map<string, Home>();
+        for (const h of homesData) {
+            if (h?.id) hmap.set(h.id, h);
+        }
+
+        const rows: (TSEntry & { home_id: string; home_name: string })[] = [];
+        for (const e of enData) {
+            const parent = tsList.find(x => x.id === e.timesheet_id);
+            if (!parent) continue; // safety: entry without parent
+            const home = hmap.get(parent.home_id);
+            rows.push({
+                ...e,
+                home_id: parent.home_id,
+                home_name: home?.name ?? '(home)',
+            });
+        }
 
         setAggEntries(rows);
+    }
+
+    // Narrow unknown rows from Supabase to RotaJoin
+    function hasRotasHomeId(row: unknown): row is RotaJoin {
+        return !!row && typeof (row as { rotas?: { home_id?: unknown } }).rotas?.home_id === 'string';
     }
 
     async function clientFallbackAutofillFromLive() {
@@ -965,11 +1163,14 @@ function MyTimesheet() {
             .eq('rotas.status', 'LIVE')
             .eq('user_id', uid);
 
-        const items = ((live.data || []) as any[]).map(x => ({
-            home_id: x.rotas.home_id as string,
-            day: x.day_of_month as number,
-            shift_type_id: (x.shift_type_id || null) as string | null,
-            hours: Number(x.hours) || 0,
+        const liveRowsUnknown: unknown[] = Array.isArray(live.data) ? live.data : [];
+        const liveRows: RotaJoin[] = liveRowsUnknown.filter(hasRotasHomeId);
+
+        const items = liveRows.map(x => ({
+            home_id: x.rotas.home_id,
+            day: Number(x.day_of_month ?? 0) || 0,
+            shift_type_id: (x.shift_type_id ?? null) as string | null,
+            hours: Number(x.hours ?? 0) || 0,
         }));
 
         if (!items.length) return; // nothing scheduled
@@ -983,17 +1184,17 @@ function MyTimesheet() {
         });
 
         // 2) Ensure a timesheet per home (DRAFT) and upsert entries via RPC
-        // Take a snapshot and batch updates to avoid setState races inside the loop
         const nextMap = new Map(timesheetByHome);
 
-        for (const [homeId, arr] of byHome) {
+        for (const [hid, arr] of byHome) {
             // find or create sheet
-            let t = nextMap.get(homeId);
+            let t = nextMap.get(hid);
+
             if (!t) {
                 const found = await supabase
                     .from('timesheets')
                     .select('*')
-                    .eq('home_id', homeId)
+                    .eq('home_id', hid)
                     .eq('user_id', uid)
                     .eq('month_date', month)
                     .maybeSingle();
@@ -1003,25 +1204,25 @@ function MyTimesheet() {
                 } else {
                     const ins = await supabase
                         .from('timesheets')
-                        .insert({ home_id: homeId, user_id: uid, month_date: month, status: 'DRAFT' })
+                        .insert({ home_id: hid, user_id: uid, month_date: month, status: 'DRAFT' })
                         .select('*')
                         .single();
-                    if (ins.error) {
-                        console.warn('Create timesheet failed:', ins.error.message);
+
+                    if (ins.error || !ins.data) {
+                        console.warn('Create timesheet failed:', ins.error?.message || 'unknown error');
                         continue;
                     }
                     t = ins.data as Timesheet;
                 }
 
-                // batch into local map; set once after the loop
-                nextMap.set(homeId, t);
+                nextMap.set(hid, t);
             }
 
             // Upsert each day via the same RPC used by the editors
             for (const it of arr) {
                 const { error } = await supabase.rpc('staff_upsert_timesheet_entry_v2', {
-                    p_timesheet_id: t!.id,
-                    p_home_id: homeId,
+                    p_timesheet_id: t.id,
+                    p_home_id: hid,
                     p_day_of_month: it.day,
                     p_shift_type_id: it.shift_type_id,
                     p_hours: it.hours,
@@ -1039,7 +1240,6 @@ function MyTimesheet() {
     }
 
 
-
     // ---- FAST RPC: Auto-fill (house) ----
     async function autoFillHouseFromLive() {
         if (isBankMode || !homeId || !month) return;
@@ -1049,19 +1249,36 @@ function MyTimesheet() {
                 p_home_id: homeId,
                 p_month_date: month,
             });
-            if (error) { console.error('refresh_timesheets_for_live_rota:', error.message); return; }
+            if (error) {
+                console.error('refresh_timesheets_for_live_rota:', error.message);
+                return;
+            }
 
             // Ensure current timesheet & reload entries
             let current = ts;
+
             if (!current) {
-                const found = await supabase.from('timesheets').select('*')
-                    .eq('home_id', homeId).eq('user_id', uid).eq('month_date', month).maybeSingle();
-                if (found.data) current = found.data as Timesheet;
+                const found = await supabase
+                    .from('timesheets')
+                    .select('*')
+                    .eq('home_id', homeId)
+                    .eq('user_id', uid)
+                    .eq('month_date', month)
+                    .maybeSingle();
+
+                const tsRow = (found.data ?? null) as Timesheet | null;
+                if (tsRow) current = tsRow;
                 setTS(current || null);
             }
+
             if (current) {
-                const e = await supabase.from('timesheet_entries').select('*').eq('timesheet_id', current.id);
-                setEntries((e.data || []) as any[]);
+                const e = await supabase
+                    .from('timesheet_entries')
+                    .select('*')
+                    .eq('timesheet_id', current.id);
+
+                const entryRows: TSEntry[] = Array.isArray(e.data) ? (e.data as TSEntry[]) : [];
+                setEntries(entryRows);
             }
         } finally {
             setIsFillingHouse(false);
@@ -1072,8 +1289,11 @@ function MyTimesheet() {
         <div className="flex items-center gap-2 justify-end">
             {isBankMode ? (
                 <>
-                    <button onClick={autoFillBankFromLive} disabled={isFillingBank}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">
+                    <button
+                        onClick={autoFillBankFromLive}
+                        disabled={isFillingBank}
+                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                    >
                         {isFillingBank ? <>⏳ Autofilling…</> : 'Auto-fill from LIVE rota'}
                     </button>
                     <button
@@ -1083,30 +1303,33 @@ function MyTimesheet() {
                     >
                         {isSubmittingBank ? <>⏳ Submitting…</> : 'Submit my timesheet'}
                     </button>
-
-
                 </>
             ) : (
                 <>
-                    <span className={`text-xs px-2 py-1 rounded ring-1 ${ts?.status === 'DRAFT' || ts?.status === 'RETURNED'
-                        ? 'bg-amber-50 text-amber-700 ring-amber-100'
-                        : ts?.status === 'SUBMITTED'
-                            ? 'bg-indigo-50 text-indigo-700 ring-indigo-100'
-                            : 'bg-emerald-50 text-emerald-700 ring-emerald-100'
-                        }`}>
+                    <span
+                        className={`text-xs px-2 py-1 rounded ring-1 ${ts?.status === 'DRAFT' || ts?.status === 'RETURNED'
+                                ? 'bg-amber-50 text-amber-700 ring-amber-100'
+                                : ts?.status === 'SUBMITTED'
+                                    ? 'bg-indigo-50 text-indigo-700 ring-indigo-100'
+                                    : 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+                            }`}
+                    >
                         Status: {ts?.status || '—'}
                     </span>
-                    <button onClick={autoFillHouseFromLive} disabled={isFillingHouse}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">
+                    <button
+                        onClick={autoFillHouseFromLive}
+                        disabled={isFillingHouse}
+                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                    >
                         {isFillingHouse ? <>⏳ Autofilling…</> : 'Auto-fill from LIVE rota'}
                     </button>
                     <button
                         disabled={isSubmittingHouse || !(ts && (ts.status === 'DRAFT' || ts.status === 'RETURNED')) || !entries.length}
                         onClick={submitHouse}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">
+                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                    >
                         {isSubmittingHouse ? <>⏳ Submitting…</> : 'Submit timesheet'}
                     </button>
-
                 </>
             )}
         </div>
@@ -1118,7 +1341,7 @@ function MyTimesheet() {
             <div className="rounded-lg border bg-white p-3 text-sm text-gray-700">
                 {isBankMode
                     ? 'This aggregated timesheet is auto-filled from any live rotas you were scheduled on. Check and adjust the hours and pick the home for added shifts if needed, then submit — each home manager will receive their portion.'
-                    : 'This timesheet is auto-filled from the live rota. Please check and edit any shifts or hours to reflect reality. Once submitted, you can’t edit unless a manager sends it back.'
+                    : 'This timesheet is auto-filled from the live rota. Please check and edit any shifts or hours to reflect reality. Once submitted, you can&apos;t edit unless a manager sends it back.'
                 }
             </div>
 
@@ -1156,12 +1379,10 @@ function MyTimesheet() {
                     Autofill is running… edits are temporarily disabled.
                 </div>
             )}
-
             {/* Calendars */}
             {isBankMode ? (
                 <CalendarGrid
                     monthISO={month}
-
                     cellRenderer={(d) => {
                         const todays = aggByDay.get(d) || [];
                         return (
@@ -1195,7 +1416,6 @@ function MyTimesheet() {
                                                 >
                                                     {(isAutofilling || isDeletingAny || deletingIds.has(e.id)) ? '⏳ Deleting…' : 'Delete'}
                                                 </button>
-
                                             </div>
                                         </div>
                                     );
@@ -1207,67 +1427,64 @@ function MyTimesheet() {
                                 >
                                     Add
                                 </button>
-
                             </div>
                         );
                     }}
-
                 />
             ) : (
                 <CalendarGrid
                     monthISO={month}
                     hidden={!homeId}
-                        cellRenderer={(d) => {
-                            const todays = entriesByDay.get(d) || [];
-                            return (
-                                <div className="space-y-1">
-                                    {todays.length === 0 ? (
-                                        <div className="text-xs text-gray-400">—</div>
-                                    ) : todays.map(e => {
-                                        const code = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.code || '') : '';
-                                        const kind = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.kind || null) : null;
-                                        return (
-                                            <div key={e.id} className="rounded-lg border bg-gray-50 p-2 text-[12px]">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold">{myInits}</span>
-                                                    {code && <span className="font-mono font-semibold">{code}</span>}
-                                                    <span>{e.hours}h</span>
-                                                    {kind && <span className="text-gray-600">· {KIND_LABEL[kind] || kind}</span>}
-                                                </div>
-                                                {(ts?.status === 'DRAFT' || ts?.status === 'RETURNED') && (
-                                                    <div className="mt-1 flex gap-1">
-                                                        <button
-                                                            onClick={() => openEditor(d, e)}
-                                                            disabled={isAutofilling}
-                                                            className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                        <button
-                                                            onClick={() => delEntryHouse(e.id)}
-                                                            disabled={isAutofilling || isDeletingAny || deletingIds.has(e.id)}
-                                                            className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                        >
-                                                            {(isAutofilling || isDeletingAny || deletingIds.has(e.id)) ? '⏳ Deleting…' : 'Delete'}
-                                                        </button>
-                                                    </div>
-                                                )}
+                    cellRenderer={(d) => {
+                        const todays = entriesByDay.get(d) || [];
+                        return (
+                            <div className="space-y-1">
+                                {todays.length === 0 ? (
+                                    <div className="text-xs text-gray-400">—</div>
+                                ) : todays.map(e => {
+                                    const code = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.code || '') : '';
+                                    const kind = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.kind || null) : null;
+                                    return (
+                                        <div key={e.id} className="rounded-lg border bg-gray-50 p-2 text-[12px]">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold">{myInits}</span>
+                                                {code && <span className="font-mono font-semibold">{code}</span>}
+                                                <span>{e.hours}h</span>
+                                                {kind && <span className="text-gray-600">· {KIND_LABEL[kind] || kind}</span>}
                                             </div>
-                                        );
-                                    })}
-                                    {(ts?.status === 'DRAFT' || ts?.status === 'RETURNED') && (
-                                        <button
-                                            onClick={() => openEditor(d)}
-                                            disabled={isAutofilling}
-                                            className="mt-1 rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                                        >
-                                            Add
-                                        </button>
-                                    )}
-                                </div>
-                            );
-                        }}
-
+                                            {(ts?.status === 'DRAFT' || ts?.status === 'RETURNED') && (
+                                                <div className="mt-1 flex gap-1">
+                                                    <button
+                                                        onClick={() => openEditor(d, e)}
+                                                        disabled={isAutofilling}
+                                                        className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => delEntryHouse(e.id)}
+                                                        disabled={isAutofilling || isDeletingAny || deletingIds.has(e.id)}
+                                                        className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {(isAutofilling || isDeletingAny || deletingIds.has(e.id)) ? '⏳ Deleting…' : 'Delete'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                {(ts?.status === 'DRAFT' || ts?.status === 'RETURNED') && (
+                                    <button
+                                        onClick={() => openEditor(d)}
+                                        disabled={isAutofilling}
+                                        className="mt-1 rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        Add
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    }}
                 />
             )}
 
@@ -1320,7 +1537,7 @@ function MyTimesheet() {
                                         const sel = (document.getElementById('bank-home-pick') as HTMLSelectElement | null);
                                         const picked = sel?.value || '';
                                         if (!picked) { alert('Pick a home for this shift.'); return; }
-                                        saveEditorBank(picked);
+                                        void saveEditorBank(picked);
                                     }}
                                     disabled={isSaving}
                                     className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -1329,7 +1546,7 @@ function MyTimesheet() {
                                 </button>
                             ) : (
                                 <button
-                                    onClick={() => { if (!isSaving) saveEditorHouse(); }}
+                                    onClick={() => { if (!isSaving) void saveEditorHouse(); }}
                                     disabled={isSaving}
                                     className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
@@ -1337,7 +1554,6 @@ function MyTimesheet() {
                                 </button>
                             )}
                         </div>
-
                     </div>
                 </div>
             )}
@@ -1345,9 +1561,6 @@ function MyTimesheet() {
     );
 }
 
-/* ===================================
-   Manager Review
-   =================================== */
 /* ===================================
    Manager Review (with missing list)
    =================================== */
@@ -1364,7 +1577,6 @@ function ManagerReview() {
     const [profilesById, setProfilesById] = useState<Map<string, Profile>>(new Map());
     const [loadingSubmitted, setLoadingSubmitted] = useState(false);
 
-
     const shiftMap = useMemo(() => {
         const m = new Map<string, ShiftType>();
         shiftTypes.forEach(s => m.set(s.id, s));
@@ -1376,17 +1588,49 @@ function ManagerReview() {
     useEffect(() => {
         (async () => {
             const { data } = await supabase.auth.getUser();
-            const me = data.user?.id; if (!me) return;
+            const me = data.user?.id;
+            if (!me) return;
 
-            const lvl = await getEffectiveLevel() as Level;
+            const lvl = (await getEffectiveLevel()) as Level;
+
             if (lvl === '1_ADMIN') {
                 const co = await supabase.from('companies').select('id,name').order('name');
-                setCompanies((co.data || []) as any[]);
-            } else if (lvl === '3_MANAGER') {
-                const hm = await supabase.from('home_memberships')
+                const companiesData: Company[] = Array.isArray(co.data) ? (co.data as Company[]) : [];
+                setCompanies(companiesData);
+                return;
+            }
+
+            if (lvl === '3_MANAGER') {
+                const hm = await supabase
+                    .from('home_memberships')
                     .select('home_id, homes!inner(id,name,company_id)')
-                    .eq('user_id', me).eq('role', 'MANAGER');
-                const list: Home[] = (hm.data || []).map((x: any) => ({ id: x.homes.id, name: x.homes.name, company_id: x.homes.company_id }));
+                    .eq('user_id', me)
+                    .eq('role', 'MANAGER');
+
+                // Type guard for rows that include a valid `homes` object
+                function hasHomes(
+                    row: unknown
+                ): row is { homes: { id: string; name: string; company_id: string } } {
+                    if (!row || typeof row !== 'object') return false;
+                    const h = (row as Record<string, unknown>).homes;
+                    if (!h || typeof h !== 'object') return false;
+                    const hh = h as Record<string, unknown>;
+                    return (
+                        typeof hh.id === 'string' &&
+                        typeof hh.name === 'string' &&
+                        typeof hh.company_id === 'string'
+                    );
+                }
+
+                const rawHM: unknown[] = Array.isArray(hm.data) ? (hm.data as unknown[]) : [];
+                const list: Home[] = rawHM
+                    .filter(hasHomes)
+                    .map((r) => ({
+                        id: r.homes.id,
+                        name: r.homes.name,
+                        company_id: r.homes.company_id,
+                    }));
+
                 setHomes(list);
                 if (list.length) {
                     setCompanyId(list[0].company_id);
@@ -1395,6 +1639,7 @@ function ManagerReview() {
             }
         })();
     }, []);
+
 
     useEffect(() => {
         (async () => {
@@ -1407,26 +1652,39 @@ function ManagerReview() {
 
             // Admin: load all homes in the company
             if (companies.length) {
-                const h = await supabase.from('homes')
+                const h = await supabase
+                    .from('homes')
                     .select('id,name,company_id')
                     .eq('company_id', companyId)
                     .order('name');
-                setHomes((h.data || []) as any[]);
+
+                const homesData: Home[] = Array.isArray(h.data) ? (h.data as Home[]) : [];
+                setHomes(homesData);
             }
 
             // Everyone needs shift types
-            const st = await supabase.from('shift_types').select('*').eq('company_id', companyId);
-            setShiftTypes((st.data || []) as any[]);
+            const st = await supabase
+                .from('shift_types')
+                .select('*')
+                .eq('company_id', companyId);
+
+            const shiftTypesData: ShiftType[] = Array.isArray(st.data) ? (st.data as ShiftType[]) : [];
+            setShiftTypes(shiftTypesData);
         })();
     }, [companyId, companies.length]);
 
-
     async function loadSubmitted() {
         setLoadingSubmitted(true);
-        setTimesheets([]); setEntriesByTS(new Map()); setProfilesById(new Map());
-        if (!homeId || !month) { setLoadingSubmitted(false); return; }
+        setTimesheets([]);
+        setEntriesByTS(new Map());
+        setProfilesById(new Map());
 
-        // staff (home-staff submitted) — include home_id
+        if (!homeId || !month) {
+            setLoadingSubmitted(false);
+            return;
+        }
+
+        // Staff-submitted sheets (directly on this home)
         const staff = await supabase
             .from('timesheets')
             .select('id, user_id, month_date, status, home_id')
@@ -1434,7 +1692,7 @@ function ManagerReview() {
             .eq('month_date', month)
             .eq('status', 'SUBMITTED');
 
-        // bank (submitted-for-this-home via reviews) — include home_id from joined timesheets
+        // Bank-submitted for this home via review join
         const bank = await supabase
             .from('timesheet_home_reviews')
             .select('timesheets!inner(id, user_id, month_date, status, home_id)')
@@ -1442,66 +1700,114 @@ function ManagerReview() {
             .eq('status', 'SUBMITTED')
             .eq('timesheets.month_date', month);
 
-        // ...
-        const listA = ((staff.data || []) as Timesheet[]);
-        const listB = ((bank.data || []) as any[]).map((r) => r.timesheets as Timesheet);
+        const listA: Timesheet[] = Array.isArray(staff.data) ? (staff.data as unknown as Timesheet[]) : [];
 
-        const byId = new Map<string, Timesheet>([...listA, ...listB].map(t => [t.id, t]));
-        const rows = Array.from(byId.values());
+        // Safely extract the joined timesheet rows
+        const listB: Timesheet[] = Array.isArray(bank.data)
+            ? (bank.data as unknown[])
+                .map((row) => {
+                    if (row && typeof row === 'object' && 'timesheets' in row) {
+                        const ts = (row as { timesheets?: unknown }).timesheets;
+                        if (ts && typeof ts === 'object' && ts !== null && 'id' in ts) {
+                            return ts as Timesheet;
+                        }
+                    }
+                    return null;
+                })
+                .filter((t): t is Timesheet => t !== null)
+            : [];
 
+        // De-dup by id
+        const byId = new Map<string, Timesheet>([...listA, ...listB].map((t) => [t.id, t]));
+        const rows: Timesheet[] = Array.from(byId.values());
         setTimesheets(rows);
 
-        const ids = rows.map(t => t.id);
-        const userIds = Array.from(new Set(rows.map(r => r.user_id)));
+        // Pull entries (only this home's portion) + profiles for those users
+        const ids = rows.map((t) => t.id);
+        const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
 
         const [en, prof] = await Promise.all([
             ids.length
-                ? supabase.from('timesheet_entries')
+                ? supabase
+                    .from('timesheet_entries')
                     .select('*')
                     .in('timesheet_id', ids)
-                    .eq('home_id', homeId) // ✅ only this home’s portion
-                : Promise.resolve({ data: [] }),
+                    .eq('home_id', homeId)
+                : Promise.resolve({ data: [] as TSEntry[] }),
             userIds.length
-                ? supabase.from('profiles')
+                ? supabase
+                    .from('profiles')
                     .select('user_id, full_name')
                     .in('user_id', userIds)
-                : Promise.resolve({ data: [] }),
+                : Promise.resolve({ data: [] as Profile[] }),
         ]);
 
-        // unchanged: build maps from en/prof results...
-
-
+        // Build entries map by timesheet_id
         const map = new Map<string, TSEntry[]>();
-        (en.data || []).forEach((e: any) => {
+        const enRows: TSEntry[] = Array.isArray(en.data) ? (en.data as unknown as TSEntry[]) : [];
+        enRows.forEach((e) => {
             if (!map.has(e.timesheet_id)) map.set(e.timesheet_id, []);
-            map.get(e.timesheet_id)!.push(e as TSEntry);
+            map.get(e.timesheet_id)!.push(e);
         });
         setEntriesByTS(map);
 
+        // Build profiles map
+        const profRows: Profile[] = Array.isArray(prof.data) ? (prof.data as unknown as Profile[]) : [];
         const m = new Map<string, Profile>();
-        ((prof.data || []) as any[]).forEach((p: any) => m.set(p.user_id, p as Profile));
+        profRows.forEach((p) => m.set(p.user_id, p));
         setProfilesById(m);
 
         setLoadingSubmitted(false);
     }
 
-    useEffect(() => { loadSubmitted(); }, [homeId, month]);
+    useEffect(() => { void loadSubmitted(); }, [homeId, month]);
 
     // Build LIVE rota snapshot for mismatch flags
-    const [rotaByUserDay, setRotaByUserDay] = useState<Map<string, Map<number, { shift_type_id: string | null, hours: number }>>>(new Map());
+    const [rotaByUserDay, setRotaByUserDay] = useState<
+        Map<string, Map<number, { shift_type_id: string | null, hours: number }>>
+    >(new Map());
     useEffect(() => {
         (async () => {
             setRotaByUserDay(new Map());
             if (!homeId || !month) return;
+
             const rota = await supabase
                 .from('rota_entries')
                 .select('day_of_month, shift_type_id, hours, user_id, rotas!inner(id,home_id,month_date,status)')
-                .eq('rotas.home_id', homeId).eq('rotas.month_date', month).eq('rotas.status', 'LIVE');
-            const byUser = new Map<string, Map<number, { shift_type_id: string | null, hours: number }>>();
-            ((rota.data || []) as any[]).forEach((r: any) => {
-                if (!byUser.has(r.user_id)) byUser.set(r.user_id, new Map());
-                byUser.get(r.user_id)!.set(r.day_of_month, { shift_type_id: r.shift_type_id, hours: Number(r.hours) || 0 });
-            });
+                .eq('rotas.home_id', homeId)
+                .eq('rotas.month_date', month)
+                .eq('rotas.status', 'LIVE');
+
+            const byUser = new Map<string, Map<number, { shift_type_id: string | null; hours: number }>>();
+
+            const rows = Array.isArray(rota.data) ? (rota.data as unknown[]) : [];
+            for (const row of rows) {
+                const o = row as Record<string, unknown>;
+
+                const userId = typeof o.user_id === 'string' ? (o.user_id as string) : null;
+                const day =
+                    typeof o.day_of_month === 'number'
+                        ? (o.day_of_month as number)
+                        : Number.isFinite(Number(o.day_of_month))
+                            ? Number(o.day_of_month)
+                            : NaN;
+                const shift =
+                    o.shift_type_id === null || typeof o.shift_type_id === 'string'
+                        ? (o.shift_type_id as string | null)
+                        : null;
+                const hours =
+                    typeof o.hours === 'number'
+                        ? (o.hours as number)
+                        : Number.isFinite(Number(o.hours))
+                            ? Number(o.hours)
+                            : 0;
+
+                if (!userId || !Number.isFinite(day)) continue;
+
+                if (!byUser.has(userId)) byUser.set(userId, new Map());
+                byUser.get(userId)!.set(day, { shift_type_id: shift, hours: Number(hours) || 0 });
+            }
+
             setRotaByUserDay(byUser);
         })();
     }, [homeId, month]);
@@ -1546,7 +1852,6 @@ function ManagerReview() {
         });
         if (error) { alert(error.message); return; }
 
-
         setTimesheets(prev => prev.filter(x => x.id !== rowTS.id));
         setEntriesByTS(prev => { const m = new Map(prev); m.delete(rowTS.id); return m; });
         await loadMissing(); // keep the missing panel in sync
@@ -1562,9 +1867,9 @@ function ManagerReview() {
             p_month: month,
         });
         if (error) { console.warn(error.message); setProgress(null); return; }
-        setProgress(data as any);
+        setProgress(data as { total_required: number; submitted_count: number });
     }
-    useEffect(() => { loadManagerProgress(); }, [homeId, month]);
+    useEffect(() => { void loadManagerProgress(); }, [homeId, month]);
 
     async function submitAll() {
         const rows = timesheets.filter(t => t.status === 'SUBMITTED');
@@ -1583,8 +1888,8 @@ function ManagerReview() {
                 p_home_id: homeId,
             })
         ));
-        const err = results.find(r => r.error);
-        if (err?.error) { alert(err.error.message); return; }
+        const err = results.find(r => (r as { error?: { message: string } }).error);
+        if (err && 'error' in err && err.error) { alert(err.error.message); return; }
 
         setConfirmAll(false);
         await loadSubmitted();
@@ -1606,11 +1911,25 @@ function ManagerReview() {
     const [loadingMissing, setLoadingMissing] = useState(false);
 
     async function loadMissing() {
-        setMissingUsers([]); setMissingProfiles(new Map());
+        setMissingUsers([]);
+        setMissingProfiles(new Map());
         if (!homeId || !month) return;
+
         setLoadingMissing(true);
         try {
-            // Who is required? — everyone on LIVE rota at this home this month
+            // Small helpers (no `any`)
+            const isObj = (v: unknown): v is Record<string, unknown> =>
+                typeof v === 'object' && v !== null;
+
+            const hasUserId = (v: unknown): v is { user_id: string } =>
+                isObj(v) && typeof v.user_id === 'string';
+
+            const isProfileRow = (v: unknown): v is Profile =>
+                isObj(v) &&
+                typeof v.user_id === 'string' &&
+                (typeof v.full_name === 'string' || v.full_name === null);
+
+            // Everyone scheduled on LIVE rota at this home this month
             const rota = await supabase
                 .from('rota_entries')
                 .select('user_id, rotas!inner(id,home_id,month_date,status)')
@@ -1618,9 +1937,15 @@ function ManagerReview() {
                 .eq('rotas.month_date', month)
                 .eq('rotas.status', 'LIVE');
 
-            const required = Array.from(new Set(((rota.data || []) as any[]).map(r => r.user_id as string)));
+            const rotaRows: unknown[] = Array.isArray(rota.data) ? rota.data : [];
+            const required = Array.from(
+                new Set(rotaRows.filter(hasUserId).map(r => r.user_id))
+            );
 
-            if (!required.length) { setMissingUsers([]); return; }
+            if (!required.length) {
+                setMissingUsers([]);
+                return;
+            }
 
             // Who has submitted for this home?
             const ts = await supabase
@@ -1630,16 +1955,28 @@ function ManagerReview() {
                 .eq('month_date', month)
                 .in('status', ['SUBMITTED', 'MANAGER_SUBMITTED']);
 
-            const submittedSet = new Set<string>(((ts.data || []) as any[]).map(t => t.user_id as string));
+            const tsRows: unknown[] = Array.isArray(ts.data) ? ts.data : [];
+            const submittedSet = new Set<string>(
+                tsRows.filter(hasUserId).map(r => r.user_id)
+            );
 
             const missing = required.filter(u => !submittedSet.has(u));
             setMissingUsers(missing);
 
             // Load names for missing folks
             if (missing.length) {
-                const prof = await supabase.from('profiles').select('user_id, full_name').in('user_id', missing);
+                const prof = await supabase
+                    .from('profiles')
+                    .select('user_id, full_name')
+                    .in('user_id', missing);
+
+                const profRows: unknown[] = Array.isArray(prof.data) ? prof.data : [];
                 const m = new Map<string, Profile>();
-                (prof.data || []).forEach((p: any) => m.set(p.user_id, p as Profile));
+                for (const row of profRows) {
+                    if (isProfileRow(row)) {
+                        m.set(row.user_id, row);
+                    }
+                }
                 setMissingProfiles(m);
             } else {
                 setMissingProfiles(new Map());
@@ -1648,7 +1985,7 @@ function ManagerReview() {
             setLoadingMissing(false);
         }
     }
-    useEffect(() => { loadMissing(); }, [homeId, month]);
+    useEffect(() => { void loadMissing(); }, [homeId, month]);
 
     return (
         <div className="space-y-4">
@@ -1767,7 +2104,7 @@ function ManagerReview() {
                                     <td className="p-2">
                                         <div className="flex gap-2">
                                             <button onClick={() => setEditTS(ts)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">View/Edit</button>
-                                            <button onClick={() => sendBack(ts)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Send back</button>
+                                            <button onClick={() => { void sendBack(ts); }} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Send back</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -1788,7 +2125,6 @@ function ManagerReview() {
                                 </td>
                             </tr>
                         )}
-
                     </tbody>
                 </table>
             </div>
@@ -1797,13 +2133,12 @@ function ManagerReview() {
                 <ManagerTimesheetEditor
                     ts={editTS}
                     onClose={() => setEditTS(null)}
-                    onChanged={() => { loadSubmitted(); loadManagerProgress(); loadMissing(); }}
+                    onChanged={() => { void loadSubmitted(); void loadManagerProgress(); void loadMissing(); }}
                 />
             )}
         </div>
     );
 }
-
 
 function ManagerTimesheetEditor({
     ts, onClose, onChanged,
@@ -1838,39 +2173,76 @@ function ManagerTimesheetEditor({
             return s;
         });
 
-    // REPLACE your existing reloadAll with this:
     // REPLACE the existing reloadAll() with this version
     async function reloadAll() {
+        // --- Type guards (no 'any') ---
+        const isObj = (v: unknown): v is Record<string, unknown> =>
+            typeof v === 'object' && v !== null;
+
+        const isNullableString = (v: unknown): v is string | null =>
+            typeof v === 'string' || v === null;
+
+        const isTSEntry = (v: unknown): v is TSEntry => {
+            if (!isObj(v)) return false;
+            return (
+                typeof v.id === 'string' &&
+                typeof v.timesheet_id === 'string' &&
+                typeof v.day_of_month === 'number' &&
+                typeof v.hours === 'number' &&
+                ('shift_type_id' in v ? isNullableString(v.shift_type_id) : true) &&
+                ('notes' in v ? isNullableString(v.notes) : true) &&
+                ('home_id' in v ? isNullableString(v.home_id) : true)
+            );
+        };
+
+        const isShiftType = (v: unknown): v is ShiftType => {
+            if (!isObj(v)) return false;
+            return (
+                typeof v.id === 'string' &&
+                typeof v.code === 'string' &&
+                typeof v.label === 'string' &&
+                typeof v.default_hours === 'number' &&
+                typeof v.is_active === 'boolean' &&
+                ('kind' in v ? isNullableString(v.kind) : true)
+            );
+        };
+
+        const isProfile = (v: unknown): v is Profile => {
+            if (!isObj(v)) return false;
+            const full = 'full_name' in v ? (v as Record<string, unknown>).full_name : undefined;
+            return typeof v.user_id === 'string' && (typeof full === 'string' || full === null || typeof full === 'undefined');
+        };
+
+        const isRotaRow = (v: unknown): v is { day_of_month: number; shift_type_id: string | null; hours: number } => {
+            if (!isObj(v)) return false;
+            const sid = 'shift_type_id' in v ? (v as Record<string, unknown>).shift_type_id : undefined;
+            return (
+                typeof v.day_of_month === 'number' &&
+                (typeof sid === 'string' || sid === null) &&
+                typeof v.hours === 'number'
+            );
+        };
+
         try {
             setIsLoading(true);
 
-            const [
-                // 1) Entries for this timesheet (only this home or null home_id)
-                { data: entryRowsRaw, error: entriesErr },
-                // 2) Shift types (prefer SECURITY DEFINER RPC; fall back to direct select)
-                shiftTypeLoad,
-                // 3) Person profile
-                prof,
-                // 4) LIVE rota snapshot for mismatch flags
-                rota
-            ] = await Promise.all([
+            const [entriesRes, shiftTypeLoad, profRes, rotaRes] = await Promise.all([
                 supabase
-                    .from<TSEntry>('timesheet_entries')
-                    .select('id,day_of_month,shift_type_id,hours,notes,home_id')
+                    .from('timesheet_entries')
+                    .select('id,day_of_month,shift_type_id,hours,notes,home_id,timesheet_id')
                     .eq('timesheet_id', ts.id)
                     .or(`home_id.eq.${ts.home_id},home_id.is.null`),
 
                 (async () => {
-                    // Try via homes -> company_id -> RPC
                     const h = await supabase
                         .from('homes')
                         .select('company_id')
                         .eq('id', ts.home_id)
                         .single();
 
-                    const companyId = h.data?.company_id ?? null;
+                    const companyId =
+                        isObj(h.data) && typeof h.data.company_id === 'string' ? (h.data.company_id as string) : null;
 
-                    // Prefer SECURITY DEFINER RPC if we have companyId
                     if (companyId) {
                         const rpc = await supabase.rpc('shift_types_for_ui', {
                             p_company_id: companyId,
@@ -1879,59 +2251,77 @@ function ManagerTimesheetEditor({
                         if (!rpc.error && Array.isArray(rpc.data)) return rpc;
                     }
 
-                    // Fallback: direct select (RLS allows managers via company/home membership)
                     if (companyId) {
-                        const direct = await supabase
-                            .from<ShiftType>('shift_types')
+                        return await supabase
+                            .from('shift_types')
                             .select('*')
                             .eq('company_id', companyId)
                             .eq('is_active', true);
-                        return direct;
                     }
 
-                    // Ultimate fallback: empty list
-                    return { data: [] as ShiftType[] };
+                    return { data: [] };
                 })(),
 
                 supabase
-                    .from<Profile>('profiles')
+                    .from('profiles')
                     .select('user_id, full_name')
                     .eq('user_id', ts.user_id)
                     .maybeSingle(),
 
                 supabase
                     .from('rota_entries')
-                    .select('day_of_month, shift_type_id, hours, user_id, rotas!inner(home_id, month_date, status)')
+                    .select(
+                        'day_of_month, shift_type_id, hours, user_id, rotas!inner(home_id, month_date, status)'
+                    )
                     .eq('rotas.home_id', ts.home_id)
                     .eq('rotas.month_date', ts.month_date)
                     .eq('rotas.status', 'LIVE')
                     .eq('user_id', ts.user_id),
             ]);
 
-            // Normalize possible nulls from Supabase (it returns { data: null } when no rows)
-            const entryRows: TSEntry[] = (entryRowsRaw ?? []) as TSEntry[];
-            if (entriesErr) {
-                // If there was an error, keep UI usable with an empty array
-                console.warn('timesheet_entries load error:', entriesErr.message);
+            // Entries
+            const entriesRaw = Array.isArray(entriesRes.data) ? entriesRes.data : [];
+            const entryRows: TSEntry[] = entriesRaw.filter(isTSEntry);
+            if (entriesRes.error) {
+                console.warn('timesheet_entries load error:', entriesRes.error.message);
             }
             setEntries(entryRows);
 
-            const shiftTypesData: ShiftType[] = ((shiftTypeLoad as any)?.data ?? []) as ShiftType[];
+            // Shift types
+            const stUnknown = isObj(shiftTypeLoad) && 'data' in shiftTypeLoad ? (shiftTypeLoad as { data?: unknown }).data : undefined;
+            const shiftTypesData: ShiftType[] = Array.isArray(stUnknown) ? stUnknown.filter(isShiftType) : [];
             setShiftTypes(shiftTypesData);
 
-            setPerson(prof.data ?? null);
+            // Person profile
+            const profData = (profRes && (profRes as { data?: unknown }).data) ?? null;
+            const personRow = isProfile(profData) ? (profData as Profile) : null;
+            setPerson(personRow);
+
+            // LIVE rota
+            const rotaUnknown = (rotaRes && (rotaRes as { data?: unknown }).data) ?? [];
+            const rotaRows: Array<{ day_of_month: number; shift_type_id: string | null; hours: number }> =
+                Array.isArray(rotaUnknown)
+                    ? rotaUnknown
+                        .map(r => {
+                            if (!isObj(r)) return null;
+                            const row = {
+                                day_of_month: Number((r as Record<string, unknown>).day_of_month),
+                                shift_type_id:
+                                    (typeof (r as Record<string, unknown>).shift_type_id === 'string'
+                                        ? (r as Record<string, unknown>).shift_type_id
+                                        : (r as Record<string, unknown>).shift_type_id === null
+                                            ? null
+                                            : null),
+                                hours: Number((r as Record<string, unknown>).hours ?? 0),
+                            };
+                            return isRotaRow(row) ? row : null;
+                        })
+                        .filter((x): x is { day_of_month: number; shift_type_id: string | null; hours: number } => x !== null)
+                    : [];
 
             const liveMap = new Map<number, { shift_type_id: string | null; hours: number }>();
-            const rotaRows = (rota.data ?? []) as Array<{
-                day_of_month: number;
-                shift_type_id: string | null;
-                hours: number;
-            }>;
             for (const r of rotaRows) {
-                liveMap.set(r.day_of_month, {
-                    shift_type_id: r.shift_type_id ?? null,
-                    hours: Number(r.hours) || 0,
-                });
+                liveMap.set(r.day_of_month, { shift_type_id: r.shift_type_id, hours: r.hours });
             }
             setLiveByDay(liveMap);
         } finally {
@@ -1940,21 +2330,10 @@ function ManagerTimesheetEditor({
     }
 
 
-
-    useEffect(() => { reloadAll(); }, [ts.id, ts.home_id, ts.user_id, ts.month_date]);
+    useEffect(() => { void reloadAll(); }, [ts.id, ts.home_id, ts.user_id, ts.month_date]);
 
     const displayName = person?.full_name || ts.user_id.slice(0, 8);
     const inits = initialsFor(person ? [person] : [], ts.user_id);
-    function isMismatch(day: number, e: TSEntry) {
-        const live = liveByDay.get(day);
-        if (!live && (e.shift_type_id || e.hours)) return true;
-        if (live) {
-            const sameShift = (live.shift_type_id || null) === (e.shift_type_id || null);
-            const sameHours = Math.abs((live.hours || 0) - (Number(e.hours) || 0)) < 0.001;
-            return !(sameShift && sameHours);
-        }
-        return false;
-    }
 
     function openEditor(day: number, entry?: TSEntry) {
         if (!editable) return;
@@ -1974,13 +2353,13 @@ function ManagerTimesheetEditor({
         const st = sid ? shiftMap.get(sid) : undefined;
         if (st) setEditHours(st.default_hours);
     }
-    // REPLACE your existing saveEditor with this:
+
     async function saveEditor() {
         if (!editingDay) return;
 
         if (editEntryId) {
             // manager-safe RPC to update an existing entry
-            const { error, data } = await supabase.rpc('manager_update_tentry_v2', {
+            const { error } = await supabase.rpc('manager_update_tentry_v2', {
                 p_entry_id: editEntryId,
                 p_shift_type_id: editShiftId || null,
                 p_hours: Number(editHours) || 0,
@@ -2013,8 +2392,6 @@ function ManagerTimesheetEditor({
         onChanged(); // keep parent progress/missing in sync
     }
 
-
-    // OPTIONAL: replace delEntry with optimistic version
     async function delEntry(id: string) {
         if (!editable || deletingIds.has(id)) return;
 
@@ -2039,7 +2416,6 @@ function ManagerTimesheetEditor({
 
         setDeleting(id, false);
     }
-
 
     return (
         <div className="fixed inset-0 bg-black/30 grid place-items-center z-50" onClick={onClose}>
@@ -2111,7 +2487,7 @@ function ManagerTimesheetEditor({
                                                             Edit
                                                         </button>
                                                         <button
-                                                            onClick={() => delEntry(e.id)}
+                                                            onClick={() => { void delEntry(e.id); }}
                                                             disabled={isLoading || deletingIds.has(e.id)}
                                                             className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
                                                         >
@@ -2137,8 +2513,7 @@ function ManagerTimesheetEditor({
                     />
                 )}
 
-
-                {/* EDITOR OVERLAY (fix: show modal instead of inline so it’s always visible) */}
+                {/* EDITOR OVERLAY (modal) */}
                 {editingDay && (
                     <div className="fixed inset-0 bg-black/30 grid place-items-center z-50" onClick={(e) => { e.stopPropagation(); setEditingDay(null); }}>
                         <div className="w-full max-w-md rounded-xl border bg-white p-4 shadow-xl" onClick={e => e.stopPropagation()}>
@@ -2153,12 +2528,19 @@ function ManagerTimesheetEditor({
                                 </div>
                                 <div>
                                     <label className="block text-xs text-gray-600 mb-1">Hours</label>
-                                    <input type="number" min={0} step="0.25" className="w-full border rounded-lg px-3 py-2" value={editHours} onChange={e => setEditHours(Number(e.target.value))} />
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        step="0.25"
+                                        className="w-full border rounded-lg px-3 py-2"
+                                        value={editHours}
+                                        onChange={e => setEditHours(Number(e.target.value))}
+                                    />
                                 </div>
                             </div>
                             <div className="mt-3 flex justify-end gap-2">
                                 <button onClick={() => setEditingDay(null)} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">Cancel</button>
-                                <button onClick={saveEditor} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">Save</button>
+                                <button onClick={() => { void saveEditor(); }} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">Save</button>
                             </div>
                         </div>
                     </div>
@@ -2169,9 +2551,6 @@ function ManagerTimesheetEditor({
 }
 
 /* ===================================
-   Company Timesheets
-   =================================== */
-/* ===================================
    Company Timesheets (with progress)
    =================================== */
 function CompanyView({ isAdmin }: { isAdmin: boolean }) {
@@ -2181,7 +2560,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
     const [homeId, setHomeId] = useState<string>(''); // optional filter
     const [month, setMonth] = useState<string>(() => firstOfMonthLocalISO());
 
-    const [timesheets, setTimesheets] = useState<(Timesheet & { home_name: string })[]>([]);
+    const [timesheets, setTimesheets] = useState<TimesheetWithHomeName[]>([]);
     const [entriesByTS, setEntriesByTS] = useState<Map<string, TSEntry[]>>(new Map());
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([]);
     const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -2208,7 +2587,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
             const me = data.user?.id; if (!me) return;
             if (isAdmin) {
                 const co = await supabase.from('companies').select('id,name').order('name');
-                setCompanies((co.data || []) as any[]);
+                setCompanies((co.data || []) as Company[]);
             } else {
                 const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', me).maybeSingle();
                 const cid = cm.data?.company_id || '';
@@ -2234,11 +2613,10 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
             }
 
             // 1) Homes in this company (RLS-safe via RPC)
-            // homes_list_company_all(p_company_id uuid)
             const homesRes = await supabase.rpc('homes_list_company_all', { p_company_id: companyId });
-            const homeList = ((homesRes.data || []) as any[]).map(h => ({
-                id: h.id, name: h.name, company_id: h.company_id
-            })) as Home[];
+            const homeList: Home[] = Array.isArray(homesRes.data)
+                ? homesRes.data.map(h => ({ id: h.id, name: h.name, company_id: h.company_id }))
+                : [];
             setHomes(homeList);
 
             // 2) Manager-submitted timesheets for month (optionally filtered by home)
@@ -2247,23 +2625,32 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                 .from('timesheets')
                 .select('*, homes!inner(name)')
                 .eq('month_date', month)
-                .in('home_id', visibleHomeIds.length ? visibleHomeIds : ['00000000-0000-0000-0000-000000000000']) // guard: IN cannot be empty
+                .in('home_id', visibleHomeIds.length ? visibleHomeIds : ['00000000-0000-0000-0000-000000000000'])
                 .eq('status', 'MANAGER_SUBMITTED');
 
-            const rows = ((ts.data || []) as any[]).map(x => ({
-                ...(x as Timesheet),
-                home_name: x.homes.name as string,
-            }));
+            const rows: TimesheetWithHomeName[] = Array.isArray(ts.data)
+                ? ts.data.map(x => ({
+                    id: x.id,
+                    home_id: x.home_id,
+                    user_id: x.user_id,
+                    month_date: x.month_date,
+                    status: x.status,
+                    submitted_at: x.submitted_at ?? null,
+                    manager_submitted_at: x.manager_submitted_at ?? null,
+                    home_name: x.homes?.name ?? '(home)',
+                }))
+                : [];
             setTimesheets(rows);
 
             // 3) Entries per timesheet
             const ids = rows.map(t => t.id);
             if (ids.length) {
-                const en = await supabase.from('timesheet_entries').select('*').in('timesheet_id', ids);
+                const enRes = await supabase.from('timesheet_entries').select('*').in('timesheet_id', ids);
+                const enData: TSEntry[] = Array.isArray(enRes.data) ? (enRes.data as TSEntry[]) : [];
                 const map = new Map<string, TSEntry[]>();
-                (en.data || []).forEach((e: any) => {
+                enData.forEach(e => {
                     if (!map.has(e.timesheet_id)) map.set(e.timesheet_id, []);
-                    map.get(e.timesheet_id)!.push(e as TSEntry);
+                    map.get(e.timesheet_id)!.push(e);
                 });
                 setEntriesByTS(map);
             } else {
@@ -2273,24 +2660,27 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
             // 4) Names for the rows' users
             const userIds = Array.from(new Set(rows.map(r => r.user_id)));
             if (userIds.length) {
-                const prof = await supabase.from('profiles').select('user_id, full_name').in('user_id', userIds);
-                setProfiles((prof.data || []) as any[]);
+                const profRes = await supabase.from('profiles').select('user_id, full_name').in('user_id', userIds);
+                const profs: Profile[] = Array.isArray(profRes.data) ? (profRes.data as Profile[]) : [];
+                setProfiles(profs);
             } else {
                 setProfiles([]);
             }
 
             // 5) Shift types for summary kinds
-            const st = await supabase.from('shift_types').select('*').eq('company_id', companyId);
-            setShiftTypes((st.data || []) as any[]);
+            const stRes = await supabase.from('shift_types').select('*').eq('company_id', companyId);
+            const stData: ShiftType[] = Array.isArray(stRes.data) ? (stRes.data as ShiftType[]) : [];
+            setShiftTypes(stData);
 
             // 6) RLS-safe classification: which of THESE users belong to ANY home in THIS company?
-            // staff_home_map_for_company_users(p_company_id uuid, p_user_ids uuid[])
             if (userIds.length) {
                 const mapRes = await supabase.rpc('staff_home_map_for_company_users', {
                     p_company_id: companyId,
                     p_user_ids: userIds,
                 });
-                const memberUsers = new Set<string>(((mapRes.data || []) as any[]).map((x: any) => x.user_id));
+                const memberUsers = new Set<string>(
+                    Array.isArray(mapRes.data) ? mapRes.data.map((x: { user_id: string }) => x.user_id) : []
+                );
                 setCompanyMemberUsers(memberUsers);
             } else {
                 setCompanyMemberUsers(new Set());
@@ -2308,11 +2698,36 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
             setProfilesMap(new Map());
             if (!companyId || !month || !homes.length) return;
 
+            // type guards
+            type RotaUserJoin = { user_id: string; rotas: { home_id: string } };
+            const isRotaUserJoin = (row: unknown): row is RotaUserJoin => {
+                if (typeof row !== 'object' || row === null) return false;
+                const r = row as { user_id?: unknown; rotas?: unknown };
+                if (typeof r.user_id !== 'string') return false;
+                if (typeof r.rotas !== 'object' || r.rotas === null) return false;
+                const rotas = r.rotas as { home_id?: unknown };
+                return typeof rotas.home_id === 'string';
+            };
+
+            type TSRow = { user_id: string; home_id: string; status: Timesheet['status'] };
+            const isTSRow = (row: unknown): row is TSRow => {
+                if (typeof row !== 'object' || row === null) return false;
+                const r = row as { user_id?: unknown; home_id?: unknown; status?: unknown };
+                return (
+                    typeof r.user_id === 'string' &&
+                    typeof r.home_id === 'string' &&
+                    (r.status === 'DRAFT' ||
+                        r.status === 'SUBMITTED' ||
+                        r.status === 'RETURNED' ||
+                        r.status === 'MANAGER_SUBMITTED')
+                );
+            };
+
             setLoadingProgress(true);
             try {
                 const homeIds = homes.map(h => h.id);
 
-                // Who is required? — everyone on LIVE rota this month in any company home
+                // LIVE rota across company homes for the month
                 const rota = await supabase
                     .from('rota_entries')
                     .select('user_id, rotas!inner(home_id, month_date, status)')
@@ -2321,11 +2736,11 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                     .in('rotas.home_id', homeIds);
 
                 const requiredByUser = new Map<string, Set<string>>();
-                ((rota.data || []) as any[]).forEach((r: any) => {
-                    const u = r.user_id as string;
-                    const h = r.rotas.home_id as string;
-                    if (!requiredByUser.has(u)) requiredByUser.set(u, new Set());
-                    requiredByUser.get(u)!.add(h);
+                const rotaRows: unknown[] = Array.isArray(rota.data) ? rota.data : [];
+                rotaRows.filter(isRotaUserJoin).forEach(r => {
+                    const set = requiredByUser.get(r.user_id) ?? new Set<string>();
+                    set.add(r.rotas.home_id);
+                    requiredByUser.set(r.user_id, set);
                 });
                 const totalRequired = requiredByUser.size;
 
@@ -2333,6 +2748,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                     setProgress({ total_required: 0, submitted_count: 0, manager_count: 0 });
                     setMissing([]);
                     setProfilesMap(new Map());
+                    setLoadingProgress(false);
                     return;
                 }
 
@@ -2345,18 +2761,22 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
 
                 const submittedByUser = new Map<string, Set<string>>();
                 const managerByUser = new Map<string, Set<string>>();
-                ((tsRes.data || []) as Timesheet[]).forEach(t => {
+
+                const tsRows: unknown[] = Array.isArray(tsRes.data) ? tsRes.data : [];
+                tsRows.filter(isTSRow).forEach(t => {
                     if (t.status === 'SUBMITTED' || t.status === 'MANAGER_SUBMITTED') {
-                        if (!submittedByUser.has(t.user_id)) submittedByUser.set(t.user_id, new Set());
-                        submittedByUser.get(t.user_id)!.add(t.home_id);
+                        const set = submittedByUser.get(t.user_id) ?? new Set<string>();
+                        set.add(t.home_id);
+                        submittedByUser.set(t.user_id, set);
                     }
                     if (t.status === 'MANAGER_SUBMITTED') {
-                        if (!managerByUser.has(t.user_id)) managerByUser.set(t.user_id, new Set());
-                        managerByUser.get(t.user_id)!.add(t.home_id);
+                        const set = managerByUser.get(t.user_id) ?? new Set<string>();
+                        set.add(t.home_id);
+                        managerByUser.set(t.user_id, set);
                     }
                 });
 
-                // Counts + who is missing (and for which homes)
+                // Counts + who is missing
                 let submittedCount = 0, managerCount = 0;
                 const missingList: { user_id: string; missing_home_ids: string[] }[] = [];
                 requiredByUser.forEach((requiredHomes, userId) => {
@@ -2378,9 +2798,19 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                 // Names/initials for the required cohort
                 const allUserIds = Array.from(requiredByUser.keys());
                 if (allUserIds.length) {
-                    const profRes = await supabase.from('profiles').select('user_id, full_name').in('user_id', allUserIds);
+                    const profRes = await supabase
+                        .from('profiles')
+                        .select('user_id, full_name')
+                        .in('user_id', allUserIds);
+
+                    const profRows: unknown[] = Array.isArray(profRes.data) ? profRes.data : [];
                     const m = new Map<string, Profile>();
-                    (profRes.data || []).forEach((p: any) => m.set(p.user_id, p as Profile));
+                    profRows.forEach(row => {
+                        const r = row as Partial<Profile>;
+                        if (typeof r.user_id === 'string') {
+                            m.set(r.user_id, { user_id: r.user_id, full_name: typeof r.full_name === 'string' ? r.full_name : null });
+                        }
+                    });
                     setProfilesMap(m);
                 } else {
                     setProfilesMap(new Map());
@@ -2390,6 +2820,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
             }
         })();
     }, [companyId, month, homes]);
+
 
     function calcSummary(ts: Timesheet) {
         const rows = entriesByTS.get(ts.id) || [];
@@ -2421,7 +2852,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
     }
 
     // Homes list for the toolbar (prepend "All homes" option)
-    const toolbarHomes = [{ id: '', name: 'All homes', company_id: companyId }, ...homes];
+    const toolbarHomes: Home[] = [{ id: '', name: 'All homes', company_id: companyId }, ...homes];
 
     // ---- Aggregate “bank” rows by USER (only for users with NO membership in the company) ----
     type BankAgg = {
@@ -2570,7 +3001,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                                         <td className="p-2">{s.other}</td>
                                         {isAdmin && (
                                             <td className="p-2">
-                                                <button onClick={() => adminDelete(t)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Delete</button>
+                                                <button onClick={() => { void adminDelete(t); }} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Delete</button>
                                             </td>
                                         )}
                                     </tr>
@@ -2613,3 +3044,5 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
         </div>
     );
 }
+
+

@@ -4,14 +4,24 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel, type AppLevel } from '@/supabase/roles';
 
-function explainFetchError(e: any) {
+function explainFetchError(
+    e: unknown
+): string {
     // Supabase-js usually returns structured errors, but if a gateway returned HTML,
     // we may only have a SyntaxError. This makes the message clearer.
-    if (e?.name === 'SyntaxError') {
+    if (e && typeof e === 'object' && 'name' in e && (e as { name?: string }).name === 'SyntaxError') {
         return 'Received HTML instead of JSON from a Supabase endpoint. Check NEXT_PUBLIC_SUPABASE_URL and bucket/RPC paths.';
     }
-    if (typeof e?.message === 'string') return e.message;
-    try { return JSON.stringify(e); } catch { return String(e); }
+
+    if (e && typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
+        return (e as { message: string }).message;
+    }
+
+    try {
+        return JSON.stringify(e);
+    } catch {
+        return String(e);
+    }
 }
 
 
@@ -362,7 +372,7 @@ export default function PayslipsPage() {
             setExisting(link.data as Payslip);
             setFile(null);
             setMsg({ type: 'success', text: 'Payslip uploaded.' });
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Key addition: surface HTML/JSON mismatch clearly
             console.error('Upload flow failed:', err);
             setMsg({ type: 'error', text: explainFetchError(err) });
@@ -384,8 +394,8 @@ export default function PayslipsPage() {
             setExisting(null);
             setConfirmDelete(false);
             setMsg({ type: 'success', text: 'Payslip deleted.' });
-        } catch (e: any) {
-            setMsg({ type: 'error', text: e?.message || 'Failed to delete' });
+        } catch (e: unknown) {
+            setMsg({ type: 'error', text: explainFetchError(e) || 'Failed to delete' });
         }
     }
 

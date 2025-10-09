@@ -1,7 +1,7 @@
 // app/(app)/_components/MobileSidebar.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { createPortal } from "react-dom";
@@ -169,7 +169,7 @@ export default function MobileSidebar() {
     text-gray-900                          /* force strong icon color on mobile */
   "
                                             aria-label="Close menu"
-                                            style={{ WebkitTapHighlightColor: 'transparent' }}  /* avoid dim tap overlay */
+                                            style={{ WebkitTapHighlightColor: 'transparent' }}
                                         >
                                             <IconClose />
                                         </button>
@@ -314,7 +314,7 @@ export default function MobileSidebar() {
 }
 
 /* ---------- Building blocks ---------- */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
     return (
         <div className="space-y-2">
             <div className="px-1 flex items-center gap-2">
@@ -348,7 +348,7 @@ function Item({
 }: {
     href: string;
     label: string;
-    icon: React.ReactNode;
+        icon: ReactNode;
     tone?: Tone;
     onClick?: () => void;
 }) {
