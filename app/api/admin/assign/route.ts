@@ -18,21 +18,21 @@ type AssignAction =
       enable?: boolean;
     }
   | {
-    action: "staff_subrole";
-    user_id: string;
-    home_id: string;
-    subrole?: string | null;
-  }
+      action: "staff_subrole";
+      user_id: string;
+      home_id: string;
+      subrole?: string | null;
+    }
   | {
-    action: "manager_subrole";
-    user_id: string;
-    home_id: string;
-    subrole?: "DEPUTY" | "MANAGER" | null;
-  };
+      action: "manager_subrole";
+      user_id: string;
+      home_id: string;
+      subrole?: "DEPUTY" | "MANAGER" | null;
+    };
 
 export async function POST(req: NextRequest) {
   try {
-    const ctx = await getRequester(req); // bearer/cookies handled inside
+    const ctx = await getRequester(req);
     const body = (await req.json()) as AssignAction;
 
     if (!ctx.user?.id) {
@@ -61,12 +61,7 @@ export async function POST(req: NextRequest) {
       const p = String(position).toUpperCase();
       const en = enable !== false;
 
-      const { error } = await ctx.admin.rpc<null, {
-        p_user_id: string;
-        p_company_id: string;
-        p_position: string;
-        p_enable: boolean;
-      }>("admin_set_company_position", {
+      const { error } = await ctx.admin.rpc("admin_set_company_position", {
         p_user_id: user_id,
         p_company_id: company_id,
         p_position: p,
@@ -94,11 +89,7 @@ export async function POST(req: NextRequest) {
 
       const s = subrole ? String(subrole).toUpperCase() : null;
 
-      const { error } = await ctx.admin.rpc<null, {
-        p_user_id: string;
-        p_home_id: string;
-        p_staff_subrole: string | null;
-      }>("admin_set_staff_subrole", {
+      const { error } = await ctx.admin.rpc("admin_set_staff_subrole", {
         p_user_id: user_id,
         p_home_id: home_id,
         p_staff_subrole: s,
@@ -130,11 +121,7 @@ export async function POST(req: NextRequest) {
           ? "DEPUTY_MANAGER"
           : "MANAGER";
 
-      const { error } = await ctx.admin.rpc<null, {
-        p_user_id: string;
-        p_home_id: string;
-        p_manager_subrole: "DEPUTY_MANAGER" | "MANAGER" | null;
-      }>("admin_set_manager_subrole", {
+      const { error } = await ctx.admin.rpc("admin_set_manager_subrole", {
         p_user_id: user_id,
         p_home_id: home_id,
         p_manager_subrole: mapped,
