@@ -9,7 +9,7 @@ type ProfileRow = {
   user_id: string;
   full_name: string | null;
   is_admin: boolean | null;
-} & Record<string, unknown>;
+};
 
 export default function DebugAuth() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -21,31 +21,27 @@ export default function DebugAuth() {
   useEffect(() => {
     (async () => {
       const { data: userData, error: uErr } = await supabase.auth.getUser();
-      if (uErr) {
-        setError(uErr.message);
-        return;
-      }
+      if (uErr) { setError(uErr.message); return; }
+
       const u = userData.user;
       setUserId(u?.id ?? null);
       setEmail(u?.email ?? null);
 
-      // what level does the DB think?
-      const { data: lvl, error: lErr } = await supabase
-        .rpc('get_effective_level')
-        .returns<AppLevel>();
+      // get_effective_level — avoid generics; cast when setting state
+      const { data: lvl, error: lErr } = await supabase.rpc('get_effective_level');
       if (lErr) setError(lErr.message);
-      else setLevel(lvl ?? null);
+      else setLevel((lvl as unknown as AppLevel) ?? null);
 
       if (u?.id) {
-        // read your profile row (policy allows self-read)
+        // Read your profile row (policy allows self-read)
         const { data: prof, error: pErr } = await supabase
           .from('profiles')
-          .select('*')
+          .select('user_id, full_name, is_admin')
           .eq('user_id', u.id)
-          .maybeSingle()
-          .returns<ProfileRow | null>();
+          .maybeSingle(); // don't force single if it may not exist
+
         if (pErr) setError(pErr.message);
-        else setProfile(prof);
+        else setProfile((prof as ProfileRow) ?? null);
       }
     })();
   }, []);
