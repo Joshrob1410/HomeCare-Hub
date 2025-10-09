@@ -1,23 +1,14 @@
 ﻿// supabase/server.ts
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { cookies, headers as nextHeaders } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-/**
- * Server-side Supabase client (Anon key) bound to request cookies.
- * Next.js 15 returns a Promise from cookies(), so we await it here.
- */
-export async function getServerSupabase() {
-  const cookieStore = await cookies();
-
+export function getServerSupabase() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
+      cookies,           // pass the functions, don't call them
+      headers: nextHeaders,
     }
   );
 }

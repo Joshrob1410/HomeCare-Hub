@@ -12,7 +12,7 @@ import { getServerSupabase } from "@/supabase/server";
  * - Bank-only users hide Budgets & Appointments under "My work".
  */
 export default async function Sidebar() {
-    const supabase = getServerSupabase();
+    const supabase = await getServerSupabase();
     const {
         data: { user },
     } = await supabase.auth.getUser();
