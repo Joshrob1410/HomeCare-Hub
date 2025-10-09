@@ -5,53 +5,16 @@ import { createClient, type User } from "@supabase/supabase-js";
 
 export type AppLevel = "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF";
 
-/** Minimal cookie options shape for Supabase SSR adapter */
-type CookieOptions = {
-  expires?: Date;
-  maxAge?: number;
-  path?: string;
-  domain?: string;
-  sameSite?: "lax" | "strict" | "none";
-  secure?: boolean;
-  httpOnly?: boolean;
-};
-
-/** Server-side Supabase client bound to request cookies (Anon key). */
+/** Server-side Supabase client bound to Next's cookies/headers (Anon key). */
 export function supabaseServer() {
-  const cookieStore = cookies();
-  // Cast to 'any' so we can feature-detect .set() (read-only in most Next 15 contexts)
-  const anyCookies = cookieStore as unknown as {
-    get?: (name: string) => { value?: string } | undefined;
-    set?: (opts: { name: string; value: string } & CookieOptions) => void;
-  };
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
-  const supa = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
-    {
-      cookies: {
-        get(name: string) {
-          // Return undefined when missing (what supabase expects)
-          return cookieStore.get(name)?.value ?? undefined;
-        },
-        set(name: string, value: string, options?: CookieOptions) {
-          try {
-            anyCookies.set?.({ name, value, ...(options ?? {}) });
-          } catch {
-            // no-op when cookies are read-only (e.g., most Next 15 server contexts)
-          }
-        },
-        remove(name: string, options?: CookieOptions) {
-          try {
-            anyCookies.set?.({ name, value: "", ...(options ?? {}), maxAge: 0 });
-          } catch {
-            // no-op when cookies are read-only
-          }
-        },
-      },
-    }
-  );
-  return supa;
+  // New API: pass the functions directly. The SSR helper handles read-only cookies on Next 15.
+  return createServerClient(url, anon, {
+    cookies,
+    headers: nextHeaders,
+  });
 }
 
 /** Privileged Supabase client using the Service Role key (never expose to client). */
@@ -124,7 +87,7 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
   const { supa, user } = await requireUser(req);
   const admin = supabaseAdmin();
 
-  // get_effective_level returns a single scalar; pick it from the field named after the function
+  // get_effective_level returns a single scalar row; select via .single() and read the field
   const { data: lvlRow, error: lvlErr } = await supa.rpc("get_effective_level").single();
   if (lvlErr) throw new Response("Failed to resolve level", { status: 500 });
   const level = (lvlRow as { get_effective_level: AppLevel }).get_effective_level;
@@ -157,24 +120,19 @@ export async function getRequester(req?: Request): Promise<RequesterContext> {
 
 /* ──────────────────────────────────────────────────────────────────────────
    Helper guards used by admin/self routes
-   These throw Response(403) when the caller lacks scope/privilege.
-   Exported symbols must match the imports in the routes.
    ────────────────────────────────────────────────────────────────────────── */
 
-/** Only Admin or Company-level can set company positions. */
 export function restrictCompanyPositions(ctx: RequesterContext, _position: string) {
   if (ctx.isAdmin || ctx.canCompany) return;
   throw new Response("Forbidden", { status: 403 });
 }
 
-/** Require that the operation is within the caller's company scope (admins bypass). */
 export function requireCompanyScope(ctx: RequesterContext, companyId: string) {
   if (ctx.isAdmin) return;
   if (ctx.companyScope && ctx.companyScope === companyId) return;
   throw new Response("Forbidden", { status: 403 });
 }
 
-/** Require that the operation targets a home the caller manages (admins/company bypass). */
 export function requireManagerScope(ctx: RequesterContext, homeId: string) {
   if (ctx.isAdmin || ctx.canCompany) return;
   if (ctx.level === "3_MANAGER" && ctx.managedHomeIds.includes(homeId)) return;
