@@ -4,25 +4,24 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { getRequester } from "@/lib/requester";
 
-type AppLevel = "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF";
-
-/** Typed request body */
-type CreateUserBody = {
-  full_name: string;
-  email: string;
-  password?: string;
-  role: AppLevel;
-  is_admin?: boolean;
-  company_id?: string | null;
-  home_id?: string | null;
-  position?: string | null; // e.g. BANK / RESIDENTIAL / TEAM_LEADER
-  company_positions?: string[];
-};
-
+/**
+ * Body:
+ * {
+ *   full_name: string,
+ *   email: string,
+ *   password?: string,
+ *   role: "1_ADMIN"|"2_COMPANY"|"3_MANAGER"|"4_STAFF",
+ *   is_admin?: boolean,
+ *   company_id?: string | null,
+ *   home_id?: string | null,
+ *   position?: string | null,             // e.g. BANK / RESIDENTIAL / TEAM_LEADER
+ *   company_positions?: string[]          // optional
+ * }
+ */
 export async function POST(req: NextRequest) {
   try {
     const r = await getRequester(req); // uses Authorization header or cookies
-    const body = (await req.json()) as CreateUserBody;
+    const body = await req.json();
 
     const {
       full_name,
@@ -34,7 +33,7 @@ export async function POST(req: NextRequest) {
       home_id,
       position,
       company_positions,
-    } = body ?? ({} as CreateUserBody);
+    } = body ?? {};
 
     if (!full_name || !email) {
       return NextResponse.json(
@@ -102,8 +101,7 @@ export async function POST(req: NextRequest) {
           .from("homes")
           .select("company_id")
           .eq("id", home_id)
-          .maybeSingle()
-          .returns<{ company_id: string } | null>();
+          .maybeSingle();
         targetCompanyId = h?.company_id ?? null;
       }
     }
@@ -114,17 +112,16 @@ export async function POST(req: NextRequest) {
         ? password
         : crypto.randomUUID().slice(0, 12);
 
-    const { data: created, error: createErr } =
-      await r.admin.auth.admin.createUser({
-        email,
-        password: passwordToUse,
-        email_confirm: true,
-        user_metadata: {
-          full_name, // Supabase UI often reads this
-          name: full_name, // many libs expect "name"
-          display_name: full_name, // belt-and-braces
-        },
-      });
+    const { data: created, error: createErr } = await r.admin.auth.admin.createUser({
+      email,
+      password: passwordToUse,
+      email_confirm: true,
+      user_metadata: {
+        full_name,           // Supabase UI often reads this
+        name: full_name,     // many libs expect "name"
+        display_name: full_name, // belt-and-braces
+      },
+    });
 
     if (createErr || !created?.user) {
       return NextResponse.json(
@@ -141,14 +138,13 @@ export async function POST(req: NextRequest) {
         .from("profiles")
         .upsert(
           { user_id: newUser.id, full_name },
-          { onConflict: "user_id" } // adjust if your unique index is named/defined differently
+          { onConflict: "user_id" }
         );
-      if (error) {
+      if (error)
         return NextResponse.json(
           { error: error.message || "Failed to upsert profile" },
           { status: 500 }
         );
-      }
     }
 
     // 2) COMPANY MEMBERSHIP (skip for pure admin role)
@@ -159,12 +155,11 @@ export async function POST(req: NextRequest) {
           { user_id: newUser.id, company_id: targetCompanyId },
           { onConflict: "user_id,company_id" }
         );
-      if (error) {
+      if (error)
         return NextResponse.json(
           { error: error.message || "Failed to upsert company membership" },
           { status: 500 }
         );
-      }
     }
 
     // 3) HOME vs BANK placement
@@ -177,12 +172,11 @@ export async function POST(req: NextRequest) {
           { user_id: newUser.id, home_id, role: homeRole },
           { onConflict: "user_id,home_id" }
         );
-      if (error) {
+      if (error)
         return NextResponse.json(
           { error: error.message || "Failed to upsert home membership" },
           { status: 500 }
         );
-      }
 
       // Optional: if you don’t want dual home+bank in the same company, you could remove bank here.
       // await r.admin.from("bank_memberships").delete().eq("user_id", newUser.id).eq("company_id", targetCompanyId ?? "");
@@ -194,32 +188,33 @@ export async function POST(req: NextRequest) {
           { user_id: newUser.id, company_id: targetCompanyId },
           { onConflict: "user_id,company_id" }
         );
-      if (error) {
+      if (error)
         return NextResponse.json(
           { error: error.message || "Failed to upsert bank membership" },
           { status: 500 }
         );
-      }
     }
 
-    // 4) Optional company positions
+    // 4) Optional company positions (idempotent)
     if (Array.isArray(company_positions) && company_positions.length && targetCompanyId) {
-      const rows = company_positions.map((p) => ({
+      const rows = company_positions.map((p: string) => ({
         user_id: newUser.id,
-        company_id: targetCompanyId, // narrowed by the if-guard
+        company_id: targetCompanyId!,
         position: p,
       }));
-      // Idempotent as well
+      // Ignore response like before (we previously swallowed errors)
       await r.admin
         .from("user_company_positions")
-        .upsert(rows, { onConflict: "user_id,company_id,position" })
-        .catch(() => {});
+        .upsert(rows, { onConflict: "user_id,company_id,position" });
     }
 
     return NextResponse.json({ ok: true, user_id: newUser.id });
   } catch (e: unknown) {
     if (e instanceof Response) return e;
     const err = e instanceof Error ? e : new Error("Unexpected error");
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500 }
+    );
   }
 }
