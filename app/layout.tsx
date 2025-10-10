@@ -17,12 +17,10 @@ export const metadata: Metadata = safeBase
       title: { default: "HomeCare Hub", template: "%s · HomeCare Hub" },
       description: "HomeCare Hub – home management.",
       metadataBase: safeBase,
-      icons: { icon: "/favicon.ico", shortcut: "/favicon.ico", apple: "/apple-touch-icon.png" },
     }
   : {
       title: { default: "HomeCare Hub", template: "%s · HomeCare Hub" },
       description: "HomeCare Hub – home management.",
-      icons: { icon: "/favicon.ico", shortcut: "/favicon.ico", apple: "/apple-touch-icon.png" },
     };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
