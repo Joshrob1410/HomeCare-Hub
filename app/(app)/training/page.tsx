@@ -3170,7 +3170,15 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
    COURSE ROW (edit course + audience)
    ========================= */
 
-function MandatoryLabel({ courseId, courseMandatory }: { courseId: string; courseMandatory: boolean }) {
+function MandatoryLabel({
+    courseId,
+    courseMandatory,
+    refreshKey = 0,
+}: {
+    courseId: string;
+    courseMandatory: boolean;
+    refreshKey?: number; // NEW
+}) {
     const [hasTargets, setHasTargets] = useState<boolean>(false);
 
     useEffect(() => {
@@ -3182,7 +3190,7 @@ function MandatoryLabel({ courseId, courseMandatory }: { courseId: string; cours
                 .eq('course_id', courseId);
             setHasTargets((t.count || 0) > 0);
         })();
-    }, [courseId, courseMandatory]);
+    }, [courseId, courseMandatory, refreshKey]); // ← include refreshKey
 
     if (courseMandatory) return <>Yes</>;
     return hasTargets ? <>Conditional</> : <>No</>;
@@ -3210,10 +3218,12 @@ function CourseRow({
     // Audience mode for editing
     type AudienceMode = 'NONE' | 'EVERYONE' | 'PEOPLE';
     const [audMode, setAudMode] = useState<AudienceMode>(c.mandatory ? 'EVERYONE' : 'NONE');
-
     const [audPeople, setAudPeople] = useState<string[]>([]);
 
     const [confirmDelete, setConfirmDelete] = useState(false);
+
+    // NEW: used to force MandatoryLabel to re-check targets after a save
+    const [refreshKey, setRefreshKey] = useState(0);
 
     async function deleteCourse() {
         setBusy(true);
@@ -3226,6 +3236,7 @@ function CourseRow({
             if (del.error) throw del.error;
 
             await onSaved(c.company_id);
+            setRefreshKey(k => k + 1); // ensure any remaining row state re-checks if visible
         } catch (e) {
             const message =
                 e instanceof Error && typeof e.message === 'string'
@@ -3239,7 +3250,6 @@ function CourseRow({
         }
     }
 
-
     // Load current targets when entering edit mode
     useEffect(() => {
         (async () => {
@@ -3252,7 +3262,9 @@ function CourseRow({
             if (t.error) return;
 
             const rows = (t.data || []) as { kind: string; user_id: string | null }[];
-            const users = rows.filter(r => r.kind === 'USER' && r.user_id).map(r => r.user_id!) as string[];
+            const users = rows
+                .filter(r => r.kind === 'USER' && r.user_id)
+                .map(r => r.user_id!) as string[];
 
             if (c.mandatory) {
                 // Everyone overrides everything: show EVERYONE
@@ -3265,7 +3277,6 @@ function CourseRow({
                 setAudMode('NONE');
                 setAudPeople([]);
             }
-
         })();
     }, [editing, c.id, c.mandatory]);
 
@@ -3281,13 +3292,12 @@ function CourseRow({
                     training_type: type,
                     refresher_years: refYears === '' ? null : Number(refYears),
                     due_soon_days: dueSoon,
-                    mandatory: legacyMandatory, // Everyone → legacy true; People → false
+                    mandatory: legacyMandatory, // Everyone → legacy true; People/None → false
                     link: link.trim() === '' ? null : link.trim(),
                 })
                 .eq('id', c.id);
             if (upd.error) throw upd.error;
 
-            // Replace targets
             // Replace targets
             const del = await supabase.from('course_mandatory_targets').delete().eq('course_id', c.id);
             if (del.error) throw del.error;
@@ -3298,15 +3308,15 @@ function CourseRow({
                         course_id: c.id,
                         kind: 'USER' as const,
                         user_id: uid,
-                        company_id: c.company_id, // << critical for RLS
+                        company_id: c.company_id, // RLS needs this
                     }))
                 );
                 if (ins.error) throw ins.error;
             }
 
-
             setEditing(false);
             await onSaved(c.company_id);
+            setRefreshKey(k => k + 1); // 🔑 force MandatoryLabel to re-check targets
         } catch (e) {
             const message =
                 e instanceof Error && typeof e.message === 'string'
@@ -3322,41 +3332,72 @@ function CourseRow({
         <tr className="border-t align-top">
             <td className="p-2">
                 {editing ? (
-                    <input className="border rounded px-2 py-1 text-sm w-full" value={name} onChange={e => setName(e.target.value)} />
-                ) : c.name}
+                    <input
+                        className="border rounded px-2 py-1 text-sm w-full"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                    />
+                ) : (
+                    c.name
+                )}
             </td>
+
             <td className="p-2">
                 {editing ? (
-                    <select className="border rounded px-2 py-1 text-sm w-full" value={type} onChange={e => setType(e.target.value)}>
-                        <option>ELearning</option><option>TES</option><option>In Person</option><option>Other</option>
+                    <select
+                        className="border rounded px-2 py-1 text-sm w-full"
+                        value={type}
+                        onChange={e => setType(e.target.value)}
+                    >
+                        <option>ELearning</option>
+                        <option>TES</option>
+                        <option>In Person</option>
+                        <option>Other</option>
                     </select>
-                ) : c.training_type}
+                ) : (
+                    c.training_type
+                )}
             </td>
+
             <td className="p-2">
                 {editing ? (
                     <input
-                        type="number" min={0} max={10}
+                        type="number"
+                        min={0}
+                        max={10}
                         className="border rounded px-2 py-1 text-sm w-full"
                         value={refYears}
                         onChange={e => setRefYears(e.target.value === '' ? '' : Number(e.target.value))}
                         placeholder="blank = never"
                     />
-                ) : (c.refresher_years ?? '—')}
+                ) : (
+                    c.refresher_years ?? '—'
+                )}
             </td>
+
             <td className="p-2">
                 {editing ? (
                     <input
-                        type="number" min={0}
+                        type="number"
+                        min={0}
                         className="border rounded px-2 py-1 text-sm w-full"
                         value={dueSoon}
                         onChange={e => setDueSoon(Number(e.target.value))}
                     />
-                ) : c.due_soon_days}
+                ) : (
+                    c.due_soon_days
+                )}
             </td>
+
             <td className="p-2">
                 {/* derive Conditional by checking targets */}
-                <MandatoryLabel courseId={c.id} courseMandatory={c.mandatory} />
+                <MandatoryLabel
+                    courseId={c.id}
+                    courseMandatory={c.mandatory}
+                    refreshKey={refreshKey} // ← NEW
+                />
             </td>
+
             <td className="p-2">
                 {editing ? (
                     <input
@@ -3366,8 +3407,12 @@ function CourseRow({
                         onChange={e => setLink(e.target.value)}
                         placeholder="https://…"
                     />
+                ) : c.link ? (
+                    <a href={c.link} target="_blank" rel="noreferrer" className="underline">
+                        Open
+                    </a>
                 ) : (
-                    c.link ? <a href={c.link} target="_blank" rel="noreferrer" className="underline">Open</a> : '—'
+                    '—'
                 )}
             </td>
 
@@ -3376,7 +3421,10 @@ function CourseRow({
                 {!editing && !confirmDelete ? (
                     <div className="flex gap-2">
                         <button
-                            onClick={() => { setEditing(true); setConfirmDelete(false); }}
+                            onClick={() => {
+                                setEditing(true);
+                                setConfirmDelete(false);
+                            }}
                             className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
                             disabled={busy}
                         >
@@ -3417,7 +3465,7 @@ function CourseRow({
                     </div>
                 ) : null}
 
-                {/* EDIT UI (restored) */}
+                {/* EDIT UI */}
                 {editing ? (
                     <div className="space-y-2 min-w-[340px]">
                         {/* Mandatory audience */}
@@ -3501,7 +3549,7 @@ function CourseRow({
                     </div>
                 ) : null}
             </td>
-
         </tr>
     );
 }
+
