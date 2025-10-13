@@ -28,7 +28,7 @@ function formatDate(d: string | null): string {
   return d.length > 10 ? d.slice(0, 10) : d; // ensure YYYY-MM-DD for <input type="date">
 }
 
-export default function LicenseAdminClient(): JSX.Element {
+export default function LicenseAdminClient() {
   const [items, setItems] = useState<LicenseRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null); // company_id when saving
