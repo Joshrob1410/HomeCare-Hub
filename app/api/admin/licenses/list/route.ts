@@ -1,3 +1,4 @@
+// app/api/admin/licenses/list/route.ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -7,9 +8,40 @@ const supabaseAdmin = createClient(
   { auth: { persistSession: false } },
 );
 
+type LicenseStatus = 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED';
+
+type CompaniesJoin = {
+  id: string;
+  name: string | null;
+} | null;
+
+type LicenseRowDb = {
+  company_id: string;
+  status: LicenseStatus;
+  plan_code: string;
+  seats: number;
+  valid_until: string | null;
+  grace_period_days: number;
+  billing_customer_id: string | null;
+  updated_at: string;
+  // FK alias join
+  companies: CompaniesJoin;
+};
+
+type LicenseRowOut = {
+  company_id: string;
+  company_name: string | null;
+  status: LicenseStatus;
+  plan_code: string;
+  seats: number;
+  valid_until: string | null;
+  grace_period_days: number;
+  billing_customer_id: string | null;
+  updated_at: string;
+};
+
 // GET /api/admin/licenses/list
 export async function GET() {
-  // You can add auth checks here (e.g., verify the caller is an admin if you pass a token).
   const { data, error } = await supabaseAdmin
     .from('company_licenses')
     .select(`
@@ -21,27 +53,27 @@ export async function GET() {
       grace_period_days,
       billing_customer_id,
       updated_at,
-      companies!inner ( id, name )
+      companies:company_licenses_company_id_fkey ( id, name )
     `)
-    .order('name', { referencedTable: 'companies', ascending: true });
+    .order('name', { foreignTable: 'companies', ascending: true });
 
   if (error) {
     // eslint-disable-next-line no-console
-    console.error(error);
+    console.error('licenses/list error:', error);
     return NextResponse.json({ error: 'db_error' }, { status: 500 });
   }
 
-  const rows = (data ?? []).map((r) => ({
-    company_id: r.company_id as string,
-    company_name: (r as any).companies?.name as string | null,
-    status: r.status as 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED',
-    plan_code: r.plan_code as string,
-    seats: r.seats as number,
-    valid_until: r.valid_until as string | null,
-    grace_period_days: r.grace_period_days as number,
-    billing_customer_id: (r.billing_customer_id ?? null) as string | null,
-    updated_at: r.updated_at as string,
-  }));
+  const rows: LicenseRowOut[] = (data as unknown as LicenseRowDb[] | null)?.map((r) => ({
+    company_id: r.company_id,
+    company_name: r.companies?.name ?? null,
+    status: r.status,
+    plan_code: r.plan_code,
+    seats: r.seats,
+    valid_until: r.valid_until,
+    grace_period_days: r.grace_period_days,
+    billing_customer_id: r.billing_customer_id,
+    updated_at: r.updated_at,
+  })) ?? [];
 
   return NextResponse.json({ items: rows });
 }
