@@ -332,6 +332,11 @@ function PeopleTab({
         return out;
     }
 
+    // Stable key: prefer "bank" when is_bank, otherwise the home id, otherwise "company"
+    const rowKey = (r: { user_id: string; home_id: string | null; is_bank: boolean }) =>
+        `${r.user_id}:${r.is_bank ? "bank" : (r.home_id ?? "company")}`;
+
+
     async function loadMore(from?: number | null) {
         if (loading) return;
         setLoading(true);
@@ -391,10 +396,23 @@ function PeopleTab({
                 base = (data ?? []) as PersonRecord[];
             }
 
-            let list = uniqueByKey<PersonRecord>(base, (r) => `${r.user_id}:${r.home_id ?? "bank"}`);
+            let list = uniqueByKey<PersonRecord>(base, rowKey);
+
+            // Prefer specific memberships (HOME/BANK) over company-only rows for the same user
+            const hasNonCompany = new Set<string>();
+            for (const r of list) {
+                if (r.is_bank || r.home_id) hasNonCompany.add(r.user_id);
+            }
+            list = list.filter((r) => r.is_bank || r.home_id || !hasNonCompany.has(r.user_id));
 
             if (filterHome) {
-                list = list.filter((r) => (filterHome === "BANK" ? r.is_bank : r.home_id === filterHome));
+                list = list.filter((r) =>
+                    filterHome === "BANK"
+                        ? r.is_bank
+                        : filterHome === "COMPANY"
+                            ? (!r.is_bank && !r.home_id) // company-level members (no home, not bank)
+                            : r.home_id === filterHome
+                );
             }
             if (search.trim()) {
                 const q = search.trim().toLowerCase();
@@ -403,7 +421,7 @@ function PeopleTab({
 
             setRows((prev) => {
                 const merged = [...prev, ...list];
-                return uniqueByKey<PersonRecord>(merged, (r) => `${r.user_id}:${r.home_id ?? "bank"}`);
+                return uniqueByKey<PersonRecord>(merged, rowKey);
             });
 
             if (base.length < PAGE_SIZE || isManager) setNextFrom(null);
@@ -719,6 +737,7 @@ function PeopleTab({
                             onChange={(e) => setFilterHome(e.target.value)}
                         >
                             <option value="">(All)</option>
+                            <option value="COMPANY">Company</option>
                             <option value="BANK">Bank</option>
                             {homesFilter.map((h) => (
                                 <option key={h.id} value={h.id}>
@@ -741,7 +760,7 @@ function PeopleTab({
                 <div className="mt-4 divide-y">
                     {rows.map((r) => (
                         <PersonRow
-                            key={`${r.user_id}:${r.home_id || "bank"}`}
+                            key={`${r.user_id}:${r.is_bank ? "bank" : (r.home_id ?? "company")}`}
                             row={r}
                             homes={homesFilter}
                             companies={companies}
@@ -815,6 +834,10 @@ function PersonRow({
     const asStringArray = (v: unknown): string[] =>
         Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
 
+    const [chipText, setChipText] = useState<string>("");
+    const [chipTone, setChipTone] = useState<"manager" | "staff" | "company" | "bank" | "admin" | "default">("default");
+
+
     useEffect(() => {
         setName(row.full_name || "");
     }, [row.user_id, row.full_name]);
@@ -855,6 +878,80 @@ function PersonRow({
         };
         load();
     }, [editing, positionEdit, currentlyManager, managerHomeIdsEdit.length, row.user_id]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadRoleChip() {
+            try {
+                // Bank row
+                if (row.is_bank) {
+                    if (!cancelled) {
+                        setChipText("Staff — Bank");
+                        setChipTone("bank");
+                    }
+                    return;
+                }
+
+                // Home row: read membership for THIS home to resolve subrole
+                if (row.home_id) {
+                    const { data, error } = await supabase
+                        .from("home_memberships")
+                        .select("role, manager_subrole, staff_subrole")
+                        .eq("user_id", row.user_id)
+                        .eq("home_id", row.home_id)
+                        .maybeSingle();
+
+                    if (!error && data) {
+                        const U = (s?: string | null) => (s ?? "").trim().toUpperCase();
+                        const role = U(data.role); // "MANAGER" | "STAFF" | null
+                        const mSub = U(data.manager_subrole); // "MANAGER" | "DEPUTY_MANAGER" | null
+                        const sSub = U(data.staff_subrole);   // "RESIDENTIAL" | "TEAM_LEADER" | null
+
+                        if (role === "MANAGER") {
+                            const label = mSub === "DEPUTY_MANAGER" ? "Manager — Deputy" : "Manager — Manager";
+                            if (!cancelled) {
+                                setChipText(label);
+                                setChipTone("manager");
+                            }
+                        } else {
+                            const label = sSub === "TEAM_LEADER" ? "Staff — Team Leader" : "Staff — Residential";
+                            if (!cancelled) {
+                                setChipText(label);
+                                setChipTone("staff");
+                            }
+                        }
+                        return;
+                    }
+                }
+
+                // Company-only row: pull company positions (array) if any
+                const { data: cm } = await supabase
+                    .from("company_memberships")
+                    .select("positions")
+                    .eq("user_id", row.user_id)
+                    .maybeSingle();
+
+                const positions = Array.isArray(cm?.positions) ? cm!.positions : [];
+                const label = positions.length ? `Company — ${positions.join(", ")}` : "Company — Member";
+                if (!cancelled) {
+                    setChipText(label);
+                    setChipTone("company");
+                }
+            } catch {
+                if (!cancelled) {
+                    setChipText("");
+                    setChipTone("default");
+                }
+            }
+        }
+
+        loadRoleChip();
+        return () => {
+            cancelled = true;
+        };
+    }, [row.user_id, row.home_id, row.is_bank]);
+
 
     async function prefillFromServer() {
         try {
@@ -1103,16 +1200,15 @@ function PersonRow({
         <div className="py-3 flex items-start gap-3">
             <div className="flex-1 min-w-0">
                 {!editing ? (
-                    <>
-                        <div className="font-medium text-gray-900">{name || "(No name)"}</div>
-                        <div className="text-xs text-gray-500">
-                            {row.is_bank
-                                ? "Bank staff"
-                                : row.home_id
-                                    ? homes.find((h) => h.id === row.home_id)?.name || "Home"
-                                    : "—"}
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <div className="font-medium text-gray-900">{name || "(No name)"}</div>
+                            <div className="text-xs text-gray-500">
+                                {row.is_bank ? "Bank staff" : row.home_id ? homes.find((h) => h.id === row.home_id)?.name || "Home" : "—"}
+                            </div>
                         </div>
-                    </>
+                        {chipText ? <RoleChip text={chipText} tone={chipTone} /> : null}
+                    </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {canEditName && (
@@ -1364,6 +1460,32 @@ function MultiSelect({
         </div>
     );
 }
+
+function RoleChip({
+    text,
+    tone = "default",
+}: {
+    text: string;
+    tone?: "manager" | "staff" | "company" | "bank" | "admin" | "default";
+}) {
+    // subtle tone variants
+    const styles: Record<string, string> = {
+        manager: "bg-amber-50 text-amber-800 border-amber-200",
+        staff: "bg-indigo-50 text-indigo-800 border-indigo-200",
+        company: "bg-sky-50 text-sky-800 border-sky-200",
+        bank: "bg-emerald-50 text-emerald-800 border-emerald-200",
+        admin: "bg-rose-50 text-rose-800 border-rose-200",
+        default: "bg-gray-100 text-gray-700 border-gray-200",
+    };
+    return (
+        <span
+            className={`inline-block rounded-full border px-2.5 py-1 text-[11px] font-medium ${styles[tone] ?? styles.default}`}
+        >
+            {text}
+        </span>
+    );
+}
+
 
 /* =====================
    HOMES TAB
