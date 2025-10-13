@@ -4,6 +4,21 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { supabase } from '@/supabase/client';
 import { useRouter } from 'next/navigation';
+// NEW: License status (matches API)
+type LicenseStatus = 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED';
+
+// NEW: call our /api/license/status with the Supabase Bearer token
+async function fetchLicenseStatus(bearer: string): Promise<LicenseStatus> {
+    const res = await fetch('/api/license/status', {
+        method: 'GET',
+        headers: { authorization: `Bearer ${bearer}` },
+        cache: 'no-store',
+    });
+    if (!res.ok) return 'SUSPENDED';
+    const json = (await res.json()) as { status?: LicenseStatus };
+    return json.status ?? 'SUSPENDED';
+}
+
 
 // --- Brand palette (keep it purple, lighter near the top)
 const ACTIVE = {
@@ -24,6 +39,15 @@ function hexToRgba(hex: string, alpha = 1): string {
 }
 
 const LS_KEY = 'hch_recent_emails';
+
+// NEW: returns true if the current user is Level 1 Admin
+async function isPlatformAdmin(): Promise<boolean> {
+    const { data, error } = await supabase.rpc('get_effective_level');
+    if (error) return false;
+    const lvl = typeof data === 'string' ? data : '';
+    return lvl === '1_ADMIN';
+}
+
 
 /* ============================
    Small brand atoms
@@ -135,19 +159,56 @@ export default function LoginPage() {
     } catch {}
   }
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError(error.message);
-    } else {
-      saveEmailToHistory(email.trim());
-      router.push('/dashboard');
-    }
-    setLoading(false);
-  };
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            setLoading(false);
+            setError(error.message);
+            return;
+        }
+
+        // Get the access token to authenticate the status check
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+
+        if (!token) {
+            // If we somehow don't have a token, fail safe
+            await supabase.auth.signOut();
+            setLoading(false);
+            setError('Could not verify your subscription. Please try again.');
+            return;
+        }
+
+        // 🔐 Platform admins bypass license checks entirely
+        const admin = await isPlatformAdmin();
+        if (!admin) {
+            // Check license status for non-admins
+            const status = await fetchLicenseStatus(token);
+
+            if (status === 'SUSPENDED' || status === 'CANCELLED') {
+                // Log them back out and show a clear message
+                await supabase.auth.signOut();
+                setLoading(false);
+                setError(
+                    status === 'SUSPENDED'
+                        ? 'Your account is currently suspended due to missed payment. Please contact your admin to resolve billing.'
+                        : 'This subscription has been cancelled. Please contact your admin to reactivate.'
+                );
+                return;
+            }
+        }
+
+        // ACTIVE or PAST_DUE (or admin): let them in
+        saveEmailToHistory(email.trim());
+        setLoading(false);
+        router.push('/dashboard');
+    };
+
+
 
   return (
     <div className="min-h-screen bg-white grid grid-cols-1 lg:grid-cols-2 relative">
@@ -365,13 +426,13 @@ export default function LoginPage() {
                 </a>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-xl bg-indigo-600 py-2.5 text-[15px] font-semibold text-white shadow-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70 transition"
-              >
-                {loading ? 'Signing in…' : 'Sign in'}
-              </button>
+                          <button
+                              type="submit"
+                              disabled={loading}
+                              className="w-full rounded-xl bg-indigo-600 py-2.5 text-[15px] font-semibold text-white shadow-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 disabled:opacity-70 transition"
+                          >
+                              {loading ? 'Checking subscription…' : 'Sign in'}
+                          </button>
             </form>
 
             <div className="mt-6 text-center">

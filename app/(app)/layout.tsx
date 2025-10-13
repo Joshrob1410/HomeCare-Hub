@@ -5,16 +5,21 @@ import UserChip from './_components/UserChip';
 import NotificationBell from './_components/NotificationBell';
 import Sidebar from './_components/Sidebar';
 import MobileSidebar from './_components/MobileSidebar';
-
+import LicenseGate from './_components/LicenseGate'; // ⬅️ NEW
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
     // Block access if not signed in
     const supabase = await getServerSupabase();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
     if (!user) redirect('/auth/login');
 
     return (
         <div className="min-h-screen bg-gray-50">
+            {/* Login/license gate runs on the client and will sign out suspended/cancelled users */}
+            <LicenseGate />
+
             {/* Top header (clean white) */}
             <header className="sticky top-0 z-30 bg-gray/90 backdrop-blur border-b border-gray-200 shadow-sm">
                 <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
@@ -44,11 +49,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Sidebar />
 
             <main className="px-4 py-6 lg:pl-72">
-                <div className="mx-auto max-w-6xl">
-                    {children}
-                </div>
+                <div className="mx-auto max-w-6xl">{children}</div>
             </main>
         </div>
     );
 }
-

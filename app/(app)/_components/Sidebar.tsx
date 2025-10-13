@@ -129,6 +129,10 @@ export default async function Sidebar() {
                     {showManagement && (
                         <Section title="Management">
                             <Item href="/Management" label="Management" icon={<IconOrg />} tone="indigo" />
+                            {/* Admin-only: Licenses */}
+                            {isAdmin && (
+                                <Item href="/licenses" label="Licenses" icon={<IconLicense />} tone="violet" />
+                            )}
                         </Section>
                     )}
 
@@ -373,7 +377,7 @@ function IconBudget() {
     return (
         <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.6">
             <path d="M3 12h18" />
-            <path d="M5 9h14a2 2 0 0 1 2 2v6H3v-6a2 2 0 0 1 2-2z" />
+            <path d="M5 9h14a2 2 0 0 1 2 2v6H3v-6a2 2 0  1 2-2z" />
             <circle cx="7.5" cy="15" r="1" />
         </svg>
     );
@@ -412,6 +416,15 @@ function IconOrg() {
             <rect x="14" y="3" width="7" height="7" rx="1" />
             <rect x="3" y="14" width="7" height="7" rx="1" />
             <path d="M7 10v4M17 10v4M10 7h4M7 17h10" />
+        </svg>
+    );
+}
+function IconLicense() {
+    // Simple shield-tick icon
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.6" aria-hidden>
+            <path d="M12 3l7 3v5c0 5-3.5 8.5-7 9-3.5-.5-7-4-7-9V6l7-3z" />
+            <path d="M9 12l2 2 4-4" />
         </svg>
     );
 }

@@ -2,6 +2,7 @@ Folder PATH listing
 Volume serial number is CE34-2C15
 C:.
 ³   .env.local
+³   .eslintignore
 ³   .gitignore
 ³   eslint.config.mjs
 ³   next-env.d.ts
@@ -9,14 +10,14 @@ C:.
 ³   package-lock.json
 ³   package.json
 ³   postcss.config.mjs
-³   projectTree.txt
+³   projecttree.txt
 ³   README.md
 ³   tsconfig.json
+³   tsconfig.tsbuildinfo
 ³   
 ÃÄÄÄ.next
 ³   ³   app-build-manifest.json
 ³   ³   build-manifest.json
-³   ³   fallback-build-manifest.json
 ³   ³   package.json
 ³   ³   prerender-manifest.json
 ³   ³   react-loadable-manifest.json
@@ -28,6 +29,16 @@ C:.
 ³   ³   ³   chrome-devtools-workspace-uuid
 ³   ³   ³   next-devtools-config.json
 ³   ³   ³   
+³   ³   ÃÄÄÄimages
+³   ³   ³   ÃÄÄÄ5pzj_JAIRhYhCJXd9-tDNt_SwLvT4qDfINMvWcF_jlE
+³   ³   ³   ³       60.1760100421504.SQDVL_rKs33H_KStJjwYW3rkP17_gb6vPu92ltYeTGg.Vy8iMmVhNTUtMTk5YjUzNzg5ODgi.webp
+³   ³   ³   ³       
+³   ³   ³   ÃÄÄÄ8pOT4jozPzGheGn09ID2T5l8H8ptaqSNFaOXxtFRQ8A
+³   ³   ³   ³       60.1760358165373.n96iczkN1SE9iQ7z9ZSWcSbpBoVb3Y0qg0yGR2iMHNI.Vy8iMmVhNTUtMTk5YjUzNzg5ODgi.webp
+³   ³   ³   ³       
+³   ³   ³   ÀÄÄÄg2ozZQmvTd4AxwIWFk7nlVsjjNsZW59Zvn-6A8Be6W0
+³   ³   ³           60.1760358165371.nPV1BAPbzd4ZgtVB0eIzkxd-3qxHg9MpGnJOCFGvEcQ.Vy8iMmVhNTUtMTk5YjUzNzg5ODgi.webp
+³   ³   ³           
 ³   ³   ÃÄÄÄswc
 ³   ³   ³   ÀÄÄÄplugins
 ³   ³   ³       ÀÄÄÄwindows_x86_64_18.0.0
@@ -128,6 +139,9 @@ C:.
 ³   ³               5.pack.gz
 ³   ³               50.pack.gz
 ³   ³               51.pack.gz
+³   ³               52.pack.gz
+³   ³               53.pack.gz
+³   ³               54.pack.gz
 ³   ³               6.pack.gz
 ³   ³               7.pack.gz
 ³   ³               8.pack.gz
@@ -147,68 +161,28 @@ C:.
 ³   ³   ³   server-reference-manifest.js
 ³   ³   ³   server-reference-manifest.json
 ³   ³   ³   webpack-runtime.js
-³   ³   ³   _error.js
 ³   ³   ³   
 ³   ³   ÃÄÄÄapp
 ³   ³   ³   ÃÄÄÄ(app)
-³   ³   ³   ³   ÃÄÄÄdashboard
-³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³       page_client-reference-manifest.js
-³   ³   ³   ³   ³       
-³   ³   ³   ³   ÃÄÄÄhelp-centre
-³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³       page_client-reference-manifest.js
-³   ³   ³   ³   ³       
-³   ³   ³   ³   ÃÄÄÄManagement
-³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³       page_client-reference-manifest.js
-³   ³   ³   ³   ³       
-³   ³   ³   ³   ÃÄÄÄpeople
-³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³       page_client-reference-manifest.js
-³   ³   ³   ³   ³       
-³   ³   ³   ³   ÃÄÄÄrotas
-³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³       page_client-reference-manifest.js
-³   ³   ³   ³   ³       
 ³   ³   ³   ³   ÀÄÄÄtraining
 ³   ³   ³   ³           page.js
 ³   ³   ³   ³           page_client-reference-manifest.js
 ³   ³   ³   ³           
 ³   ³   ³   ÃÄÄÄapi
-³   ³   ³   ³   ÃÄÄÄadmin
-³   ³   ³   ³   ³   ÃÄÄÄcreate-user
-³   ³   ³   ³   ³   ³       route.js
-³   ³   ³   ³   ³   ³       route_client-reference-manifest.js
-³   ³   ³   ³   ³   ³       
-³   ³   ³   ³   ³   ÀÄÄÄpeople
-³   ³   ³   ³   ³       ÀÄÄÄupdate
-³   ³   ³   ³   ³               route.js
-³   ³   ³   ³   ³               route_client-reference-manifest.js
-³   ³   ³   ³   ³               
+³   ³   ³   ³   ÃÄÄÄlicense
+³   ³   ³   ³   ³   ÀÄÄÄstatus
+³   ³   ³   ³   ³           route.js
+³   ³   ³   ³   ³           route_client-reference-manifest.js
+³   ³   ³   ³   ³           
 ³   ³   ³   ³   ÀÄÄÄself
 ³   ³   ³   ³       ÀÄÄÄmembers
 ³   ³   ³   ³           ÀÄÄÄlist
 ³   ³   ³   ³                   route.js
 ³   ³   ³   ³                   route_client-reference-manifest.js
 ³   ³   ³   ³                   
-³   ³   ³   ÃÄÄÄauth
-³   ³   ³   ³   ÀÄÄÄlogin
-³   ³   ³   ³           page.js
-³   ³   ³   ³           page_client-reference-manifest.js
-³   ³   ³   ³           
-³   ³   ³   ÃÄÄÄicon.png
-³   ³   ³   ³       route.js
-³   ³   ³   ³       
-³   ³   ³   ÀÄÄÄ_not-found
-³   ³   ³           page.js
-³   ³   ³           page_client-reference-manifest.js
+³   ³   ³   ÀÄÄÄicon.png
+³   ³   ³           route.js
 ³   ³   ³           
-³   ³   ÃÄÄÄpages
-³   ³   ³       _app.js
-³   ³   ³       _document.js
-³   ³   ³       _error.js
-³   ³   ³       
 ³   ³   ÀÄÄÄvendor-chunks
 ³   ³           @supabase.js
 ³   ³           @swc.js
@@ -222,78 +196,29 @@ C:.
 ³   ³   ÃÄÄÄchunks
 ³   ³   ³   ³   app-pages-internals.js
 ³   ³   ³   ³   main-app.js
-³   ³   ³   ³   main.js
 ³   ³   ³   ³   polyfills.js
-³   ³   ³   ³   react-refresh.js
 ³   ³   ³   ³   webpack.js
 ³   ³   ³   ³   _app-pages-browser_node_modules_next_dist_client_dev_noop-turbopack-hmr_js.js
-³   ³   ³   ³   _error.js
-³   ³   ³   ³   _pages-dir-browser_node_modules_next_dist_pages__app_js.js
-³   ³   ³   ³   _pages-dir-browser_node_modules_next_dist_pages__error_js.js
 ³   ³   ³   ³   
-³   ³   ³   ÃÄÄÄapp
-³   ³   ³   ³   ³   layout.js
-³   ³   ³   ³   ³   
-³   ³   ³   ³   ÃÄÄÄ(app)
-³   ³   ³   ³   ³   ³   layout.js
-³   ³   ³   ³   ³   ³   
-³   ³   ³   ³   ³   ÃÄÄÄdashboard
-³   ³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³   ³       
-³   ³   ³   ³   ³   ÃÄÄÄhelp-centre
-³   ³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³   ³       
-³   ³   ³   ³   ³   ÃÄÄÄManagement
-³   ³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³   ³       
-³   ³   ³   ³   ³   ÃÄÄÄpeople
-³   ³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³   ³       
-³   ³   ³   ³   ³   ÃÄÄÄrotas
-³   ³   ³   ³   ³   ³       page.js
-³   ³   ³   ³   ³   ³       
-³   ³   ³   ³   ³   ÀÄÄÄtraining
-³   ³   ³   ³   ³           page.js
-³   ³   ³   ³   ³           
-³   ³   ³   ³   ÃÄÄÄapi
-³   ³   ³   ³   ³   ÃÄÄÄadmin
-³   ³   ³   ³   ³   ³   ÃÄÄÄcreate-user
-³   ³   ³   ³   ³   ³   ³       route.js
-³   ³   ³   ³   ³   ³   ³       
-³   ³   ³   ³   ³   ³   ÀÄÄÄpeople
-³   ³   ³   ³   ³   ³       ÀÄÄÄupdate
-³   ³   ³   ³   ³   ³               route.js
-³   ³   ³   ³   ³   ³               
-³   ³   ³   ³   ³   ÀÄÄÄself
-³   ³   ³   ³   ³       ÀÄÄÄmembers
-³   ³   ³   ³   ³           ÀÄÄÄlist
-³   ³   ³   ³   ³                   route.js
-³   ³   ³   ³   ³                   
-³   ³   ³   ³   ÃÄÄÄauth
-³   ³   ³   ³   ³   ÀÄÄÄlogin
-³   ³   ³   ³   ³           page.js
-³   ³   ³   ³   ³           
-³   ³   ³   ³   ÀÄÄÄ_not-found
-³   ³   ³   ³           page.js
-³   ³   ³   ³           
-³   ³   ³   ÃÄÄÄfallback
-³   ³   ³   ³   ³   amp.js
-³   ³   ³   ³   ³   main-app.js
-³   ³   ³   ³   ³   main.js
-³   ³   ³   ³   ³   react-refresh.js
-³   ³   ³   ³   ³   webpack.js
-³   ³   ³   ³   ³   _app-pages-browser_node_modules_next_dist_client_dev_noop-turbopack-hmr_js.js
-³   ³   ³   ³   ³   _pages-dir-browser_node_modules_next_dist_pages__app_js.js
-³   ³   ³   ³   ³   _pages-dir-browser_node_modules_next_dist_pages__error_js.js
-³   ³   ³   ³   ³   
-³   ³   ³   ³   ÀÄÄÄpages
-³   ³   ³   ³           _app.js
-³   ³   ³   ³           _error.js
-³   ³   ³   ³           
-³   ³   ³   ÀÄÄÄpages
-³   ³   ³           _app.js
-³   ³   ³           _error.js
-³   ³   ³           
+³   ³   ³   ÀÄÄÄapp
+³   ³   ³       ³   layout.js
+³   ³   ³       ³   
+³   ³   ³       ÃÄÄÄ(app)
+³   ³   ³       ³   ³   layout.js
+³   ³   ³       ³   ³   
+³   ³   ³       ³   ÀÄÄÄtraining
+³   ³   ³       ³           page.js
+³   ³   ³       ³           
+³   ³   ³       ÀÄÄÄapi
+³   ³   ³           ÃÄÄÄlicense
+³   ³   ³           ³   ÀÄÄÄstatus
+³   ³   ³           ³           route.js
+³   ³   ³           ³           
+³   ³   ³           ÀÄÄÄself
+³   ³   ³               ÀÄÄÄmembers
+³   ³   ³                   ÀÄÄÄlist
+³   ³   ³                           route.js
+³   ³   ³                           
 ³   ³   ÃÄÄÄcss
 ³   ³   ³   ÀÄÄÄapp
 ³   ³   ³           layout.css
@@ -311,400 +236,15 @@ C:.
 ³   ³   ³       ba015fad6dcf6784-s.woff2
 ³   ³   ³       
 ³   ³   ÀÄÄÄwebpack
-³   ³       ³   00daab8b750188fc.webpack.hot-update.json
-³   ³       ³   03d80a053c5660a8.webpack.hot-update.json
-³   ³       ³   0713c53e0237a3ca.webpack.hot-update.json
-³   ³       ³   09a40cfd118667db.webpack.hot-update.json
-³   ³       ³   0a219ddbbfb0c6c9.webpack.hot-update.json
-³   ³       ³   0ac0baf5450d9a28.webpack.hot-update.json
-³   ³       ³   0bb8a665db59269e.webpack.hot-update.json
-³   ³       ³   0bddb2d38a37f231.webpack.hot-update.json
-³   ³       ³   0faf458859a092e0.webpack.hot-update.json
-³   ³       ³   10507020d239f21e.webpack.hot-update.json
-³   ³       ³   1339665f8305beef.webpack.hot-update.json
-³   ³       ³   17f4a6812cea12c3.webpack.hot-update.json
-³   ³       ³   1a1fc04c81a0f0a2.webpack.hot-update.json
-³   ³       ³   1a69cb5c66c08fbb.webpack.hot-update.json
-³   ³       ³   1ae15574135372be.webpack.hot-update.json
-³   ³       ³   1f449a4d294cf829.webpack.hot-update.json
-³   ³       ³   24db0430a7da160b.webpack.hot-update.json
-³   ³       ³   26b73f2b1c9845bd.webpack.hot-update.json
-³   ³       ³   2a4bec93c4615ac8.webpack.hot-update.json
-³   ³       ³   3000e1926707943b.webpack.hot-update.json
-³   ³       ³   3057600e54e25954.webpack.hot-update.json
-³   ³       ³   305ca211e2f9dd55.webpack.hot-update.json
-³   ³       ³   30d909ec3c0707b8.webpack.hot-update.json
-³   ³       ³   33bdc41a525413c0.webpack.hot-update.json
-³   ³       ³   3f62c66703fe75a8.webpack.hot-update.json
-³   ³       ³   408677d87bbddf69.webpack.hot-update.json
-³   ³       ³   410c87f7ac4bbceb.webpack.hot-update.json
-³   ³       ³   41ca3a1d84bea654.webpack.hot-update.json
-³   ³       ³   45b6032187dd2621.webpack.hot-update.json
-³   ³       ³   48077a407256be89.webpack.hot-update.json
-³   ³       ³   4a65410f910251b3.webpack.hot-update.json
-³   ³       ³   4aa725f6b7bf67d1.webpack.hot-update.json
-³   ³       ³   4ae1e288e2193b2c.webpack.hot-update.json
-³   ³       ³   4b1bc0987efaa8a9.webpack.hot-update.json
-³   ³       ³   4cb942b0e7dec980.webpack.hot-update.json
-³   ³       ³   4e87325558ab474b.webpack.hot-update.json
-³   ³       ³   4ee4315deb357b50.webpack.hot-update.json
-³   ³       ³   51e72d38c48da5ab.webpack.hot-update.json
-³   ³       ³   51f8fc2b7c7b90d2.webpack.hot-update.json
-³   ³       ³   522b10b806be4c27.webpack.hot-update.json
-³   ³       ³   5322bf641f0ac183.webpack.hot-update.json
-³   ³       ³   53e9dd1c9fdae387.webpack.hot-update.json
-³   ³       ³   556d6216b9256771.webpack.hot-update.json
-³   ³       ³   5a49d845867bc281.webpack.hot-update.json
-³   ³       ³   5b59868de423c6be.webpack.hot-update.json
-³   ³       ³   5b79cf735b93c4e7.webpack.hot-update.json
-³   ³       ³   5ff97549cc4574bf.webpack.hot-update.json
-³   ³       ³   60660d9434b4cfdd.webpack.hot-update.json
-³   ³       ³   6169cb969efbbba6.webpack.hot-update.json
 ³   ³       ³   633457081244afec._.hot-update.json
-³   ³       ³   658bcf9c26f5b848.webpack.hot-update.json
-³   ³       ³   65c33ace981625cb.webpack.hot-update.json
-³   ³       ³   68987534869a58d6.webpack.hot-update.json
-³   ³       ³   68e52876e376dc05.webpack.hot-update.json
-³   ³       ³   6c344dbac5293b48.webpack.hot-update.json
-³   ³       ³   6f50535ac26bf9ef.webpack.hot-update.json
-³   ³       ³   70140d15c49545c7.webpack.hot-update.json
-³   ³       ³   7188b525e593c41a.webpack.hot-update.json
-³   ³       ³   7395b852beb9a24b.webpack.hot-update.json
-³   ³       ³   74210f6f6d68a6db.webpack.hot-update.json
-³   ³       ³   79e79ed453e22813.webpack.hot-update.json
-³   ³       ³   7cf72a109b49bc86.webpack.hot-update.json
-³   ³       ³   7cf829fc2afd5a9f.webpack.hot-update.json
-³   ³       ³   7f355e884f3119e6.webpack.hot-update.json
-³   ³       ³   8017240a638523cc.webpack.hot-update.json
-³   ³       ³   809794f0b478ef7a.webpack.hot-update.json
-³   ³       ³   81e13f39d46deb33.webpack.hot-update.json
-³   ³       ³   8332fa9be34a7d89.webpack.hot-update.json
-³   ³       ³   84f2f20a3c46816b.webpack.hot-update.json
-³   ³       ³   88b9e79dff9669d1.webpack.hot-update.json
-³   ³       ³   89eae94e28b0cd93.webpack.hot-update.json
-³   ³       ³   8a5d4fe9a27ef775.webpack.hot-update.json
-³   ³       ³   8c55d5e07323546d.webpack.hot-update.json
-³   ³       ³   8cef762a2331dc28.webpack.hot-update.json
-³   ³       ³   8e900b402e3c1eea.webpack.hot-update.json
-³   ³       ³   90fd766163f59af6.webpack.hot-update.json
-³   ³       ³   9197538b1936deee.webpack.hot-update.json
-³   ³       ³   929a600a59e40438.webpack.hot-update.json
-³   ³       ³   93a6056f73d35a5a.webpack.hot-update.json
-³   ³       ³   990abb87e58fc856.webpack.hot-update.json
-³   ³       ³   9c78076c810528a2.webpack.hot-update.json
-³   ³       ³   a10500bd7f203866.webpack.hot-update.json
-³   ³       ³   a1c93d1146765bab.webpack.hot-update.json
-³   ³       ³   a4f0cd30b3abaa24.webpack.hot-update.json
-³   ³       ³   add4673ac77174ef.webpack.hot-update.json
-³   ³       ³   b4ba8f41fa0a3757.webpack.hot-update.json
-³   ³       ³   b584141f14bbfda8.webpack.hot-update.json
-³   ³       ³   b66cc61317b55c93.webpack.hot-update.json
-³   ³       ³   b706d50bc758ba28.webpack.hot-update.json
-³   ³       ³   b70a3b5237f268c1.webpack.hot-update.json
-³   ³       ³   baff5fb90064f27c.webpack.hot-update.json
-³   ³       ³   bd09ae0376505ec6.webpack.hot-update.json
-³   ³       ³   bd7d4b3acffa2826.webpack.hot-update.json
-³   ³       ³   bdfcddec75884066.webpack.hot-update.json
-³   ³       ³   c14d0444e8fd6105.webpack.hot-update.json
-³   ³       ³   c26315722e7b9450.webpack.hot-update.json
-³   ³       ³   c464a3d66f484af7.webpack.hot-update.json
-³   ³       ³   c558b695b890f0ad.webpack.hot-update.json
-³   ³       ³   c7f443f5e022fb43.webpack.hot-update.json
-³   ³       ³   c8a1465ce5011640.webpack.hot-update.json
-³   ³       ³   c9729e87d7657208.webpack.hot-update.json
-³   ³       ³   c9d5ae38b75cf725.webpack.hot-update.json
-³   ³       ³   cb384682e55fbb3c.webpack.hot-update.json
-³   ³       ³   cb80a98211dde007.webpack.hot-update.json
-³   ³       ³   cbaf3d621b2400b3.webpack.hot-update.json
-³   ³       ³   cc1cb2dafc783009.webpack.hot-update.json
-³   ³       ³   ccae7f0e78a29a5a.webpack.hot-update.json
-³   ³       ³   d298e825a3611442.webpack.hot-update.json
-³   ³       ³   d3e24e4571d0f0f3.webpack.hot-update.json
-³   ³       ³   d5c49b948fd511bd.webpack.hot-update.json
-³   ³       ³   d5f61856d439a569.webpack.hot-update.json
-³   ³       ³   d8c791b27b636ed6.webpack.hot-update.json
-³   ³       ³   d8fc89ae63d0d222.webpack.hot-update.json
-³   ³       ³   dbed210f2ae46b8d.webpack.hot-update.json
-³   ³       ³   dcef496cd2f32dc2.webpack.hot-update.json
-³   ³       ³   dd05d390fc482639.webpack.hot-update.json
-³   ³       ³   e00f8bcd97fcb090.webpack.hot-update.json
-³   ³       ³   e85a3df107f20672.webpack.hot-update.json
-³   ³       ³   ec7e67d7d798aa95.webpack.hot-update.json
-³   ³       ³   eca5c3e4a2d92d00.webpack.hot-update.json
-³   ³       ³   ee22b0bcceb67c66.webpack.hot-update.json
-³   ³       ³   ee8aafeb87d07e9f.webpack.hot-update.json
-³   ³       ³   f0b6c89521296753.webpack.hot-update.json
-³   ³       ³   f19fe9cd97c4e49f.webpack.hot-update.json
-³   ³       ³   f27dffb2156119a7.webpack.hot-update.json
-³   ³       ³   f2c873386776c3d9.webpack.hot-update.json
-³   ³       ³   f42a5250bc1e47f7.webpack.hot-update.json
-³   ³       ³   fa956d63d857ce7e.webpack.hot-update.json
-³   ³       ³   fc4e04d41bbca010.webpack.hot-update.json
-³   ³       ³   fee449142a96ef3c.webpack.hot-update.json
-³   ³       ³   main.5322bf641f0ac183.hot-update.js
-³   ³       ³   main.79e79ed453e22813.hot-update.js
-³   ³       ³   main.dcef496cd2f32dc2.hot-update.js
-³   ³       ³   webpack.00daab8b750188fc.hot-update.js
-³   ³       ³   webpack.03d80a053c5660a8.hot-update.js
-³   ³       ³   webpack.0713c53e0237a3ca.hot-update.js
-³   ³       ³   webpack.09a40cfd118667db.hot-update.js
-³   ³       ³   webpack.0a219ddbbfb0c6c9.hot-update.js
-³   ³       ³   webpack.0ac0baf5450d9a28.hot-update.js
-³   ³       ³   webpack.0bb8a665db59269e.hot-update.js
-³   ³       ³   webpack.0bddb2d38a37f231.hot-update.js
-³   ³       ³   webpack.0faf458859a092e0.hot-update.js
-³   ³       ³   webpack.10507020d239f21e.hot-update.js
-³   ³       ³   webpack.1339665f8305beef.hot-update.js
-³   ³       ³   webpack.17f4a6812cea12c3.hot-update.js
-³   ³       ³   webpack.1a1fc04c81a0f0a2.hot-update.js
-³   ³       ³   webpack.1a69cb5c66c08fbb.hot-update.js
-³   ³       ³   webpack.1ae15574135372be.hot-update.js
-³   ³       ³   webpack.1f449a4d294cf829.hot-update.js
-³   ³       ³   webpack.24db0430a7da160b.hot-update.js
-³   ³       ³   webpack.26b73f2b1c9845bd.hot-update.js
-³   ³       ³   webpack.2a4bec93c4615ac8.hot-update.js
-³   ³       ³   webpack.3000e1926707943b.hot-update.js
-³   ³       ³   webpack.3057600e54e25954.hot-update.js
-³   ³       ³   webpack.305ca211e2f9dd55.hot-update.js
-³   ³       ³   webpack.30d909ec3c0707b8.hot-update.js
-³   ³       ³   webpack.33bdc41a525413c0.hot-update.js
-³   ³       ³   webpack.3f62c66703fe75a8.hot-update.js
-³   ³       ³   webpack.408677d87bbddf69.hot-update.js
-³   ³       ³   webpack.410c87f7ac4bbceb.hot-update.js
-³   ³       ³   webpack.41ca3a1d84bea654.hot-update.js
-³   ³       ³   webpack.45b6032187dd2621.hot-update.js
-³   ³       ³   webpack.48077a407256be89.hot-update.js
-³   ³       ³   webpack.4a65410f910251b3.hot-update.js
-³   ³       ³   webpack.4aa725f6b7bf67d1.hot-update.js
-³   ³       ³   webpack.4ae1e288e2193b2c.hot-update.js
-³   ³       ³   webpack.4b1bc0987efaa8a9.hot-update.js
-³   ³       ³   webpack.4cb942b0e7dec980.hot-update.js
-³   ³       ³   webpack.4e87325558ab474b.hot-update.js
-³   ³       ³   webpack.4ee4315deb357b50.hot-update.js
-³   ³       ³   webpack.51e72d38c48da5ab.hot-update.js
-³   ³       ³   webpack.51f8fc2b7c7b90d2.hot-update.js
-³   ³       ³   webpack.522b10b806be4c27.hot-update.js
-³   ³       ³   webpack.5322bf641f0ac183.hot-update.js
-³   ³       ³   webpack.53e9dd1c9fdae387.hot-update.js
-³   ³       ³   webpack.556d6216b9256771.hot-update.js
-³   ³       ³   webpack.5a49d845867bc281.hot-update.js
-³   ³       ³   webpack.5b59868de423c6be.hot-update.js
-³   ³       ³   webpack.5b79cf735b93c4e7.hot-update.js
-³   ³       ³   webpack.5ff97549cc4574bf.hot-update.js
-³   ³       ³   webpack.60660d9434b4cfdd.hot-update.js
-³   ³       ³   webpack.6169cb969efbbba6.hot-update.js
-³   ³       ³   webpack.658bcf9c26f5b848.hot-update.js
-³   ³       ³   webpack.65c33ace981625cb.hot-update.js
-³   ³       ³   webpack.68987534869a58d6.hot-update.js
-³   ³       ³   webpack.68e52876e376dc05.hot-update.js
-³   ³       ³   webpack.6c344dbac5293b48.hot-update.js
-³   ³       ³   webpack.6f50535ac26bf9ef.hot-update.js
-³   ³       ³   webpack.70140d15c49545c7.hot-update.js
-³   ³       ³   webpack.7188b525e593c41a.hot-update.js
-³   ³       ³   webpack.7395b852beb9a24b.hot-update.js
-³   ³       ³   webpack.74210f6f6d68a6db.hot-update.js
-³   ³       ³   webpack.79e79ed453e22813.hot-update.js
-³   ³       ³   webpack.7cf72a109b49bc86.hot-update.js
-³   ³       ³   webpack.7cf829fc2afd5a9f.hot-update.js
-³   ³       ³   webpack.7f355e884f3119e6.hot-update.js
-³   ³       ³   webpack.8017240a638523cc.hot-update.js
-³   ³       ³   webpack.809794f0b478ef7a.hot-update.js
-³   ³       ³   webpack.81e13f39d46deb33.hot-update.js
-³   ³       ³   webpack.8332fa9be34a7d89.hot-update.js
-³   ³       ³   webpack.84f2f20a3c46816b.hot-update.js
-³   ³       ³   webpack.88b9e79dff9669d1.hot-update.js
-³   ³       ³   webpack.89eae94e28b0cd93.hot-update.js
-³   ³       ³   webpack.8a5d4fe9a27ef775.hot-update.js
-³   ³       ³   webpack.8c55d5e07323546d.hot-update.js
-³   ³       ³   webpack.8cef762a2331dc28.hot-update.js
-³   ³       ³   webpack.8e900b402e3c1eea.hot-update.js
-³   ³       ³   webpack.90fd766163f59af6.hot-update.js
-³   ³       ³   webpack.9197538b1936deee.hot-update.js
-³   ³       ³   webpack.929a600a59e40438.hot-update.js
-³   ³       ³   webpack.93a6056f73d35a5a.hot-update.js
-³   ³       ³   webpack.990abb87e58fc856.hot-update.js
-³   ³       ³   webpack.9c78076c810528a2.hot-update.js
-³   ³       ³   webpack.a10500bd7f203866.hot-update.js
-³   ³       ³   webpack.a1c93d1146765bab.hot-update.js
-³   ³       ³   webpack.a4f0cd30b3abaa24.hot-update.js
-³   ³       ³   webpack.add4673ac77174ef.hot-update.js
-³   ³       ³   webpack.b4ba8f41fa0a3757.hot-update.js
-³   ³       ³   webpack.b584141f14bbfda8.hot-update.js
-³   ³       ³   webpack.b66cc61317b55c93.hot-update.js
-³   ³       ³   webpack.b706d50bc758ba28.hot-update.js
-³   ³       ³   webpack.b70a3b5237f268c1.hot-update.js
-³   ³       ³   webpack.baff5fb90064f27c.hot-update.js
-³   ³       ³   webpack.bd09ae0376505ec6.hot-update.js
-³   ³       ³   webpack.bd7d4b3acffa2826.hot-update.js
-³   ³       ³   webpack.bdfcddec75884066.hot-update.js
-³   ³       ³   webpack.c14d0444e8fd6105.hot-update.js
-³   ³       ³   webpack.c26315722e7b9450.hot-update.js
-³   ³       ³   webpack.c464a3d66f484af7.hot-update.js
-³   ³       ³   webpack.c558b695b890f0ad.hot-update.js
-³   ³       ³   webpack.c7f443f5e022fb43.hot-update.js
-³   ³       ³   webpack.c8a1465ce5011640.hot-update.js
-³   ³       ³   webpack.c9729e87d7657208.hot-update.js
-³   ³       ³   webpack.c9d5ae38b75cf725.hot-update.js
-³   ³       ³   webpack.cb384682e55fbb3c.hot-update.js
-³   ³       ³   webpack.cb80a98211dde007.hot-update.js
-³   ³       ³   webpack.cbaf3d621b2400b3.hot-update.js
-³   ³       ³   webpack.cc1cb2dafc783009.hot-update.js
-³   ³       ³   webpack.ccae7f0e78a29a5a.hot-update.js
-³   ³       ³   webpack.d298e825a3611442.hot-update.js
-³   ³       ³   webpack.d3e24e4571d0f0f3.hot-update.js
-³   ³       ³   webpack.d5c49b948fd511bd.hot-update.js
-³   ³       ³   webpack.d5f61856d439a569.hot-update.js
-³   ³       ³   webpack.d8c791b27b636ed6.hot-update.js
-³   ³       ³   webpack.d8fc89ae63d0d222.hot-update.js
-³   ³       ³   webpack.dbed210f2ae46b8d.hot-update.js
-³   ³       ³   webpack.dcef496cd2f32dc2.hot-update.js
-³   ³       ³   webpack.dd05d390fc482639.hot-update.js
-³   ³       ³   webpack.e00f8bcd97fcb090.hot-update.js
-³   ³       ³   webpack.e85a3df107f20672.hot-update.js
-³   ³       ³   webpack.ec7e67d7d798aa95.hot-update.js
-³   ³       ³   webpack.eca5c3e4a2d92d00.hot-update.js
-³   ³       ³   webpack.ee22b0bcceb67c66.hot-update.js
-³   ³       ³   webpack.ee8aafeb87d07e9f.hot-update.js
-³   ³       ³   webpack.f0b6c89521296753.hot-update.js
-³   ³       ³   webpack.f19fe9cd97c4e49f.hot-update.js
-³   ³       ³   webpack.f27dffb2156119a7.hot-update.js
-³   ³       ³   webpack.f2c873386776c3d9.hot-update.js
-³   ³       ³   webpack.f42a5250bc1e47f7.hot-update.js
-³   ³       ³   webpack.fa956d63d857ce7e.hot-update.js
-³   ³       ³   webpack.fc4e04d41bbca010.hot-update.js
-³   ³       ³   webpack.fee449142a96ef3c.hot-update.js
+³   ³       ³   bb150936e1dcc8fe.webpack.hot-update.json
+³   ³       ³   dbcf90a77a35b47d.webpack.hot-update.json
+³   ³       ³   webpack.bb150936e1dcc8fe.hot-update.js
+³   ³       ³   webpack.dbcf90a77a35b47d.hot-update.js
 ³   ³       ³   
 ³   ³       ÀÄÄÄapp
-³   ³           ³   layout.03d80a053c5660a8.hot-update.js
-³   ³           ³   layout.0713c53e0237a3ca.hot-update.js
-³   ³           ³   layout.09a40cfd118667db.hot-update.js
-³   ³           ³   layout.0a219ddbbfb0c6c9.hot-update.js
-³   ³           ³   layout.0ac0baf5450d9a28.hot-update.js
-³   ³           ³   layout.0bb8a665db59269e.hot-update.js
-³   ³           ³   layout.0bddb2d38a37f231.hot-update.js
-³   ³           ³   layout.0faf458859a092e0.hot-update.js
-³   ³           ³   layout.10507020d239f21e.hot-update.js
-³   ³           ³   layout.1339665f8305beef.hot-update.js
-³   ³           ³   layout.17f4a6812cea12c3.hot-update.js
-³   ³           ³   layout.1a1fc04c81a0f0a2.hot-update.js
-³   ³           ³   layout.1a69cb5c66c08fbb.hot-update.js
-³   ³           ³   layout.1ae15574135372be.hot-update.js
-³   ³           ³   layout.1f449a4d294cf829.hot-update.js
-³   ³           ³   layout.24db0430a7da160b.hot-update.js
-³   ³           ³   layout.26b73f2b1c9845bd.hot-update.js
-³   ³           ³   layout.2a4bec93c4615ac8.hot-update.js
-³   ³           ³   layout.3000e1926707943b.hot-update.js
-³   ³           ³   layout.3057600e54e25954.hot-update.js
-³   ³           ³   layout.305ca211e2f9dd55.hot-update.js
-³   ³           ³   layout.30d909ec3c0707b8.hot-update.js
-³   ³           ³   layout.33bdc41a525413c0.hot-update.js
-³   ³           ³   layout.3f62c66703fe75a8.hot-update.js
-³   ³           ³   layout.408677d87bbddf69.hot-update.js
-³   ³           ³   layout.410c87f7ac4bbceb.hot-update.js
-³   ³           ³   layout.41ca3a1d84bea654.hot-update.js
-³   ³           ³   layout.45b6032187dd2621.hot-update.js
-³   ³           ³   layout.48077a407256be89.hot-update.js
-³   ³           ³   layout.4a65410f910251b3.hot-update.js
-³   ³           ³   layout.4aa725f6b7bf67d1.hot-update.js
-³   ³           ³   layout.4ae1e288e2193b2c.hot-update.js
-³   ³           ³   layout.4b1bc0987efaa8a9.hot-update.js
-³   ³           ³   layout.4cb942b0e7dec980.hot-update.js
-³   ³           ³   layout.4ee4315deb357b50.hot-update.js
-³   ³           ³   layout.51e72d38c48da5ab.hot-update.js
-³   ³           ³   layout.51f8fc2b7c7b90d2.hot-update.js
-³   ³           ³   layout.522b10b806be4c27.hot-update.js
-³   ³           ³   layout.53e9dd1c9fdae387.hot-update.js
-³   ³           ³   layout.556d6216b9256771.hot-update.js
-³   ³           ³   layout.5a49d845867bc281.hot-update.js
-³   ³           ³   layout.5b59868de423c6be.hot-update.js
-³   ³           ³   layout.5b79cf735b93c4e7.hot-update.js
-³   ³           ³   layout.5ff97549cc4574bf.hot-update.js
-³   ³           ³   layout.60660d9434b4cfdd.hot-update.js
-³   ³           ³   layout.658bcf9c26f5b848.hot-update.js
-³   ³           ³   layout.65c33ace981625cb.hot-update.js
-³   ³           ³   layout.68987534869a58d6.hot-update.js
-³   ³           ³   layout.68e52876e376dc05.hot-update.js
-³   ³           ³   layout.6c344dbac5293b48.hot-update.js
-³   ³           ³   layout.6f50535ac26bf9ef.hot-update.js
-³   ³           ³   layout.70140d15c49545c7.hot-update.js
-³   ³           ³   layout.7188b525e593c41a.hot-update.js
-³   ³           ³   layout.7395b852beb9a24b.hot-update.js
-³   ³           ³   layout.74210f6f6d68a6db.hot-update.js
-³   ³           ³   layout.7cf72a109b49bc86.hot-update.js
-³   ³           ³   layout.7cf829fc2afd5a9f.hot-update.js
-³   ³           ³   layout.7f355e884f3119e6.hot-update.js
-³   ³           ³   layout.809794f0b478ef7a.hot-update.js
-³   ³           ³   layout.81e13f39d46deb33.hot-update.js
-³   ³           ³   layout.8332fa9be34a7d89.hot-update.js
-³   ³           ³   layout.84f2f20a3c46816b.hot-update.js
-³   ³           ³   layout.8a5d4fe9a27ef775.hot-update.js
-³   ³           ³   layout.8c55d5e07323546d.hot-update.js
-³   ³           ³   layout.8cef762a2331dc28.hot-update.js
-³   ³           ³   layout.8e900b402e3c1eea.hot-update.js
-³   ³           ³   layout.9197538b1936deee.hot-update.js
-³   ³           ³   layout.929a600a59e40438.hot-update.js
-³   ³           ³   layout.93a6056f73d35a5a.hot-update.js
-³   ³           ³   layout.990abb87e58fc856.hot-update.js
-³   ³           ³   layout.9c78076c810528a2.hot-update.js
-³   ³           ³   layout.a10500bd7f203866.hot-update.js
-³   ³           ³   layout.a1c93d1146765bab.hot-update.js
-³   ³           ³   layout.a4f0cd30b3abaa24.hot-update.js
-³   ³           ³   layout.add4673ac77174ef.hot-update.js
-³   ³           ³   layout.b4ba8f41fa0a3757.hot-update.js
-³   ³           ³   layout.b584141f14bbfda8.hot-update.js
-³   ³           ³   layout.b66cc61317b55c93.hot-update.js
-³   ³           ³   layout.b70a3b5237f268c1.hot-update.js
-³   ³           ³   layout.baff5fb90064f27c.hot-update.js
-³   ³           ³   layout.bd09ae0376505ec6.hot-update.js
-³   ³           ³   layout.bd7d4b3acffa2826.hot-update.js
-³   ³           ³   layout.bdfcddec75884066.hot-update.js
-³   ³           ³   layout.c14d0444e8fd6105.hot-update.js
-³   ³           ³   layout.c26315722e7b9450.hot-update.js
-³   ³           ³   layout.c464a3d66f484af7.hot-update.js
-³   ³           ³   layout.c558b695b890f0ad.hot-update.js
-³   ³           ³   layout.c7f443f5e022fb43.hot-update.js
-³   ³           ³   layout.c8a1465ce5011640.hot-update.js
-³   ³           ³   layout.c9729e87d7657208.hot-update.js
-³   ³           ³   layout.c9d5ae38b75cf725.hot-update.js
-³   ³           ³   layout.cb384682e55fbb3c.hot-update.js
-³   ³           ³   layout.cb80a98211dde007.hot-update.js
-³   ³           ³   layout.cbaf3d621b2400b3.hot-update.js
-³   ³           ³   layout.cc1cb2dafc783009.hot-update.js
-³   ³           ³   layout.ccae7f0e78a29a5a.hot-update.js
-³   ³           ³   layout.d298e825a3611442.hot-update.js
-³   ³           ³   layout.d5c49b948fd511bd.hot-update.js
-³   ³           ³   layout.d5f61856d439a569.hot-update.js
-³   ³           ³   layout.d8fc89ae63d0d222.hot-update.js
-³   ³           ³   layout.dbed210f2ae46b8d.hot-update.js
-³   ³           ³   layout.dcef496cd2f32dc2.hot-update.js
-³   ³           ³   layout.dd05d390fc482639.hot-update.js
-³   ³           ³   layout.e00f8bcd97fcb090.hot-update.js
-³   ³           ³   layout.e85a3df107f20672.hot-update.js
-³   ³           ³   layout.ec7e67d7d798aa95.hot-update.js
-³   ³           ³   layout.eca5c3e4a2d92d00.hot-update.js
-³   ³           ³   layout.ee22b0bcceb67c66.hot-update.js
-³   ³           ³   layout.ee8aafeb87d07e9f.hot-update.js
-³   ³           ³   layout.f0b6c89521296753.hot-update.js
-³   ³           ³   layout.f19fe9cd97c4e49f.hot-update.js
-³   ³           ³   layout.f42a5250bc1e47f7.hot-update.js
-³   ³           ³   layout.fa956d63d857ce7e.hot-update.js
-³   ³           ³   layout.fc4e04d41bbca010.hot-update.js
-³   ³           ³   layout.fee449142a96ef3c.hot-update.js
-³   ³           ³   
-³   ³           ÀÄÄÄ(app)
-³   ³               ÀÄÄÄManagement
-³   ³                       page.1339665f8305beef.hot-update.js
-³   ³                       page.17f4a6812cea12c3.hot-update.js
-³   ³                       page.30d909ec3c0707b8.hot-update.js
-³   ³                       page.5ff97549cc4574bf.hot-update.js
-³   ³                       page.68e52876e376dc05.hot-update.js
-³   ³                       page.6f50535ac26bf9ef.hot-update.js
-³   ³                       page.929a600a59e40438.hot-update.js
-³   ³                       page.93a6056f73d35a5a.hot-update.js
-³   ³                       page.bd7d4b3acffa2826.hot-update.js
-³   ³                       page.d8fc89ae63d0d222.hot-update.js
-³   ³                       page.fc4e04d41bbca010.hot-update.js
-³   ³                       
+³   ³               layout.dbcf90a77a35b47d.hot-update.js
+³   ³               
 ³   ÀÄÄÄtypes
 ³       ³   cache-life.d.ts
 ³       ³   package.json
@@ -717,60 +257,29 @@ C:.
 ³           ÃÄÄÄ(app)
 ³           ³   ³   layout.ts
 ³           ³   ³   
-³           ³   ÃÄÄÄdashboard
-³           ³   ³       page.ts
-³           ³   ³       
-³           ³   ÃÄÄÄhelp-centre
-³           ³   ³       page.ts
-³           ³   ³       
-³           ³   ÃÄÄÄManagement
-³           ³   ³       page.ts
-³           ³   ³       
-³           ³   ÃÄÄÄpeople
-³           ³   ³       page.ts
-³           ³   ³       
-³           ³   ÃÄÄÄrotas
-³           ³   ³       page.ts
-³           ³   ³       
 ³           ³   ÀÄÄÄtraining
 ³           ³           page.ts
 ³           ³           
-³           ÃÄÄÄapi
-³           ³   ÃÄÄÄadmin
-³           ³   ³   ÃÄÄÄcreate-user
-³           ³   ³   ³       route.ts
-³           ³   ³   ³       
-³           ³   ³   ÀÄÄÄpeople
-³           ³   ³       ÀÄÄÄupdate
-³           ³   ³               route.ts
-³           ³   ³               
-³           ³   ÀÄÄÄself
-³           ³       ÀÄÄÄmembers
-³           ³           ÀÄÄÄlist
-³           ³                   route.ts
-³           ³                   
-³           ÀÄÄÄauth
-³               ÀÄÄÄlogin
-³                       page.ts
-³                       
+³           ÀÄÄÄapi
+³               ÃÄÄÄlicense
+³               ³   ÀÄÄÄstatus
+³               ³           route.ts
+³               ³           
+³               ÀÄÄÄself
+³                   ÀÄÄÄmembers
+³                       ÀÄÄÄlist
+³                               route.ts
+³                               
 ÃÄÄÄapp
 ³   ³   globals.css
 ³   ³   icon.png
+³   ³   layout.bak
 ³   ³   layout.tsx
 ³   ³   page.tsx
 ³   ³   
 ³   ÃÄÄÄ(app)
 ³   ³   ³   layout.tsx
 ³   ³   ³   
-³   ³   ÃÄÄÄadmin
-³   ³   ³   ³   layout.tsx
-³   ³   ³   ³   
-³   ³   ³   ÃÄÄÄmembers
-³   ³   ³   ³       page.tsx
-³   ³   ³   ³       
-³   ³   ³   ÀÄÄÄorg
-³   ³   ³           page.tsx
-³   ³   ³           
 ³   ³   ÃÄÄÄannual-leave
 ³   ³   ³       page.tsx
 ³   ³   ³       
@@ -783,10 +292,6 @@ C:.
 ³   ³   ÃÄÄÄbudgets
 ³   ³   ³       page.tsx
 ³   ³   ³       
-³   ³   ÃÄÄÄcompany
-³   ³   ³   ÀÄÄÄhomes
-³   ³   ³           page.tsx
-³   ³   ³           
 ³   ³   ÃÄÄÄdashboard
 ³   ³   ³       page.tsx
 ³   ³   ³       
@@ -797,9 +302,6 @@ C:.
 ³   ³   ³       page.tsx
 ³   ³   ³       
 ³   ³   ÃÄÄÄpayslips
-³   ³   ³       page.tsx
-³   ³   ³       
-³   ³   ÃÄÄÄpeople
 ³   ³   ³       page.tsx
 ³   ³   ³       
 ³   ³   ÃÄÄÄrotas
@@ -815,6 +317,7 @@ C:.
 ³   ³   ³       page.tsx
 ³   ³   ³       
 ³   ³   ÀÄÄÄ_components
+³   ³           LicenseGate.tsx
 ³   ³           MobileSidebar.tsx
 ³   ³           NotificationBell.tsx
 ³   ³           Sidebar.tsx
@@ -838,6 +341,10 @@ C:.
 ³   ³   ³       ÀÄÄÄupdate
 ³   ³   ³               route.ts
 ³   ³   ³               
+³   ³   ÃÄÄÄbilling
+³   ³   ³   ÀÄÄÄwebhook
+³   ³   ³           route.ts
+³   ³   ³           
 ³   ³   ÃÄÄÄdebug
 ³   ³   ³   ÀÄÄÄwhoami
 ³   ³   ³           route.ts
@@ -845,6 +352,10 @@ C:.
 ³   ³   ÃÄÄÄenums
 ³   ³   ³       route.ts
 ³   ³   ³       
+³   ³   ÃÄÄÄlicense
+³   ³   ³   ÀÄÄÄstatus
+³   ³   ³           route.ts
+³   ³   ³           
 ³   ³   ÃÄÄÄself
 ³   ³   ³   ÃÄÄÄhomes
 ³   ³   ³   ³   ÃÄÄÄcreate
@@ -24481,6 +23992,7 @@ C:.
 ÃÄÄÄpublic
 ³       file.svg
 ³       globe.svg
+³       logo.png
 ³       next.svg
 ³       vercel.svg
 ³       window.svg
