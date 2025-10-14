@@ -6,31 +6,98 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel, type AppLevel } from '@/supabase/roles';
 
-// ===== HomeOrbit dark (subtle) tokens to match Sidebar/MobileSidebar =====
-const ORBIT = {
+/* ===== Tokens (ORBIT + LIGHT) ===== */
+type Theme = {
+    pageBg: string;
+    ring: string;
+    ink: string;
+    sub: string;
+    faint: string;
+    cardBg: string;
+};
+const ORBIT: Theme = {
     pageBg:
         'linear-gradient(180deg, rgba(20,26,48,0.96) 0%, rgba(14,19,36,0.96) 60%, rgba(12,17,30,0.96) 100%)',
-    ring: 'rgba(148,163,184,0.16)', // slate-400 alpha
-    ink: '#E5E7EB', // slate-200
-    sub: '#94A3B8', // slate-400
+    ring: 'rgba(148,163,184,0.16)',
+    ink: '#E5E7EB',
+    sub: '#94A3B8',
     faint: 'rgba(148,163,184,0.10)',
+    cardBg: 'rgba(255,255,255,0.03)',
 };
-const BRAND_GRADIENT = 'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
+const LIGHT: Theme = {
+    pageBg:
+        'linear-gradient(180deg, #F7F8FB 0%, #F4F6FA 60%, #F2F4F8 100%)',
+    ring: 'rgba(15,23,42,0.10)',
+    ink: '#0F172A',
+    sub: '#475569',
+    faint: 'rgba(15,23,42,0.08)',
+    cardBg: '#FFFFFF',
+};
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
 
-// ===== Types =====
+/* ===== Types ===== */
 type View =
     | { status: 'loading' }
     | { status: 'signed_out' }
     | { status: 'ready'; level: AppLevel; bankOnly: boolean };
 
+/* Cookie reader (client) */
+function readOrbitCookie(): boolean {
+    if (typeof document === 'undefined') return false;
+    return document.cookie.split('; ').some((c) => c === 'orbit=1');
+}
+
 export default function DashboardPage() {
     const router = useRouter();
     const [view, setView] = useState<View>({ status: 'loading' });
 
-    // Prevent flash-of-unstyled by fading content in after hydration
+    // 🔧 Instant theme: read cookie in the initial render
+    const [orbit, setOrbit] = useState<boolean>(() => {
+        if (typeof document === 'undefined') return false;
+        return document.cookie.split('; ').some((c) => c === 'orbit=1');
+    });
+    const T = orbit ? ORBIT : LIGHT;
+
+    // Fade-in after hydration (no theme work here)
     const [hydrated, setHydrated] = useState(false);
     useEffect(() => {
         setHydrated(true);
+    }, []);
+
+    // Live listeners (same-tab custom event + cross-tab storage) + safety refreshers
+    useEffect(() => {
+        function onOrbitChanged(e: Event) {
+            const detail = (e as CustomEvent).detail as { orbit?: boolean } | undefined;
+            if (typeof detail?.orbit === 'boolean') setOrbit(detail.orbit);
+            else setOrbit(readOrbitCookie());
+        }
+
+        function onStorage(e: StorageEvent) {
+            if (e.key === 'orbit:lastChange' && e.newValue) {
+                try {
+                    const payload = JSON.parse(e.newValue) as { orbit?: boolean };
+                    if (typeof payload.orbit === 'boolean') setOrbit(payload.orbit);
+                } catch {
+                    /* ignore */
+                }
+            }
+        }
+
+        const onFocus = () => setOrbit(readOrbitCookie());
+        const onVis = () => document.visibilityState === 'visible' && setOrbit(readOrbitCookie());
+
+        window.addEventListener('orbit:changed', onOrbitChanged as EventListener);
+        window.addEventListener('storage', onStorage);
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVis);
+
+        return () => {
+            window.removeEventListener('orbit:changed', onOrbitChanged as EventListener);
+            window.removeEventListener('storage', onStorage);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVis);
+        };
     }, []);
 
     useEffect(() => {
@@ -98,34 +165,35 @@ export default function DashboardPage() {
         if (view.status === 'signed_out') router.replace('/auth/login');
     }, [view.status, router]);
 
+    /* ---------- Loading ---------- */
     if (view.status === 'loading') {
         return (
             <div
-                className={`p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-h-screen transition-opacity duration-150 ${hydrated ? 'opacity-100' : 'opacity-0'
-                    }`}
-                style={{ background: ORBIT.pageBg }}
+                className={`p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-h-screen transition-opacity duration-150 ${hydrated ? 'opacity-100' : 'opacity-0'}`}
+                style={{ background: T.pageBg }}
             >
-                <SkeletonCard />
-                <SkeletonCard />
-                <SkeletonCard />
-                <SkeletonCard />
+                <SkeletonCard T={T} orbit={orbit} />
+                <SkeletonCard T={T} orbit={orbit} />
+                <SkeletonCard T={T} orbit={orbit} />
+                <SkeletonCard T={T} orbit={orbit} />
             </div>
         );
     }
     if (view.status === 'signed_out') return null;
 
+    /* ---------- Ready ---------- */
     return (
         <div
             className={`p-5 space-y-5 min-h-screen transition-opacity duration-150 ${hydrated ? 'opacity-100' : 'opacity-0'}`}
-            style={{ background: ORBIT.pageBg }}
+            style={{ background: T.pageBg }}
         >
             {/* Page header */}
             <header className="flex items-end justify-between">
                 <div>
-                    <h1 className="text-[20px] sm:text-[22px] font-semibold tracking-tight" style={{ color: ORBIT.ink }}>
+                    <h1 className="text-[20px] sm:text-[22px] font-semibold tracking-tight" style={{ color: T.ink }}>
                         Dashboard
                     </h1>
-                    <p className="text-[13px]" style={{ color: ORBIT.sub }}>
+                    <p className="text-[13px]" style={{ color: T.sub }}>
                         Everything you need at a glance.
                     </p>
                 </div>
@@ -133,8 +201,8 @@ export default function DashboardPage() {
 
             {/* At-a-glance */}
             <div className="space-y-5">
-                <WeekStrip />
-                <TasksPanel />
+                <WeekStrip T={T} orbit={orbit} />
+                <TasksPanel T={T} orbit={orbit} />
             </div>
         </div>
     );
@@ -143,93 +211,31 @@ export default function DashboardPage() {
 /* =========
    Sections
    ========= */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, T }: { title: string; children: React.ReactNode; T: Theme }) {
     return (
         <section className="space-y-2">
             <div className="flex items-center gap-3">
-                <h2 className="text-sm font-semibold" style={{ color: ORBIT.ink }}>
+                <h2 className="text-sm font-semibold" style={{ color: T.ink }}>
                     {title}
                 </h2>
-                <div className="h-px flex-1" style={{ background: ORBIT.faint }} />
+                <div className="h-px flex-1" style={{ background: T.faint }} />
             </div>
             {children}
         </section>
     );
 }
 
-function TileGrid({ children }: { children: React.ReactNode }) {
-    return <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">{children}</div>;
-}
-
-/* =========================
-   Tile (kept for future use)
-   ========================= */
-function Tile({
-    href,
-    title,
-    desc,
-    icon,
-    palette,
-}: {
-    href: string;
-    title: string;
-    desc: string;
-    icon: React.ReactNode;
-    palette: 'indigo' | 'violet' | 'fuchsia' | 'emerald' | 'cyan' | 'amber' | 'rose' | 'slate';
-}) {
-    const tone = {
-        indigo: { chipBg: 'bg-indigo-500/10', chipRing: 'ring-indigo-400/20', chipText: 'text-indigo-300' },
-        violet: { chipBg: 'bg-violet-500/10', chipRing: 'ring-violet-400/20', chipText: 'text-violet-300' },
-        fuchsia: { chipBg: 'bg-fuchsia-500/10', chipRing: 'ring-fuchsia-400/20', chipText: 'text-fuchsia-300' },
-        emerald: { chipBg: 'bg-emerald-500/10', chipRing: 'ring-emerald-400/20', chipText: 'text-emerald-300' },
-        cyan: { chipBg: 'bg-cyan-500/10', chipRing: 'ring-cyan-400/20', chipText: 'text-cyan-300' },
-        amber: { chipBg: 'bg-amber-500/10', chipRing: 'ring-amber-400/20', chipText: 'text-amber-300' },
-        rose: { chipBg: 'bg-rose-500/10', chipRing: 'ring-rose-400/20', chipText: 'text-rose-300' },
-        slate: { chipBg: 'bg-slate-500/10', chipRing: 'ring-slate-400/20', chipText: 'text-slate-300' },
-    }[palette];
-
-    return (
-        <Link
-            href={href}
-            className="group relative block rounded-xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-            style={{ outlineColor: 'transparent' }}
-        >
-            <div
-                className={`relative rounded-xl p-3 transition duration-150 group-hover:-translate-y-0.5 group-hover:shadow-xl ring-1`}
-                style={{ background: 'rgba(255,255,255,0.03)', borderColor: ORBIT.ring }}
-            >
-                <div className="flex items-start gap-3">
-                    <span className={`h-9 w-9 rounded-lg grid place-items-center ring-1 ${tone.chipBg} ${tone.chipRing}`}>
-                        <span className={`${tone.chipText}`}>{icon}</span>
-                    </span>
-                    <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold leading-tight" style={{ color: ORBIT.ink }}>
-                            {title}
-                        </h3>
-                        <p className="mt-0.5 text-[13px]/5" style={{ color: ORBIT.sub }}>
-                            {desc}
-                        </p>
-                    </div>
-                    <svg width="16" height="16" viewBox="0 0 24 24" className="ml-1 mt-0.5 shrink-0" style={{ color: ORBIT.sub }}>
-                        <path d="M9 6l6 6-6 6" fill="currentColor" />
-                    </svg>
-                </div>
-            </div>
-        </Link>
-    );
-}
-
 /* =========================
    Skeleton
    ========================= */
-function SkeletonCard() {
+function SkeletonCard({ T, orbit }: { T: Theme; orbit: boolean }) {
     return (
-        <div className="rounded-xl h-[96px] ring-1" style={{ background: 'rgba(255,255,255,0.03)', borderColor: ORBIT.ring }}>
+        <div className="rounded-2xl h-[96px] ring-1" style={{ background: T.cardBg, borderColor: T.ring }}>
             <div className="p-3 flex items-start gap-3 h-full">
-                <div className="h-9 w-9 rounded-lg bg-white/10 animate-pulse" />
+                <div className={`h-9 w-9 rounded-lg ${orbit ? 'bg-white/10' : 'bg-slate-200/60'} animate-pulse`} />
                 <div className="flex-1 space-y-2 self-center">
-                    <div className="h-4 bg-white/10 rounded w-3/5 animate-pulse" />
-                    <div className="h-3 bg-white/10 rounded w-2/5 animate-pulse" />
+                    <div className={`h-4 rounded w-3/5 animate-pulse ${orbit ? 'bg-white/10' : 'bg-slate-200/60'}`} />
+                    <div className={`h-3 rounded w-2/5 animate-pulse ${orbit ? 'bg-white/10' : 'bg-slate-200/60'}`} />
                 </div>
             </div>
         </div>
@@ -237,94 +243,9 @@ function SkeletonCard() {
 }
 
 /* =========================
-   Minimal inline icons
-   ========================= */
-function IconBook() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <path d="M6 17V5a2 2 0 0 1 2-2h10v14" />
-            <path d="M4 19a2 2 0 0 1 2-2h12" />
-            <path d="M8 6h10" />
-        </svg>
-    );
-}
-function IconCalendar() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <path d="M16 2v4M8 2v4M3 10h18" />
-        </svg>
-    );
-}
-function IconRota() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="M7 9h10M7 13h6" />
-        </svg>
-    );
-}
-function IconBudget() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <path d="M3 12h18" />
-            <path d="M5 9h14a2 2 0 0 1 2 2v6H3v-6a2 2 0 0 1 2-2z" />
-            <circle cx="7.5" cy="15" r="1" />
-        </svg>
-    );
-}
-function IconClock() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v5l3 3" />
-        </svg>
-    );
-}
-function IconAppointment() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <path d="M4 7h16M7 3v4M17 3v4" />
-            <rect x="4" y="7" width="16" height="14" rx="2" />
-            <path d="M8 12h4" />
-        </svg>
-    );
-}
-function IconLeave() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <path d="M4 7h16M7 3v4M17 3v4" />
-            <rect x="4" y="7" width="16" height="14" rx="2" />
-            <path d="M8 12h5M14 16h2" />
-            <path d="M6 18l3-3" />
-        </svg>
-    );
-}
-function IconUsers() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <circle cx="9" cy="7" r="3" />
-            <path d="M2 21v-1a6 6 0 0 1 6-6h2" />
-            <circle cx="17" cy="11" r="3" />
-            <path d="M22 21v-1a6 6 0 0 0-6-6h-1" />
-        </svg>
-    );
-}
-function IconOrg() {
-    return (
-        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={1.6}>
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <path d="M7 10v4M17 10v4M10 7h4M7 17h10" />
-        </svg>
-    );
-}
-
-/* =========================
    WEEK STRIP (Mon→Sun)
    ========================= */
-function WeekStrip() {
+function WeekStrip({ T, orbit }: { T: Theme; orbit: boolean }) {
     const [items, setItems] = useState<
         { date: string; label: string; dd: number; isToday: boolean; hasShift: boolean }[]
     >([]);
@@ -423,12 +344,12 @@ function WeekStrip() {
     })();
 
     return (
-        <div className="rounded-2xl p-4 ring-1" style={{ background: 'rgba(255,255,255,0.03)', borderColor: ORBIT.ring }}>
+        <div className="rounded-2xl p-4 ring-1" style={{ background: T.cardBg, borderColor: T.ring }}>
             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold" style={{ color: ORBIT.ink }}>
+                <h3 className="text-sm font-semibold" style={{ color: T.ink }}>
                     My week
                 </h3>
-                <div className="text-xs" style={{ color: ORBIT.sub }}>
+                <div className="text-xs" style={{ color: T.sub }}>
                     {niceRange}
                 </div>
             </div>
@@ -436,16 +357,16 @@ function WeekStrip() {
             <div className="mt-3 grid grid-cols-7 gap-2">
                 {items.map((d) => (
                     <div key={d.date} className="text-center">
-                        <div className="text-xs" style={{ color: ORBIT.sub }}>
+                        <div className="text-xs" style={{ color: T.sub }}>
                             {d.label}
                         </div>
                         <div
-                            className={[
-                                'mt-1 mx-auto h-9 w-9 rounded-full grid place-items-center ring-1 transition',
-                                d.isToday ? 'ring-indigo-400/50' : 'ring-white/10',
-                                d.hasShift ? 'text-white' : ''
-                            ].join(' ')}
-                            style={{ background: d.hasShift ? BRAND_GRADIENT : 'transparent', color: d.hasShift ? '#FFFFFF' : ORBIT.ink }}
+                            className={['mt-1 mx-auto h-9 w-9 rounded-full grid place-items-center ring-1 transition'].join(' ')}
+                            style={{
+                                background: d.hasShift ? BRAND_GRADIENT : 'transparent',
+                                color: d.hasShift ? '#FFFFFF' : T.ink,
+                                borderColor: d.isToday ? 'rgba(99,102,241,0.50)' : T.ring,
+                            }}
                             title={d.hasShift ? 'Scheduled to work' : 'No shift'}
                         >
                             {d.dd}
@@ -454,12 +375,12 @@ function WeekStrip() {
                 ))}
             </div>
 
-            <div className="mt-3 flex items-center gap-4 text-[11px]" style={{ color: ORBIT.sub }}>
+            <div className="mt-3 flex items-center gap-4 text-[11px]" style={{ color: T.sub }}>
                 <span className="inline-flex h-3 w-3 rounded-sm ring-1 ring-indigo-300/30" style={{ background: BRAND_GRADIENT }} />
                 <span>Working day</span>
-                <span className="inline-flex h-3 w-3 rounded-sm ring-1" style={{ background: 'transparent', borderColor: ORBIT.ring }} />
+                <span className="inline-flex h-3 w-3 rounded-sm ring-1" style={{ background: 'transparent', borderColor: T.ring }} />
                 <span>Off</span>
-                <span className="inline-flex h-3 w-3 rounded-full ring-1 ring-indigo-400/50" />
+                <span className="inline-flex h-3 w-3 rounded-full ring-1" style={{ borderColor: 'rgba(99,102,241,0.50)' }} />
                 <span>Today</span>
             </div>
         </div>
@@ -469,7 +390,7 @@ function WeekStrip() {
 /* =========================
    TASKS PANEL (Training)
    ========================= */
-function TasksPanel() {
+function TasksPanel({ T, orbit }: { T: Theme; orbit: boolean }) {
     // ===== State =====
     const [today, setToday] = useState<{ label: string; items: { name: string; due: string }[] }>({ label: '', items: [] });
     const [upcoming, setUpcoming] = useState<{ items: { name: string; due: string }[] }>({ items: [] });
@@ -594,45 +515,46 @@ function TasksPanel() {
         })();
     }, []);
 
-    // ===== UI helpers =====
+    /* Pills that look good in both themes */
+    function pill(txt: string, tone: 'indigo' | 'amber' | 'slate' | 'emerald' | 'rose') {
+        const darkStyles: Record<typeof tone, React.CSSProperties> = {
+            indigo: { background: 'rgba(99,102,241,0.12)', color: '#C7D2FE', borderColor: 'rgba(99,102,241,0.25)' },
+            amber: { background: 'rgba(245,158,11,0.12)', color: '#FDE68A', borderColor: 'rgba(245,158,11,0.25)' },
+            emerald: { background: 'rgba(16,185,129,0.12)', color: '#A7F3D0', borderColor: 'rgba(16,185,129,0.25)' },
+            rose: { background: 'rgba(244,63,94,0.12)', color: '#FCA5A5', borderColor: 'rgba(244,63,94,0.25)' },
+            slate: { background: 'rgba(148,163,184,0.12)', color: '#CBD5E1', borderColor: 'rgba(148,163,184,0.25)' },
+        };
+        const lightStyles: Record<typeof tone, React.CSSProperties> = {
+            indigo: { background: 'rgba(99,102,241,0.10)', color: '#3730A3', borderColor: 'rgba(99,102,241,0.25)' },
+            amber: { background: 'rgba(245,158,11,0.10)', color: '#92400E', borderColor: 'rgba(245,158,11,0.25)' },
+            emerald: { background: 'rgba(16,185,129,0.12)', color: '#065F46', borderColor: 'rgba(16,185,129,0.25)' },
+            rose: { background: 'rgba(244,63,94,0.10)', color: '#991B1B', borderColor: 'rgba(244,63,94,0.25)' },
+            slate: { background: 'rgba(148,163,184,0.12)', color: '#334155', borderColor: 'rgba(148,163,184,0.25)' },
+        };
+        const style = orbit ? darkStyles[tone] : lightStyles[tone];
+        return (
+            <span className="rounded-md px-2 py-0.5 text-[11px] ring-1" style={style}>
+                {txt}
+            </span>
+        );
+    }
+
     const fmtDateShort = (d: string) => new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
 
     const Card = ({ title, children, cta }: { title: string; children: React.ReactNode; cta?: React.ReactNode }) => (
-        <div className="rounded-2xl p-4 ring-1" style={{ background: 'rgba(255,255,255,0.03)', borderColor: ORBIT.ring }}>
+        <div className="rounded-2xl p-4 ring-1" style={{ background: T.cardBg, borderColor: T.ring }}>
             <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold" style={{ color: ORBIT.ink }}>
+                <h4 className="text-sm font-semibold" style={{ color: T.ink }}>
                     {title}
                 </h4>
                 {cta}
             </div>
-            <div className="mt-3" style={{ color: ORBIT.ink }}>
+            <div className="mt-3" style={{ color: T.ink }}>
                 {children}
             </div>
         </div>
     );
 
-    const pill = (txt: string, tone: 'indigo' | 'amber' | 'slate' | 'emerald' | 'rose') => (
-        <span
-            className={
-                'rounded-md px-2 py-0.5 text-[11px] ring-1'
-            }
-            style={{
-                ...(tone === 'indigo'
-                    ? { background: 'rgba(99,102,241,0.12)', color: '#C7D2FE', borderColor: 'rgba(99,102,241,0.25)' }
-                    : tone === 'amber'
-                        ? { background: 'rgba(245,158,11,0.12)', color: '#FDE68A', borderColor: 'rgba(245,158,11,0.25)' }
-                        : tone === 'emerald'
-                            ? { background: 'rgba(16,185,129,0.12)', color: '#A7F3D0', borderColor: 'rgba(16,185,129,0.25)' }
-                            : tone === 'rose'
-                                ? { background: 'rgba(244,63,94,0.12)', color: '#FCA5A5', borderColor: 'rgba(244,63,94,0.25)' }
-                                : { background: 'rgba(148,163,184,0.12)', color: '#CBD5E1', borderColor: 'rgba(148,163,184,0.25)' }),
-            }}
-        >
-            {txt}
-        </span>
-    );
-
-    // ===== Render =====
     return (
         <div className="space-y-5">
             {/* Row 1: Training today + Timesheet */}
@@ -640,20 +562,20 @@ function TasksPanel() {
                 {/* Training due today */}
                 <Card title="Today">
                     {today.items.length === 0 ? (
-                        <div className="text-[13px]" style={{ color: ORBIT.sub }}>
+                        <div className="text-[13px]" style={{ color: T.sub }}>
                             Nothing due today 🎉
                         </div>
                     ) : (
                         <ul className="space-y-2">
                             {today.items.map((t, i) => (
-                                <li key={i} className="text-[13px] flex items-center justify-between" style={{ color: ORBIT.ink }}>
+                                <li key={i} className="text-[13px] flex items-center justify-between" style={{ color: T.ink }}>
                                     <span className="truncate">{t.name}</span>
                                     {pill('Training', 'amber')}
                                 </li>
                             ))}
                         </ul>
                     )}
-                    <div className="mt-2 text-[12px]" style={{ color: ORBIT.sub }}>
+                    <div className="mt-2 text-[12px]" style={{ color: T.sub }}>
                         {today.label}
                     </div>
                 </Card>
@@ -662,22 +584,20 @@ function TasksPanel() {
                 <Card
                     title="Timesheet (this month)"
                     cta={
-                        <Link href="/timesheets" className="text-[12px] underline-offset-4 hover:underline" style={{ color: '#C7D2FE' }}>
+                        <Link href="/timesheets" className="text-[12px] underline-offset-4 hover:underline" style={{ color: orbit ? '#C7D2FE' : '#4F46E5' }}>
                             Open →
                         </Link>
                     }
                 >
                     {timesheet ? (
-                        <div className="flex items-center justify-between text-[13px]" style={{ color: ORBIT.ink }}>
-                            <span>
-                                {new Date(timesheet.month_date).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                            </span>
+                        <div className="flex items-center justify-between text-[13px]" style={{ color: T.ink }}>
+                            <span>{new Date(timesheet.month_date).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
                             {pill(timesheet.status.replace('_', ' '), 'slate')}
                         </div>
                     ) : (
-                        <div className="flex items-center justify-between text-[13px]" style={{ color: ORBIT.ink }}>
+                        <div className="flex items-center justify-between text-[13px]" style={{ color: T.ink }}>
                             <span>No timesheet created</span>
-                            <Link href="/timesheets" className="text-[12px] underline-offset-4 hover:underline" style={{ color: '#C7D2FE' }}>
+                            <Link href="/timesheets" className="text-[12px] underline-offset-4 hover:underline" style={{ color: orbit ? '#C7D2FE' : '#4F46E5' }}>
                                 Create
                             </Link>
                         </div>
@@ -688,19 +608,19 @@ function TasksPanel() {
                 <Card
                     title="Leave (next 30 days)"
                     cta={
-                        <Link href="/annual-leave" className="text-[12px] underline-offset-4 hover:underline" style={{ color: '#C7D2FE' }}>
+                        <Link href="/annual-leave" className="text-[12px] underline-offset-4 hover:underline" style={{ color: orbit ? '#C7D2FE' : '#4F46E5' }}>
                             Manage →
                         </Link>
                     }
                 >
                     {leaveSoon.length === 0 ? (
-                        <div className="text-[13px]" style={{ color: ORBIT.sub }}>
+                        <div className="text-[13px]" style={{ color: T.sub }}>
                             No upcoming leave
                         </div>
                     ) : (
                         <ul className="space-y-2">
                             {leaveSoon.map((l) => (
-                                <li key={l.id} className="text-[13px] flex items-center justify-between" style={{ color: ORBIT.ink }}>
+                                <li key={l.id} className="text-[13px] flex items-center justify-between" style={{ color: T.ink }}>
                                     <span className="truncate">
                                         {fmtDateShort(l.starts_on)} – {fmtDateShort(l.ends_on)}
                                     </span>
@@ -718,21 +638,21 @@ function TasksPanel() {
                 <Card
                     title="Upcoming training (next 14 days)"
                     cta={
-                        <Link href="/training" className="text-[12px] underline-offset-4 hover:underline" style={{ color: '#C7D2FE' }}>
+                        <Link href="/training" className="text-[12px] underline-offset-4 hover:underline" style={{ color: orbit ? '#C7D2FE' : '#4F46E5' }}>
                             View all →
                         </Link>
                     }
                 >
                     {upcoming.items.length === 0 ? (
-                        <div className="text-[13px]" style={{ color: ORBIT.sub }}>
+                        <div className="text-[13px]" style={{ color: T.sub }}>
                             No upcoming training
                         </div>
                     ) : (
                         <ul className="space-y-2">
                             {upcoming.items.map((t, i) => (
-                                <li key={i} className="text-[13px] flex items-center justify-between" style={{ color: ORBIT.ink }}>
+                                <li key={i} className="text-[13px] flex items-center justify-between" style={{ color: T.ink }}>
                                     <span className="truncate">{t.name}</span>
-                                    <span className="ml-3 text-[12px]" style={{ color: ORBIT.sub }}>
+                                    <span className="ml-3 text-[12px]" style={{ color: T.sub }}>
                                         due {fmtDateShort(t.due)}
                                     </span>
                                 </li>
@@ -745,23 +665,28 @@ function TasksPanel() {
                 <Card
                     title="My booked sessions (next 14 days)"
                     cta={
-                        <Link href="/bookings" className="text-[12px] underline-offset-4 hover:underline" style={{ color: '#C7D2FE' }}>
+                        <Link href="/bookings" className="text-[12px] underline-offset-4 hover:underline" style={{ color: orbit ? '#C7D2FE' : '#4F46E5' }}>
                             Manage →
                         </Link>
                     }
                 >
                     {sessions.length === 0 ? (
-                        <div className="text-[13px]" style={{ color: ORBIT.sub }}>
+                        <div className="text-[13px]" style={{ color: T.sub }}>
                             No upcoming booked sessions
                         </div>
                     ) : (
                         <ul className="space-y-2">
                             {sessions.map((s) => (
-                                <li key={s.id} className="text-[13px] flex items-center justify-between" style={{ color: ORBIT.ink }}>
+                                <li key={s.id} className="text-[13px] flex items-center justify-between" style={{ color: T.ink }}>
                                     <span className="truncate">
-                                        {s.title || 'Training session'} •
-                                        {' '}
-                                        {new Date(s.starts_at).toLocaleString(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                        {s.title || 'Training session'} •{' '}
+                                        {new Date(s.starts_at).toLocaleString(undefined, {
+                                            weekday: 'short',
+                                            day: '2-digit',
+                                            month: 'short',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                        })}
                                         {s.location ? ` @ ${s.location}` : ''}
                                     </span>
                                     {pill(s.status, 'indigo')}

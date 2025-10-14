@@ -9,6 +9,10 @@ import { getEffectiveLevel } from '@/supabase/roles';
    ========================= */
 type Level = '1_ADMIN' | '2_COMPANY' | '3_MANAGER' | '4_STAFF';
 
+// Brand gradient (same as Payslips)
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
+
 type LeaveRule = {
     id: string; company_id: string; name: string;
     unit: 'HOURS' | 'DAYS';
@@ -21,15 +25,11 @@ type ShiftType = { id: string; code: string; label: string; default_hours: numbe
 
 type LeaveSettings = {
     company_id: string;
-    tax_year_start_month: number;       // fixed April in UI
-    carryover_limit: number | null;     // hours; optional
+    tax_year_start_month: number;
+    carryover_limit: number | null;
     require_manager_approval: boolean;
-    // Optional in UI; kept for compatibility with RPCs using settings?.unit
     unit?: 'HOURS' | 'DAYS';
-
-    // NEW for rota link:
     rota_shift_type_id?: string | null;
-    // optional helper coming from the getter:
     rota_shift?: { id: string; code: string; label: string; default_hours: number; kind?: string | null } | null;
 };
 
@@ -43,15 +43,14 @@ type EntitlementSummary = {
 
 type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'CANCEL_REQUESTED';
 
-
 type LeaveRequest = {
     id: string;
     user_id: string;
     company_id: string;
     home_id: string | null;
-    starts_on: string;                  // 'YYYY-MM-DD'
-    ends_on: string;                    // 'YYYY-MM-DD'
-    amount: number;                     // in the requested unit
+    starts_on: string;
+    ends_on: string;
+    amount: number;
     unit: 'HOURS' | 'DAYS';
     status: LeaveStatus;
     reason: string | null;
@@ -62,18 +61,43 @@ type LeaveRequest = {
 };
 
 /* =========================
-   Small UI helpers
+   Small UI helpers (Payslips look)
    ========================= */
+
+// Section wrapper
 function Section({ title, children }: { title: string; children: ReactNode }) {
     return (
-        <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-3">
-            <h2 className="text-base font-semibold">{title}</h2>
+        <section
+            className="rounded-xl shadow-sm ring-1 p-4 space-y-3"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+        >
+            <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>{title}</h2>
             {children}
         </section>
     );
 }
 
-// Helper: show ISO dates as dd/mm/yyyy consistently
+// Payslips-style tab button
+function TabBtn(
+    { active, children, ...props }:
+        React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
+) {
+    return (
+        <button
+            className="px-3 py-1.5 rounded-md ring-1 transition"
+            style={
+                active
+                    ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                    : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+            }
+            {...props}
+        >
+            {children}
+        </button>
+    );
+}
+
+// Format ISO date as dd/mm/yyyy
 function formatDMY(iso: string) {
     if (!iso) return '';
     const d = new Date(`${iso}T00:00:00`);
@@ -114,10 +138,6 @@ function Stat({
     );
 }
 
-function TabBtn({ active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
-    return <button className={`px-4 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`} {...props}>{children}</button>;
-}
-
 /* =========================
    Root page
    ========================= */
@@ -139,10 +159,11 @@ export default function AnnualLeavePage() {
     }, [showManage, showSettings, tab]);
 
     return (
-        <div className="p-6 space-y-6">
-            <h1 className="text-2xl font-semibold">Annual leave</h1>
+        <div className="p-6 space-y-6" style={{ color: 'var(--ink)' }}>
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Annual leave</h1>
 
-            <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
+            {/* Payslips-style tabs */}
+            <div className="flex gap-2">
                 <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>My leave</TabBtn>
                 {showManage && <TabBtn active={tab === 'MANAGE'} onClick={() => setTab('MANAGE')}>Manage</TabBtn>}
                 {showSettings && <TabBtn active={tab === 'SETTINGS'} onClick={() => setTab('SETTINGS')}>Settings</TabBtn>}
@@ -151,6 +172,28 @@ export default function AnnualLeavePage() {
             {tab === 'MY' && <MyLeave isManager={isManager} />}
             {tab === 'MANAGE' && showManage && <ManageLeave />}
             {tab === 'SETTINGS' && showSettings && <LeaveSettingsTab isAdmin={isAdmin} />}
+
+            {/* Orbit-only select fixes (same block as Payslips) */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="number"],
+        [data-orbit="1"] input[type="date"] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) { opacity: 1; }
+      `}</style>
         </div>
     );
 }
@@ -221,7 +264,7 @@ function MyLeave({ isManager }: { isManager: boolean }) {
             p_starts: starts,
             p_ends: ends,
             p_amount: Number(amount),
-            p_unit: requestUnit,                  // HOURS for staff; DAYS for managers
+            p_unit: requestUnit,
             p_reason: reason?.trim() || null
         });
         setBusy(false);
@@ -239,7 +282,7 @@ function MyLeave({ isManager }: { isManager: boolean }) {
 
     // NEW: owner actions
     async function cancelMyPending(r: LeaveRequest) {
-        const { data, error } = await supabase.rpc('leave_request_cancel_self', { p_request: r.id });
+        const { error } = await supabase.rpc('leave_request_cancel_self', { p_request: r.id });
         if (error) { alert(error.message); return; }
         setMyRequests(prev => prev.filter(x => x.id !== r.id));
         const sum = await supabase.rpc('leave_my_summary');
@@ -250,7 +293,7 @@ function MyLeave({ isManager }: { isManager: boolean }) {
     }
 
     async function requestCancellation(r: LeaveRequest, cancelReason?: string) {
-        const { data, error } = await supabase.rpc('leave_request_request_cancellation', {
+        const { error } = await supabase.rpc('leave_request_request_cancellation', {
             p_request: r.id,
             p_reason: cancelReason || null
         });
@@ -269,7 +312,7 @@ function MyLeave({ isManager }: { isManager: boolean }) {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {(() => {
                             const unit = (summary?.unit || 'HOURS').toLowerCase();
-                            const total = Number(summary?.total ?? 0); // from DB rule/override
+                            const total = Number(summary?.total ?? 0);
                             const used = Number(summary?.used ?? 0);
                             const pending = Number(summary?.pending ?? 0);
                             const remainingDisplay = Number(summary?.remaining ?? Math.max(0, total - used - pending));
@@ -291,11 +334,23 @@ function MyLeave({ isManager }: { isManager: boolean }) {
                 <div className="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
                     <div>
                         <label className="block text-xs text-gray-600 mb-1">Starts</label>
-                        <input type="date" className="w-full border rounded-lg px-3 py-2" value={starts} onChange={e => setStarts(e.target.value)} />
+                        <input
+                            type="date"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={starts}
+                            onChange={e => setStarts(e.target.value)}
+                        />
                     </div>
                     <div>
                         <label className="block text-xs text-gray-600 mb-1">Ends</label>
-                        <input type="date" className="w-full border rounded-lg px-3 py-2" value={ends} onChange={e => setEnds(e.target.value)} />
+                        <input
+                            type="date"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={ends}
+                            onChange={e => setEnds(e.target.value)}
+                        />
                     </div>
                     <div>
                         <label className="block text-xs text-gray-600 mb-1">
@@ -305,7 +360,8 @@ function MyLeave({ isManager }: { isManager: boolean }) {
                             type="number"
                             min={0}
                             step={requestUnit === 'DAYS' ? 0.5 : 0.25}
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={amount}
                             onChange={e => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
                         />
@@ -315,14 +371,21 @@ function MyLeave({ isManager }: { isManager: boolean }) {
                     </div>
                     <div className="sm:col-span-2">
                         <label className="block text-xs text-gray-600 mb-1">Reason (optional)</label>
-                        <input className="w-full border rounded-lg px-3 py-2" value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Annual holiday" />
+                        <input
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={reason}
+                            onChange={e => setReason(e.target.value)}
+                            placeholder="e.g. Annual holiday"
+                        />
                     </div>
 
                     <div className="sm:col-span-6">
                         <button
                             disabled={busy || !canSubmit}
                             onClick={submitRequest}
-                            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                            className="rounded-md px-3 py-2 text-sm text-white disabled:opacity-60"
+                            style={{ background: BRAND_GRADIENT, borderColor: 'var(--ring-strong)' }}
                         >
                             {busy ? 'Sending…' : 'Submit request'}
                         </button>
@@ -348,8 +411,6 @@ function MyLeave({ isManager }: { isManager: boolean }) {
         </div>
     );
 }
-
-
 /* =========================
    Manage (approvals + manager overrides)
    ========================= */
@@ -454,11 +515,6 @@ function ManageLeave() {
         });
         if (res.error) { setBusy(false); alert(res.error.message); return; }
 
-        // DB now handles:
-        // - PENDING -> APPROVED: trigger applies leave to rota
-        // - CANCEL_REQUESTED + APPROVED: removes AL rota entries; sets CANCELLED
-        // - CANCEL_REQUESTED + REJECTED: reverts to APPROVED
-
         try { await loadCalendar(); } catch { /* noop */ }
 
         setBusy(false);
@@ -533,7 +589,12 @@ function ManageLeave() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label className="block text-xs text-gray-600 mb-1">Home</label>
-                        <select className="w-full border rounded-lg px-3 py-2" value={homeId} onChange={(e) => setHomeId(e.target.value)}>
+                        <select
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={homeId}
+                            onChange={(e) => setHomeId(e.target.value)}
+                        >
                             <option value="">{canSeeAllHomes ? 'All homes' : 'Select home'}</option>
                             {homes.map((h) => (
                                 <option key={h.id} value={h.id}>{h.name}</option>
@@ -543,7 +604,8 @@ function ManageLeave() {
                     <div className="sm:col-span-2 flex items-end justify-end">
                         <button
                             onClick={() => setCalOpen(true)}
-                            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                            className="rounded-md px-3 py-2 text-sm ring-1 disabled:opacity-60"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             disabled={!homeId}
                         >
                             View calendar
@@ -573,7 +635,11 @@ function ManageLeave() {
                 <Section title="Entitlement overrides (current tax year)">
                     <div className="flex items-center justify-between">
                         <p className="text-sm text-gray-600">Set a person’s opening balance for the current tax year. Approvals will deduct from this balance.</p>
-                        <button className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50" onClick={() => setShowOverrides((v) => !v)}>
+                        <button
+                            className="rounded-md px-3 py-1.5 text-sm ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            onClick={() => setShowOverrides((v) => !v)}
+                        >
                             {showOverrides ? 'Hide' : 'Manage overrides'}
                         </button>
                     </div>
@@ -587,7 +653,10 @@ function ManageLeave() {
                             ) : (
                                 <div className="max-h-[28rem] overflow-auto mt-3">
                                     <table className="min-w-full text-sm">
-                                        <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                                        <thead
+                                            className="sticky top-0 text-gray-600"
+                                            style={{ background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                                        >
                                             <tr>
                                                 <th className="text-left p-2">Person</th>
                                                 <th className="text-left p-2">Unit</th>
@@ -605,7 +674,8 @@ function ManageLeave() {
                                                         <td className="p-2">{p.full_name?.trim() || p.user_id.slice(0, 8)}</td>
                                                         <td className="p-2">
                                                             <select
-                                                                className="w-full border rounded px-2 py-1 text-sm"
+                                                                className="rounded px-2 py-1 text-sm ring-1"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                                 value={draft.unit}
                                                                 onChange={(e) => {
                                                                     const next = new Map(ovDraft);
@@ -619,7 +689,8 @@ function ManageLeave() {
                                                         </td>
                                                         <td className="p-2">
                                                             <input
-                                                                className="w-full border rounded px-2 py-1 text-sm"
+                                                                className="w-full rounded px-2 py-1 text-sm ring-1"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                                 type="number"
                                                                 min={0}
                                                                 step={draft.unit === 'DAYS' ? 0.5 : 0.25}
@@ -635,7 +706,8 @@ function ManageLeave() {
                                                         <td className="p-2">
                                                             <div className="flex gap-2">
                                                                 <button
-                                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                                    className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                                     disabled={ovBusy === p.user_id || draft.remaining === ''}
                                                                     onClick={() => saveOverride(p.user_id)}
                                                                 >
@@ -643,7 +715,8 @@ function ManageLeave() {
                                                                 </button>
                                                                 {cur && (
                                                                     <button
-                                                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                                        className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                                         disabled={ovBusy === p.user_id}
                                                                         onClick={() => clearOverride(p.user_id)}
                                                                     >
@@ -677,7 +750,6 @@ function ManageLeave() {
         </div>
     );
 }
-
 
 /* =========================
    Requests table (shared)
@@ -728,7 +800,10 @@ function RequestsTable({
     return (
         <div className="max-h-[28rem] overflow-auto">
             <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                <thead
+                    className="sticky top-0 text-gray-600"
+                    style={{ background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                >
                     <tr>
                         {showUser && <th className="text-left p-2">Person</th>}
                         <th className="text-left p-2">Dates</th>
@@ -743,7 +818,6 @@ function RequestsTable({
                         const note = notesById[r.id] ?? '';
                         const setNote = (v: string) => setNotesById((s) => ({ ...s, [r.id]: v }));
 
-                        // status pill classes (treat CANCEL_REQUESTED like pending)
                         const pill =
                             r.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' :
                                 (r.status === 'PENDING' || r.status === 'CANCEL_REQUESTED') ? 'bg-amber-50 text-amber-700 ring-amber-100' :
@@ -780,11 +854,12 @@ function RequestsTable({
 
                                 {hasActions && (
                                     <td className="p-2">
-                                        {/* Manager notes box OR staff cancel-reason box */}
+                                        {/* Manager notes OR staff cancel-reason */}
                                         {((showDecisionNotes && (onApprove || onReject)) || (onRequestCancel && r.status === 'APPROVED')) && (
                                             <div className="mb-2">
                                                 <input
-                                                    className="w-full border rounded px-2 py-1 text-xs"
+                                                    className="w-full rounded px-2 py-1 text-xs ring-1"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                     placeholder={(onApprove || onReject) ? "Decision note (optional)" : "Reason (optional)"}
                                                     value={note}
                                                     onChange={(e) => setNote(e.target.value)}
@@ -793,12 +868,12 @@ function RequestsTable({
                                         )}
 
                                         <div className="flex flex-wrap gap-2">
-                                            {/* Manager actions */}
                                             {onApprove && (
                                                 <button
                                                     disabled={busy}
                                                     onClick={() => onApprove(r, note)}
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                    className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 >
                                                     Approve
                                                 </button>
@@ -807,17 +882,18 @@ function RequestsTable({
                                                 <button
                                                     disabled={busy}
                                                     onClick={() => onReject(r, note)}
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                    className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 >
                                                     Reject
                                                 </button>
                                             )}
 
-                                            {/* Owner actions */}
                                             {onCancelPending && r.status === 'PENDING' && (
                                                 <button
                                                     onClick={() => onCancelPending(r)}
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                    className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 >
                                                     Cancel
                                                 </button>
@@ -825,7 +901,8 @@ function RequestsTable({
                                             {onRequestCancel && r.status === 'APPROVED' && (
                                                 <button
                                                     onClick={() => onRequestCancel(r, note)}
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                    className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 >
                                                     Request cancellation
                                                 </button>
@@ -857,7 +934,6 @@ function RequestsTable({
     );
 }
 
-
 /* =========================
    Calendar modal (per home/month)
    ========================= */
@@ -881,14 +957,12 @@ function LeaveCalendarModal({
         setMonthISO(iso);
     }
 
-    // build per-day map for the month
     const base = new Date(`${monthISO}T00:00:00`);
     const year = base.getFullYear(), month = base.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const byDay: Record<number, { name: string; status: LeaveStatus }[]> = {};
     for (let d = 1; d <= daysInMonth; d++) byDay[d] = [];
 
-    // Exclude rejected/cancelled; keep cancel_requested as pending-style
     const shown = events.filter(ev => ev.status !== 'REJECTED' && ev.status !== 'CANCELLED');
 
     shown.forEach(ev => {
@@ -906,24 +980,39 @@ function LeaveCalendarModal({
 
     return (
         <div className="fixed inset-0 bg-black/40 z-50 grid place-items-center" onClick={onClose}>
-            <div className="w-full max-w-5xl max-h-[90vh] overflow-auto rounded-2xl border bg-white p-4 shadow-xl" onClick={e => e.stopPropagation()}>
-                <div className="mb-3 flex items-center justify-between border-b pb-2">
-                    <h3 className="text-base font-semibold">Annual leave</h3>
+            <div
+                className="w-full max-w-5xl max-h-[90vh] overflow-auto rounded-2xl border p-4 shadow-xl"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="mb-3 flex items-center justify-between border-b pb-2" style={{ borderColor: 'var(--ring)' }}>
+                    <h3 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>Annual leave</h3>
                     <div className="flex items-center gap-2 h-10">
-                        <button className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50" onClick={() => nextMonth(-1)} aria-label="Previous month">
+                        <button
+                            className="rounded-md px-2 py-1 text-sm ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            onClick={() => nextMonth(-1)}
+                            aria-label="Previous month"
+                        >
                             &larr;
                         </button>
 
                         <div className="w-[12rem]">
                             <input
                                 type="month"
-                                className="w-full border rounded px-2 py-1 text-sm tabular-nums"
+                                className="rounded px-2 py-1 text-sm ring-1 tabular-nums w-full"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={`${year}-${String(month + 1).padStart(2, '0')}`}
                                 onChange={e => setMonthISO(`${e.target.value}-01`)}
                             />
                         </div>
 
-                        <button className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50" onClick={() => nextMonth(1)} aria-label="Next month">
+                        <button
+                            className="rounded-md px-2 py-1 text-sm ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            onClick={() => nextMonth(1)}
+                            aria-label="Next month"
+                        >
                             &rarr;
                         </button>
 
@@ -936,12 +1025,24 @@ function LeaveCalendarModal({
                             </span>
                         </div>
 
-                        <button className="ml-2 rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50" onClick={onReload}>Reload</button>
-                        <button className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50" onClick={onClose}>Close</button>
+                        <button
+                            className="ml-2 rounded-md px-3 py-1.5 text-sm ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            onClick={onReload}
+                        >
+                            Reload
+                        </button>
+                        <button
+                            className="rounded-md px-3 py-1.5 text-sm ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            onClick={onClose}
+                        >
+                            Close
+                        </button>
                     </div>
                 </div>
 
-                <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-3">
+                <div className="rounded-xl shadow-sm ring-1 p-3" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
                     <div className="grid grid-cols-7 gap-2">
                         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(h =>
                             <div key={h} className="text-xs font-medium text-gray-600">{h}</div>
@@ -956,7 +1057,8 @@ function LeaveCalendarModal({
                             if (cells.length > 42) cells = cells.slice(0, 42);
 
                             return cells.map((d, i) => (
-                                <div key={i} className="h-28 rounded-lg border bg-white p-2 flex flex-col">
+                                <div key={i} className="h-28 rounded-lg border p-2 flex flex-col"
+                                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}>
                                     <div className="text-[11px] text-gray-500 font-medium">{d ?? ''}</div>
                                     <div className="mt-1 space-y-1 flex-1 overflow-auto">
                                         {d && byDay[d].length === 0 && <div className="text-xs text-gray-300">—</div>}
@@ -981,7 +1083,6 @@ function LeaveCalendarModal({
         </div>
     );
 }
-
 
 /* =========================
    Settings (admin-only company picker; show company name for others)
@@ -1008,13 +1109,13 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
     const [assignments, setAssignments] = useState<Map<string, string | null>>(new Map());
     const [assignBusy, setAssignBusy] = useState<string | null>(null);
 
-    // === Overrides state ===
+    // Overrides state
     type OverrideRow = { user_id: string; unit: 'HOURS' | 'DAYS'; opening_remaining: number };
     const [overrides, setOverrides] = useState<Map<string, OverrideRow>>(new Map());
     const [ovDraft, setOvDraft] = useState<Map<string, { unit: 'HOURS' | 'DAYS'; remaining: string }>>(new Map());
     const [ovBusy, setOvBusy] = useState<string | null>(null);
 
-    // NEW: shift types (for rota link)
+    // Shift types (rota link)
     const [shiftTypes, setShiftTypes] = useState<ShiftType[]>([]);
 
     function currentTaxYearStartISO(): string {
@@ -1072,7 +1173,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
             setHomes(((rpcHomes.data || []) as { id: string; name: string; company_id: string }[]));
             if (!assignHomeId && rpcHomes.data && rpcHomes.data[0]) setAssignHomeId(rpcHomes.data[0].id);
 
-            // shift types (for rota link) — RPC first, fallback to table select
+            // shift types (for rota link)
             const st = await supabase.rpc('shift_types_for_ui', { p_company_id: companyId, p_include_inactive: false });
             if (!st.error) {
                 setShiftTypes((st.data || []) as ShiftType[]);
@@ -1087,7 +1188,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
         })();
     }, [companyId, isAdmin]);
 
-    // Load people for selected home (include bank) + their explicit assignments + overrides
+    // Load people for selected home + assignments + overrides
     useEffect(() => {
         (async () => {
             setPeople([]); setAssignments(new Map()); setOverrides(new Map()); setOvDraft(new Map());
@@ -1128,7 +1229,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
         })();
     }, [assignHomeId, companyId, settings?.tax_year_start_month]);
 
-    // Save settings (month fixed to April)
+    // Save settings (April fixed)
     async function saveSettings(patch: Partial<LeaveSettings>) {
         if (!companyId) return;
         setBusy(true);
@@ -1202,7 +1303,7 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
         }
     }
 
-    // Save override for current tax year (company-level)
+    // Save override (company-level)
     async function saveOverride(userId: string) {
         if (!companyId) return;
         const draft = ovDraft.get(userId);
@@ -1261,12 +1362,22 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                     <div>
                         <label className="block text-sm mb-1">Company</label>
                         {isAdmin ? (
-                            <select className="w-full border rounded-lg px-3 py-2" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                            <select
+                                className="w-full rounded-md px-2 py-2 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={companyId}
+                                onChange={(e) => setCompanyId(e.target.value)}
+                            >
                                 <option value="">Select company…</option>
                                 {companies.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
                             </select>
                         ) : (
-                            <input className="w-full border rounded-lg px-3 py-2 bg-gray-50" value={companyName || '—'} disabled />
+                            <input
+                                className="w-full rounded-md px-2 py-2 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={companyName || '—'}
+                                disabled
+                            />
                         )}
                     </div>
                 </div>
@@ -1276,7 +1387,12 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
                     <div>
                         <label className="block text-xs text-gray-600 mb-1">Tax year start</label>
-                        <input className="w-full border rounded-lg px-3 py-2 bg-gray-50" value="April (fixed)" disabled />
+                        <input
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value="April (fixed)"
+                            disabled
+                        />
                     </div>
 
                     <div>
@@ -1285,7 +1401,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                             type="number"
                             min={0}
                             step={0.5}
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={settings?.carryover_limit ?? ''}
                             placeholder="none"
                             onChange={(e) =>
@@ -1306,11 +1423,12 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                         </label>
                     </div>
 
-                    {/* NEW: Link to rota shift type */}
+                    {/* Link to rota shift type */}
                     <div>
                         <label className="block text-xs text-gray-600 mb-1">Link to rota shift type</label>
                         <select
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={settings?.rota_shift_type_id ?? ''}
                             onChange={async (e) => {
                                 const v: string | null = e.target.value ? e.target.value : null;
@@ -1344,7 +1462,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                     <div className="sm:col-span-2">
                         <label className="block text-sm mb-1">Rule name</label>
                         <input
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             placeholder='e.g. "Standard" or "Manager"'
                             value={newRuleName}
                             onChange={(e) => setNewRuleName(e.target.value)}
@@ -1354,7 +1473,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                     <div>
                         <label className="block text-sm mb-1">Unit</label>
                         <select
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={newRuleUnit}
                             onChange={(e) => setNewRuleUnit(e.target.value as 'HOURS' | 'DAYS')}
                         >
@@ -1366,7 +1486,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                     <div>
                         <label className="block text-sm mb-1">Applies to</label>
                         <select
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={newRuleApplies}
                             onChange={(e) => setNewRuleApplies(e.target.value as 'ALL' | 'STAFF' | 'BANK' | 'MANAGER')}
                         >
@@ -1383,7 +1504,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                             type="number"
                             min={0}
                             step={0.5}
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             placeholder="e.g. 112 or 28"
                             value={newRuleAmount}
                             onChange={(e) => setNewRuleAmount(e.target.value === '' ? '' : Number(e.target.value))}
@@ -1393,7 +1515,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                     <div className="sm:col-span-1">
                         <button
                             disabled={busy || !companyId}
-                            className="w-full rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                            className="w-full rounded-md px-3 py-2 text-sm text-white disabled:opacity-60"
+                            style={{ background: BRAND_GRADIENT }}
                             type="submit"
                         >
                             {busy ? 'Adding…' : 'Add rule'}
@@ -1403,7 +1526,10 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
 
                 <div className="max-h-[28rem] overflow-auto mt-3">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                        <thead
+                            className="sticky top-0 text-gray-600"
+                            style={{ background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">Name</th>
                                 <th className="text-left p-2">Applies to</th>
@@ -1427,7 +1553,11 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                                         </label>
                                     </td>
                                     <td className="p-2">
-                                        <button className="rounded border px-2 py-1 text-xs hover:bg-gray-50" onClick={() => alert('Edit coming soon')}>
+                                        <button
+                                            className="rounded px-2 py-1 text-xs ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                            onClick={() => alert('Edit coming soon')}
+                                        >
                                             Edit
                                         </button>
                                     </td>
@@ -1448,7 +1578,12 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                     <div>
                         <label className="block text-xs text-gray-600 mb-1">Home</label>
-                        <select className="w-full border rounded-lg px-3 py-2" value={assignHomeId} onChange={(e) => setAssignHomeId(e.target.value)}>
+                        <select
+                            className="w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={assignHomeId}
+                            onChange={(e) => setAssignHomeId(e.target.value)}
+                        >
                             <option value="">{homes.length ? 'Select home…' : 'No homes'}</option>
                             {homes.map((h) => (<option key={h.id} value={h.id}>{h.name}</option>))}
                         </select>
@@ -1457,7 +1592,10 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
 
                 <div className="mt-3 max-h-[28rem] overflow-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                        <thead
+                            className="sticky top-0 text-gray-600"
+                            style={{ background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">Person</th>
                                 <th className="text-left p-2 w-[280px]">Rule</th>
@@ -1476,7 +1614,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
 
                                         <td className="p-2">
                                             <select
-                                                className="w-full border rounded-lg px-2 py-1 text-sm"
+                                                className="w-full rounded px-2 py-1 text-sm ring-1"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 value={currentRule || ''}
                                                 onChange={(e) => setPersonRule(p.user_id, e.target.value)}
                                                 disabled={assignBusy === p.user_id}
@@ -1498,7 +1637,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                                                 <div>
                                                     <label className="block text-[11px] text-gray-600 mb-1">Unit</label>
                                                     <select
-                                                        className="w-full border rounded px-2 py-1 text-sm"
+                                                        className="rounded px-2 py-1 text-sm ring-1"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         value={draft.unit}
                                                         onChange={(e) => {
                                                             const next = new Map(ovDraft);
@@ -1513,7 +1653,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                                                 <div className="col-span-2">
                                                     <label className="block text-[11px] text-gray-600 mb-1">Remaining now</label>
                                                     <input
-                                                        className="w-full border rounded px-2 py-1 text-sm"
+                                                        className="w-full rounded px-2 py-1 text-sm ring-1"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         type="number"
                                                         min={0}
                                                         step={draft.unit === 'DAYS' ? 0.5 : 0.25}
@@ -1530,7 +1671,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
 
                                             <div className="mt-2 flex gap-2">
                                                 <button
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                    className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                     disabled={ovBusy === p.user_id || draft.remaining === ''}
                                                     onClick={() => saveOverride(p.user_id)}
                                                 >
@@ -1538,7 +1680,8 @@ function LeaveSettingsTab({ isAdmin }: { isAdmin: boolean }) {
                                                 </button>
                                                 {ov && (
                                                     <button
-                                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                        className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         disabled={ovBusy === p.user_id}
                                                         onClick={() => clearOverride(p.user_id)}
                                                     >
