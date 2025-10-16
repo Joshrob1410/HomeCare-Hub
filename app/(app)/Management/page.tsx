@@ -1,30 +1,43 @@
-"use client";
+'use client';
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/supabase/client";
-import { getEffectiveLevel, type AppLevel } from "@/supabase/roles";
+import type React from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/supabase/client';
+import { getEffectiveLevel, type AppLevel } from '@/supabase/roles';
 
+/* Brand accent (same as payslips) */
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
 
+/** =========================
+ * Cosmos types
+ * ========================= */
+type Company = { id: string; name: string };
+type Home = { id: string; name: string; company_id: string };
+type PersonLite = {
+    user_id: string;
+    full_name: string;
+    home_id: string | null;
+    is_bank: boolean;
+};
 
-/**
- * Management hub
- * Tabs: People, Homes, Companies
- *
- * Access
- * - Admin (1_ADMIN): all tabs; can choose any company/home; can set any role (incl Admin)
- * - Company (2_COMPANY): People + Homes only; company is fixed to their own; can set roles up to their level
- * - Manager (3_MANAGER): People only; scope limited to their managed home(s); can set roles up to their level
- * - Staff (4_STAFF): no access (redirect)
- */
+type SimplePreset = {
+    tab?: 'PEOPLE' | 'HOMES' | 'COMPANIES';
+    companyId?: string;
+    homeId?: string;
+    search?: string;
+};
 
-// Helper to include the Supabase access token on API calls
+type CosmosLevel = 'GALAXIES' | 'HOMES' | 'STAFF';
+
+/** Helper to include the Supabase access token on API calls */
 async function authFetch(input: RequestInfo | URL, init?: RequestInit) {
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token;
     const headers = new Headers(init?.headers);
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    headers.set("Content-Type", "application/json");
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    headers.set('Content-Type', 'application/json');
     return fetch(input, { ...init, headers });
 }
 
@@ -32,6 +45,12 @@ export default function ManagementPage() {
     const router = useRouter();
     const [level, setLevel] = useState<AppLevel | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const [simplePreset, setSimplePreset] = useState<SimplePreset | null>(null);
+
+
+    // NEW: view mode
+    const [viewMode, setViewMode] = useState<'SIMPLE' | 'COSMOS'>('SIMPLE');
 
     useEffect(() => {
         (async () => {
@@ -42,79 +61,1336 @@ export default function ManagementPage() {
     }, []);
 
     useEffect(() => {
-        if (!loading && level === "4_STAFF") router.replace("/dashboard");
+        if (!loading && level === '4_STAFF') router.replace('/dashboard');
     }, [level, loading, router]);
 
-    if (loading || level === "4_STAFF") {
+    if (loading || level === '4_STAFF') {
         return (
-            <div className="p-5 min-h-screen bg-gray-50">
-                <div className="animate-pulse text-sm text-gray-600">Loading…</div>
+            <div
+                className="p-5 min-h-screen"
+                style={{ background: 'var(--page-bg)' }}
+            >
+                <div className="animate-pulse text-sm" style={{ color: 'var(--sub)' }}>
+                    Loading…
+                </div>
             </div>
         );
     }
 
-    const isAdmin = level === "1_ADMIN";
-    const isCompany = level === "2_COMPANY";
-    const isManager = level === "3_MANAGER";
+    const isAdmin = level === '1_ADMIN';
+    const isCompany = level === '2_COMPANY';
+    const isManager = level === '3_MANAGER';
 
     return (
-        <div className="p-5 space-y-5 bg-gray-50 min-h-screen">
+        <div
+            className="p-5 space-y-5 min-h-screen"
+            style={{ color: 'var(--ink)', background: 'var(--page-bg)' }}
+        >
+            {/* Header w/ mode toggle */}
             <header className="flex items-end justify-between">
                 <div>
-                    <h1 className="text-[20px] sm:text-[22px] font-semibold tracking-tight text-gray-900">
+                    <h1
+                        className="text-[20px] sm:text-[22px] font-semibold tracking-tight"
+                        style={{ color: 'var(--ink)' }}
+                    >
                         Management
                     </h1>
-                    <p className="text-[13px] text-gray-600">People, Homes and Companies</p>
+                    <p className="text-[13px]" style={{ color: 'var(--sub)' }}>
+                        People, Homes and Companies
+                    </p>
+                </div>
+
+                {/* Mode switch: Simple ↔ Cosmos */}
+                <div
+                    className="inline-flex rounded-lg overflow-hidden ring-1"
+                    style={{ borderColor: 'var(--ring)', background: 'var(--nav-item-bg)' }}
+                    role="tablist"
+                    aria-label="View mode"
+                >
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={viewMode === 'SIMPLE'}
+                        onClick={() => setViewMode('SIMPLE')}
+                        className="px-3 py-1.5 text-sm transition border-r last:border-r-0"
+                        style={{
+                            color: viewMode === 'SIMPLE' ? '#fff' : 'var(--ink)',
+                            background:
+                                viewMode === 'SIMPLE' ? BRAND_GRADIENT : 'var(--nav-item-bg)',
+                            borderRightColor: 'var(--ring)',
+                        }}
+                    >
+                        Simple
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={viewMode === 'COSMOS'}
+                        onClick={() => setViewMode('COSMOS')}
+                        className="px-3 py-1.5 text-sm transition"
+                        style={{
+                            color: viewMode === 'COSMOS' ? '#fff' : 'var(--ink)',
+                            background:
+                                viewMode === 'COSMOS' ? BRAND_GRADIENT : 'var(--nav-item-bg)',
+                        }}
+                    >
+                        Cosmos
+                    </button>
                 </div>
             </header>
 
-            <Tabbed isAdmin={isAdmin} isCompany={isCompany} isManager={isManager} />
+            {viewMode === 'SIMPLE' ? (
+                <Tabbed
+                    isAdmin={isAdmin}
+                    isCompany={isCompany}
+                    isManager={isManager}
+                    preset={simplePreset}                     // NEW
+                    onConsumePreset={() => setSimplePreset(null)} // NEW
+                />
+            ) : (
+                <CosmosMode
+                    isAdmin={isAdmin}
+                    isCompany={isCompany}
+                    isManager={isManager}
+                    onHandoffToSimple={(p) => {               // NEW
+                        setSimplePreset(p);
+                        setViewMode('SIMPLE');
+                    }}
+                />
+            )}
+
+            {/* --- Orbit-only select fixes (scoped to this page) --- */}
+            <style jsx global>{`
+        /* Make native select popovers dark in Orbit; also fix number/date controls */
+        [data-orbit='1'] select,
+        [data-orbit='1'] input[type='number'],
+        [data-orbit='1'] input[type='date'] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit='1'] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit='1'] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit='1'] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
+
+function CosmosMode({
+    isAdmin,
+    isCompany,
+    isManager,
+    onHandoffToSimple,
+}: {
+    isAdmin: boolean;
+    isCompany: boolean;
+    isManager: boolean;
+    onHandoffToSimple?: (p: SimplePreset) => void; // NEW
+}) {
+    type Company = { id: string; name: string };
+    type Home = { id: string; name: string; company_id: string };
+    type PersonLite = {
+        user_id: string;
+        full_name: string;
+        home_id: string | null;
+        is_bank: boolean;
+    };
+    type CosmosLevel = 'GALAXIES' | 'HOMES' | 'STAFF';
+
+    const [level, setLevel] = useState<CosmosLevel>('GALAXIES');
+    const [companies, setCompanies] = useState<Company[]>([]);
+    const [homes, setHomes] = useState<Home[]>([]);
+    const [people, setPeople] = useState<PersonLite[]>([]);
+    const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+    const [selectedHome, setSelectedHome] = useState<Home | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [focusPerson, setFocusPerson] = useState<PersonLite | null>(null);
+
+    // Manager scope: homes they manage (used to filter)
+    const [managedHomeIds, setManagedHomeIds] = useState<string[]>([]);
+
+    // Quick actions state
+    const [creatingHome, setCreatingHome] = useState(false);
+    const [newHomeName, setNewHomeName] = useState('');
+    const [renamingCompany, setRenamingCompany] = useState(false);
+    const [renamingHome, setRenamingHome] = useState(false);
+
+    // Colors from CSS variables
+    const ink = 'var(--ink)';
+    const sub = 'var(--sub)';
+    const ring = 'var(--ring)';
+    const brand = 'var(--brand-link)';
+    const spaceBg = 'var(--panel-bg-dark)';
+
+    // --- Zoom + reveal state ---
+    const VIEW_W = 1000;
+    const VIEW_H = 600;
+    const [zooming, setZooming] = useState(false);
+    const [zoomOrigin, setZoomOrigin] = useState<{ x: number; y: number } | null>(null);
+    const [revealKey, setRevealKey] = useState(0);
+
+    // Kick off a short zoom centered at (x,y); then run `then()`, stop zoom, and trigger reveal
+    const startZoomAt = useCallback((x: number, y: number, then: () => void) => {
+        setZoomOrigin({ x, y });
+        setZooming(true);
+        window.setTimeout(() => {
+            then();
+            setRevealKey((k) => k + 1);  // remounts reveal layer for the fade-in stagger
+            setZooming(false);
+        }, 220); // duration (ms)
+    }, []);
+
+
+    // Initial scope load
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            try {
+                if (isManager) {
+                    const { data: u } = await supabase.auth.getUser();
+                    const me = u.user?.id;
+                    if (me) {
+                        const r = await supabase.rpc('home_ids_managed_by', { p_user: me });
+                        if (!cancelled) setManagedHomeIds(((r.data || []) as string[]) ?? []);
+                    }
+                }
+
+                if (isAdmin) {
+                    const { data: co, error } = await supabase
+                        .from('companies')
+                        .select('id,name')
+                        .order('name');
+                    if (error) throw error;
+                    if (!cancelled) {
+                        setCompanies((co || []) as Company[]);
+                        setLevel('GALAXIES');
+                    }
+                } else if (isCompany) {
+                    const { data: u } = await supabase.auth.getUser();
+                    const me = u.user?.id;
+                    if (!me) return;
+                    const cm = await supabase
+                        .from('company_memberships')
+                        .select('company_id')
+                        .eq('user_id', me)
+                        .maybeSingle();
+                    const cid = cm.data?.company_id;
+                    if (!cid) {
+                        if (!cancelled) setCompanies([]);
+                    } else {
+                        const co = await supabase
+                            .from('companies')
+                            .select('id,name')
+                            .eq('id', cid)
+                            .maybeSingle();
+                        if (!cancelled && co.data) setCompanies([co.data as Company]);
+                    }
+                    if (!cancelled) setLevel('GALAXIES');
+                } else if (isManager) {
+                    // Managers: galaxies that contain homes they manage
+                    if (managedHomeIds.length) {
+                        const hs = await supabase
+                            .from('homes')
+                            .select('id,name,company_id')
+                            .in('id', managedHomeIds);
+                        const list = (hs.data || []) as Home[];
+                        const companyIds = Array.from(new Set(list.map((h) => h.company_id)));
+                        const co = await supabase
+                            .from('companies')
+                            .select('id,name')
+                            .in('id', companyIds)
+                            .order('name');
+                        if (!cancelled) setCompanies((co.data || []) as Company[]);
+                    } else if (!cancelled) {
+                        setCompanies([]);
+                    }
+                    if (!cancelled) setLevel('GALAXIES');
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAdmin, isCompany, isManager]);
+
+    // Helpers
+    const polar = (n: number, i: number, radius: number, cx: number, cy: number) => {
+        const angle = (i / Math.max(n, 1)) * Math.PI * 2 - Math.PI / 2;
+        return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+    };
+
+    // Load homes for a company, filtered for managers
+    const loadHomesForCompany = useCallback(
+        async (company: Company) => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('homes')
+                    .select('id,name,company_id')
+                    .eq('company_id', company.id)
+                    .order('name');
+                if (error) throw error;
+                let list = (data || []) as Home[];
+                if (isManager && managedHomeIds.length) {
+                    const allowed = new Set(managedHomeIds);
+                    list = list.filter((h) => allowed.has(h.id));
+                }
+                setHomes(list);
+                setLevel('HOMES');
+            } finally {
+                setLoading(false);
+            }
+        },
+        [isManager, managedHomeIds],
+    );
+
+    // Load people for home (company-scoped RPC, then filter)
+    const loadPeopleForHome = useCallback(
+        async (company: Company, home: Home) => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase.rpc('list_company_people', {
+                    p_company_id: company.id,
+                });
+                if (error) throw error;
+                const base = (data || []) as PersonLite[];
+                const filtered = base.filter((p) => p.home_id === home.id || p.is_bank);
+                setPeople(filtered);
+                setLevel('STAFF');
+            } finally {
+                setLoading(false);
+            }
+        },
+        [],
+    );
+
+    // Breadcrumb actions
+    const toGalaxies = () => {
+        setSelectedCompany(null);
+        setSelectedHome(null);
+        setPeople([]);
+        setHomes([]);
+        setLevel('GALAXIES');
+    };
+    const toHomes = () => {
+        setSelectedHome(null);
+        setPeople([]);
+        setLevel('HOMES');
+    };
+
+    // Quick actions
+    async function createHome() {
+        if (!selectedCompany || !newHomeName.trim()) return;
+        setCreatingHome(true);
+        try {
+            const res = await authFetch('/api/admin/homes', {
+                method: 'POST',
+                body: JSON.stringify({ company_id: selectedCompany.id, name: newHomeName.trim() }),
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error((j as { error?: string })?.error || 'Failed to create home');
+            }
+            setNewHomeName('');
+            await loadHomesForCompany(selectedCompany);
+        } catch (e) {
+            // eslint-disable-next-line no-alert
+            alert(e instanceof Error ? e.message : 'Failed to create home');
+        } finally {
+            setCreatingHome(false);
+        }
+    }
+
+    async function renameCompany(newName: string) {
+        if (!selectedCompany) return;
+        const res = await authFetch('/api/admin/companies', {
+            method: 'PATCH',
+            body: JSON.stringify({ company_id: selectedCompany.id, name: newName.trim() }),
+        });
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            // eslint-disable-next-line no-alert
+            alert((j as { error?: string })?.error || 'Failed to rename company');
+            return false;
+        }
+        // Refresh companies list + local selection
+        const { data: co } = await supabase.from('companies').select('id,name').order('name');
+        const list = (co || []) as Company[];
+        setCompanies(list);
+        const updated = list.find((c) => c.id === selectedCompany.id) || null;
+        setSelectedCompany(updated);
+        return true;
+    }
+
+    async function renameHome(newName: string) {
+        if (!selectedHome) return;
+        const res = await authFetch('/api/admin/homes', {
+            method: 'PATCH',
+            body: JSON.stringify({ home_id: selectedHome.id, name: newName.trim() }),
+        });
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            // eslint-disable-next-line no-alert
+            alert((j as { error?: string })?.error || 'Failed to rename home');
+            return false;
+        }
+        if (selectedCompany) await loadHomesForCompany(selectedCompany);
+        // keep selection with updated object
+        const updated = homes.find((h) => h.id === selectedHome.id) || null;
+        setSelectedHome(updated);
+        return true;
+    }
+
+    return (
+        <section
+            className="relative rounded-xl overflow-hidden ring-1"
+            style={{ borderColor: ring, background: 'var(--panel-bg)' }}
+        >
+            {/* Top bar: breadcrumb + hint + quick actions */}
+            <div
+                className="flex items-center justify-between px-3 py-2 border-b"
+                style={{ borderColor: ring, background: 'var(--header-tint)' }}
+            >
+                {/* Breadcrumb */}
+                <div className="flex items-center gap-2 text-sm" style={{ color: sub }}>
+                    {level !== 'GALAXIES' ? (
+                        <>
+                            <button
+                                type="button"
+                                onClick={toGalaxies}
+                                className="underline decoration-dotted"
+                                style={{ color: brand }}
+                            >
+                                Galaxies
+                            </button>
+                            {selectedCompany && (
+                                <>
+                                    <span aria-hidden>›</span>
+                                    {level === 'HOMES' ? (
+                                        <span style={{ color: ink }}>{selectedCompany.name}</span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={toHomes}
+                                            className="underline decoration-dotted"
+                                            style={{ color: brand }}
+                                        >
+                                            {selectedCompany.name}
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                            {selectedHome && (
+                                <>
+                                    <span aria-hidden>›</span>
+                                    <span style={{ color: ink }}>{selectedHome.name}</span>
+                                </>
+                            )}
+                        </>
+                    ) : (
+                        <span>Galaxies</span>
+                    )}
+                </div>
+
+                {/* Quick actions */}
+                <div className="flex items-center gap-2">
+                    {/* Contextual hint */}
+                    <span className="text-[12px] mr-2" style={{ color: sub }}>
+                        {level === 'GALAXIES' && 'Select a company galaxy'}
+                        {level === 'HOMES' && 'Select a home in this orbit'}
+                        {level === 'STAFF' && 'Select a person or edit on the right'}
+                    </span>
+
+                    {/* Company-level actions (Admin/Company only) */}
+                    {selectedCompany && level === 'HOMES' && (isAdmin || isCompany) && (
+                        <>
+                            <button
+                                type="button"
+                                className="px-2 py-1 text-xs rounded-md ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: ring, color: ink }}
+                                onClick={() => setRenamingCompany((v) => !v)}
+                            >
+                                {renamingCompany ? 'Cancel' : 'Rename Company'}
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                                <input
+                                    aria-label="New home name"
+                                    className="px-2 py-1 text-xs rounded-md ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', borderColor: ring, color: ink }}
+                                    placeholder="New home…"
+                                    value={newHomeName}
+                                    onChange={(e) => setNewHomeName(e.target.value)}
+                                />
+                                <button
+                                    type="button"
+                                    className="px-2 py-1 text-xs rounded-md ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', borderColor: ring, color: ink }}
+                                    onClick={createHome}
+                                    disabled={creatingHome || !newHomeName.trim()}
+                                >
+                                    {creatingHome ? 'Creating…' : 'Create Home'}
+                                </button>
+                            </div>
+                        </>
+                    )}
+
+                    {/* Home-level actions (Admin/Company only) */}
+                    {selectedHome && level === 'STAFF' && (isAdmin || isCompany) && (
+                        <>
+                            <button
+                                type="button"
+                                className="px-2 py-1 text-xs rounded-md ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: ring, color: ink }}
+                                onClick={() => setRenamingHome((v) => !v)}
+                            >
+                                {renamingHome ? 'Cancel' : 'Rename Home'}
+                            </button>
+
+                            {/* NEW: open this view in Simple mode with filters pre-populated */}
+                            <button
+                                type="button"
+                                className="px-2 py-1 text-xs rounded-md ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: ring, color: ink }}
+                                onClick={() =>
+                                    onHandoffToSimple?.({
+                                        tab: 'PEOPLE',
+                                        companyId: selectedCompany?.id,
+                                        homeId: selectedHome?.id,
+                                        search: focusPerson?.full_name ?? '',
+                                    })
+                                }
+                            >
+                                Open in Simple
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Inline rename bars */}
+            {renamingCompany && selectedCompany && level === 'HOMES' && (
+                <InlineRename
+                    kind="company"
+                    initial={selectedCompany.name}
+                    onCancel={() => setRenamingCompany(false)}
+                    onSave={async (val) => {
+                        const ok = await renameCompany(val);
+                        if (ok) setRenamingCompany(false);
+                    }}
+                />
+            )}
+            {renamingHome && selectedHome && level === 'STAFF' && (
+                <InlineRename
+                    kind="home"
+                    initial={selectedHome.name}
+                    onCancel={() => setRenamingHome(false)}
+                    onSave={async (val) => {
+                        const ok = await renameHome(val);
+                        if (ok) setRenamingHome(false);
+                    }}
+                />
+            )}
+
+            {/* Space canvas */}
+            <div className="relative" style={{ background: spaceBg, minHeight: 460 }}>
+                <svg viewBox="0 0 1000 600" role="img" aria-label="Cosmos mode" className="w-full h-full block">
+                    {/* faint stars */}
+                    <defs>
+                        <radialGradient id="glow" r="1">
+                            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
+                            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+                        </radialGradient>
+                    </defs>
+                    {Array.from({ length: 90 }).map((_, i) => {
+                        const x = (i * 97) % 1000;
+                        const y = (i * 131) % 600;
+                        const r = ((i * 13) % 6) / 10 + 0.2;
+                        return <circle key={i} cx={x} cy={y} r={r} fill="url(#glow)" opacity={0.6} />;
+                    })}
+
+                    {/* GALAXIES */}
+                    {level === 'GALAXIES' &&
+                        companies.map((c, i) => {
+                            const { x, y } = polar(companies.length || 1, i, 180, 500, 300);
+                            return (
+                                <g key={c.id} transform={`translate(${x},${y})`} style={{ cursor: 'pointer' }}>
+                                    <circle r={38} fill="url(#glow)" opacity={0.25} />
+                                    <circle r={26} fill="url(#glow)" opacity={0.4} />
+                                    <circle
+                                        r={14}
+                                        fill="currentColor"
+                                        style={{ color: 'var(--brand-link)' }}
+                                        onClick={() => {
+                                            setSelectedCompany(c);
+                                            void loadHomesForCompany(c);
+                                        }}
+                                    />
+                                    <text x={0} y={46} textAnchor="middle" fontSize="12" style={{ fill: ink }}>
+                                        {c.name}
+                                    </text>
+                                </g>
+                            );
+                        })}
+
+                    {/* HOMES ring */}
+                    {level !== 'GALAXIES' && selectedCompany && (
+                        <>
+                            <text x={500} y={60} textAnchor="middle" fontSize="14" style={{ fill: sub }}>
+                                {selectedCompany.name}
+                            </text>
+                            <circle cx={500} cy={300} r={190} fill="none" stroke={ring} strokeDasharray="4 6" opacity={0.3} />
+                        </>
+                    )}
+                    {level === 'HOMES' &&
+                        homes.map((h, i) => {
+                            const { x, y } = polar(homes.length || 1, i, 190, 500, 300);
+                            return (
+                                <g key={h.id} transform={`translate(${x},${y})`} style={{ cursor: 'pointer' }}>
+                                    <circle r={10} fill="currentColor" style={{ color: brand }} />
+                                    <text x={0} y={24} textAnchor="middle" fontSize="11" style={{ fill: ink }}>
+                                        {h.name}
+                                    </text>
+                                    <rect
+                                        x={-12}
+                                        y={-12}
+                                        width={24}
+                                        height={24}
+                                        fill="transparent"
+                                        onClick={() => {
+                                            setSelectedHome(h);
+                                            if (selectedCompany) void loadPeopleForHome(selectedCompany, h);
+                                        }}
+                                    />
+                                </g>
+                            );
+                        })}
+
+                    {/* STAFF ring */}
+                    {level === 'STAFF' && selectedCompany && selectedHome && (
+                        <>
+                            <g transform="translate(500,300)">
+                                <circle r={12} fill="currentColor" style={{ color: brand }} />
+                                <text x={0} y={-18} textAnchor="middle" fontSize="12" style={{ fill: sub }}>
+                                    {selectedHome.name}
+                                </text>
+                            </g>
+                            <circle
+                                cx={500}
+                                cy={300}
+                                r={140}
+                                fill="none"
+                                stroke={ring}
+                                strokeDasharray="2 6"
+                                opacity={0.35}
+                            />
+                            {people.map((p, i) => {
+                                const { x, y } = polar(people.length || 1, i, 140, 500, 300);
+                                const bank = p.is_bank;
+                                return (
+                                    <g
+                                        key={`${p.user_id}:${p.home_id ?? 'company'}:${bank ? 'bank' : 'h'}`}
+                                        transform={`translate(${x},${y})`}
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => setFocusPerson(p)}
+                                    >
+                                        <circle
+                                            r={bank ? 8 : 10}
+                                            fill={bank ? 'transparent' : 'currentColor'}
+                                            stroke="currentColor"
+                                            style={{ color: bank ? 'var(--ring-strong)' : brand }}
+                                            strokeWidth={bank ? 2 : 0}
+                                        />
+                                        <text x={0} y={bank ? 22 : 24} textAnchor="middle" fontSize="10" style={{ fill: ink }}>
+                                            {p.full_name}
+                                        </text>
+                                    </g>
+                                );
+                            })}
+                        </>
+                    )}
+                </svg>
+
+                {/* Person editor drawer */}
+                {focusPerson && selectedCompany && (
+                    <PersonEditorDrawer
+                        key={`${focusPerson.user_id}:${focusPerson.home_id ?? 'company'}`}
+                        person={focusPerson}
+                        homes={homes}
+                        companies={companies}
+                        isAdmin={isAdmin}
+                        isCompany={isCompany}
+                        isManager={isManager}
+                        companyIdContext={selectedCompany.id}
+                        onClose={() => setFocusPerson(null)}
+                        onSaved={async () => {
+                            // refresh current ring to reflect changes (e.g., name/role)
+                            if (selectedCompany && selectedHome) {
+                                await loadPeopleForHome(selectedCompany, selectedHome);
+                            }
+                        }}
+                    />
+                )}
+            </div>
+        </section>
+    );
+}
+
+function PersonEditorDrawer({
+    person,
+    homes,
+    companies,
+    isAdmin,
+    isCompany,
+    isManager,
+    companyIdContext,
+    onClose,
+    onSaved,
+}: {
+    person: { user_id: string; full_name: string; home_id: string | null; is_bank: boolean };
+    homes: Array<{ id: string; name: string; company_id: string }>;
+    companies: Array<{ id: string; name: string }>;
+    isAdmin: boolean;
+    isCompany: boolean;
+    isManager: boolean;
+    companyIdContext: string;
+    onClose: () => void;
+    onSaved: () => Promise<void> | void;
+}) {
+    type AppLevel = '1_ADMIN' | '2_COMPANY' | '3_MANAGER' | '4_STAFF';
+    type PositionValue = '' | 'BANK' | 'RESIDENTIAL' | 'TEAM_LEADER' | 'MANAGER' | 'DEPUTY_MANAGER';
+
+    const [name, setName] = useState(person.full_name || '');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [companyId, setCompanyId] = useState<string>('');
+    const [homeId, setHomeId] = useState<string>(person.home_id || '');
+    const [positionEdit, setPositionEdit] = useState<PositionValue>('');
+    const [managerHomeIdsEdit, setManagerHomeIdsEdit] = useState<string[]>([]);
+    const [currentlyManager, setCurrentlyManager] = useState(false);
+    const [companyPositionsEdit, setCompanyPositionsEdit] = useState<string[]>([]);
+    const [appRole, setAppRole] = useState<AppLevel | ''>('');
+    const [saving, setSaving] = useState(false);
+    const [viewerId, setViewerId] = useState<string | null>(null);
+
+    const bankMode =
+        (appRole === '4_STAFF' && positionEdit === 'BANK') || (!positionEdit && person.is_bank);
+
+    const LEVEL_RANK: Record<AppLevel, number> = {
+        '1_ADMIN': 1,
+        '2_COMPANY': 2,
+        '3_MANAGER': 3,
+        '4_STAFF': 4,
+    };
+    const LEVEL_LABELS: Record<AppLevel, string> = {
+        '1_ADMIN': 'Admin',
+        '2_COMPANY': 'Company',
+        '3_MANAGER': 'Manager',
+        '4_STAFF': 'Staff',
+    };
+    const viewerCap: AppLevel = isAdmin ? '1_ADMIN' : isCompany ? '2_COMPANY' : '3_MANAGER';
+    const canChangeAppRole = (isAdmin || isCompany || isManager) && viewerId !== person.user_id;
+    const allowedAppLevels: AppLevel[] = (['1_ADMIN', '2_COMPANY', '3_MANAGER', '4_STAFF'] as AppLevel[]).filter(
+        (l) => LEVEL_RANK[l] >= LEVEL_RANK[viewerCap],
+    );
+
+    const canEditName = isAdmin || isCompany || isManager;
+    const canEditEmail = canEditName;
+    const canEditPassword = canEditName;
+    const canChangeCompany = isAdmin;
+    const canChangeHome = isAdmin || isCompany || isManager;
+
+    useEffect(() => {
+        setName(person.full_name || '');
+    }, [person.user_id, person.full_name]);
+
+    useEffect(() => {
+        setHomeId(person.home_id || '');
+    }, [person.user_id, person.home_id]);
+
+    useEffect(() => {
+        (async () => {
+            const { data } = await supabase.auth.getUser();
+            setViewerId(data.user?.id ?? null);
+        })();
+    }, []);
+
+    // Prefill membership info similar to your PersonRow
+    useEffect(() => {
+        (async () => {
+            try {
+                const cm = await supabase
+                    .from('company_memberships')
+                    .select('company_id, positions')
+                    .eq('user_id', person.user_id)
+                    .maybeSingle();
+                if (cm.data?.company_id) setCompanyId(cm.data.company_id);
+                setCompanyPositionsEdit(Array.isArray(cm.data?.positions) ? (cm.data!.positions as string[]) : []);
+            } catch {
+                /* noop */
+            }
+
+            try {
+                const rpc = await supabase.rpc('home_ids_managed_by', { p_user: person.user_id });
+                const managerIds: string[] = (rpc.data || []) as string[];
+                if (managerIds.length > 0) {
+                    setManagerHomeIdsEdit(managerIds);
+                    setCurrentlyManager(true);
+                    setAppRole('3_MANAGER');
+                    setPositionEdit('MANAGER');
+                    return;
+                }
+            } catch {
+                /* noop */
+            }
+
+            type HM = {
+                home_id: string;
+                role: 'MANAGER' | 'STAFF' | null;
+                manager_subrole: 'MANAGER' | 'DEPUTY_MANAGER' | null;
+                staff_subrole: 'RESIDENTIAL' | 'TEAM_LEADER' | null;
+            };
+
+            let hmsRaw: HM[] | null = null;
+            try {
+                const { data } = await supabase
+                    .from('home_memberships')
+                    .select('home_id, role, manager_subrole, staff_subrole')
+                    .eq('user_id', person.user_id);
+                hmsRaw = (data || []) as HM[];
+            } catch {
+                /* noop */
+            }
+
+            const U = (s?: string | null) => (s ?? '').trim().toUpperCase();
+            const hms = (hmsRaw ?? []).map((r) => ({
+                home_id: r.home_id,
+                role: (U(r.role) as 'MANAGER' | 'STAFF' | null) || null,
+                manager_subrole: (U(r.manager_subrole) as 'MANAGER' | 'DEPUTY_MANAGER' | null) || null,
+                staff_subrole: (U(r.staff_subrole) as 'RESIDENTIAL' | 'TEAM_LEADER' | null) || null,
+            }));
+
+            const deputy = hms.find((r) => r.role === 'MANAGER' && r.manager_subrole === 'DEPUTY_MANAGER');
+            if (deputy) {
+                setAppRole('3_MANAGER');
+                setPositionEdit('DEPUTY_MANAGER');
+                setHomeId(deputy.home_id);
+                return;
+            }
+            const teamLead = hms.find((r) => r.role === 'STAFF' && r.staff_subrole === 'TEAM_LEADER');
+            if (teamLead) {
+                setAppRole('4_STAFF');
+                setPositionEdit('TEAM_LEADER');
+                setHomeId(teamLead.home_id);
+                return;
+            }
+            const staffAny = hms.find((r) => r.role === 'STAFF');
+            if (staffAny) {
+                setAppRole('4_STAFF');
+                setPositionEdit('RESIDENTIAL');
+                setHomeId(staffAny.home_id);
+                return;
+            }
+            if (person.is_bank) {
+                setAppRole('4_STAFF');
+                setPositionEdit('BANK');
+                setHomeId('');
+                return;
+            }
+            if (person.home_id) {
+                setAppRole('4_STAFF');
+                setPositionEdit('RESIDENTIAL');
+                setHomeId(person.home_id);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [person.user_id]);
+
+    useEffect(() => {
+        if (bankMode && homeId) setHomeId('');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [bankMode]);
+
+    async function save() {
+        setSaving(true);
+        try {
+            type UpdatePersonBody = {
+                user_id: string;
+                full_name?: string;
+                email?: string;
+                password?: string;
+                set_company?: { company_id: string };
+                set_bank?: { company_id: string; home_id?: string };
+                clear_home?: { home_id: string };
+                set_home?: { home_id: string; clear_bank_for_company?: string };
+                set_home_role?: { home_id: string; role: string };
+                set_manager_homes?: { home_ids: string[] };
+                set_level?: { level: AppLevel; company_id: string | null };
+                ensure_role_manager?: boolean;
+            };
+
+            const body: UpdatePersonBody = { user_id: person.user_id };
+
+            const trimmedName = (name || '').trim();
+            if (canEditName && trimmedName && trimmedName !== (person.full_name || '')) {
+                body.full_name = trimmedName;
+            }
+            if (canEditEmail && email.trim()) {
+                body.email = email.trim();
+            }
+            if (canEditPassword && password) {
+                body.password = password;
+            }
+
+            if (canChangeCompany && companyId) {
+                body.set_company = { company_id: companyId };
+            }
+
+            if (canChangeHome) {
+                const isManagerManager = appRole === '3_MANAGER' && positionEdit === 'MANAGER';
+                if (isManagerManager) {
+                    body.set_manager_homes = { home_ids: managerHomeIdsEdit };
+                } else if (bankMode) {
+                    const bankCompanyId = (isAdmin && companyId ? companyId : companyIdContext) as string;
+                    body.set_bank = {
+                        company_id: bankCompanyId,
+                        ...(person.home_id ? { home_id: person.home_id } : {}),
+                    };
+                } else if (!homeId) {
+                    if (person.home_id) {
+                        body.clear_home = { home_id: person.home_id };
+                    }
+                } else if (person.home_id !== homeId) {
+                    const ensuredHomeId = homeId as string;
+                    body.set_home = {
+                        home_id: ensuredHomeId,
+                        ...(person.is_bank && (companyId || companyIdContext)
+                            ? { clear_bank_for_company: (companyId || companyIdContext) as string }
+                            : {}),
+                    };
+                }
+            }
+
+            if (positionEdit) {
+                if (positionEdit === 'BANK') {
+                    // no-op (bank status is handled above)
+                } else if (positionEdit === 'MANAGER') {
+                    body.ensure_role_manager = true;
+                } else {
+                    const targetHome = homeId || person.home_id;
+                    if (!targetHome) throw new Error('Select a home before assigning this position.');
+                    let apiRole: 'STAFF' | 'TEAM_LEADER' | 'MANAGER' | 'DEPUTY_MANAGER';
+                    switch (positionEdit) {
+                        case 'RESIDENTIAL':
+                            apiRole = 'STAFF';
+                            break;
+                        case 'TEAM_LEADER':
+                            apiRole = 'TEAM_LEADER';
+                            break;
+                        case 'DEPUTY_MANAGER':
+                            apiRole = 'DEPUTY_MANAGER';
+                            break;
+                        default:
+                            apiRole = 'STAFF';
+                    }
+                    body.set_home_role = { home_id: targetHome, role: apiRole };
+                }
+            }
+
+            if (canChangeAppRole && appRole) {
+                if (!allowedAppLevels.includes(appRole)) {
+                    throw new Error('You are not allowed to assign that role.');
+                }
+                body.set_level = {
+                    level: appRole,
+                    company_id: appRole === '2_COMPANY' ? (companyId || companyIdContext || null) : null,
+                };
+            }
+
+            const res = await authFetch('/api/admin/people/update', {
+                method: 'PATCH',
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+                let message = 'Failed to update';
+                try {
+                    const j = await res.json();
+                    if (j?.error) message = j.error;
+                } catch {
+                    /* noop */
+                }
+                throw new Error(message);
+            }
+
+            await onSaved();
+            onClose();
+        } catch (err) {
+            // eslint-disable-next-line no-alert
+            alert(err instanceof Error ? err.message : 'Failed to save');
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <div
+            className="absolute top-3 right-3 w-[360px] rounded-xl ring-1 p-3"
+            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+            role="dialog"
+            aria-modal="false"
+        >
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                        {name || '(No name)'}
+                    </div>
+                    <div className="text-xs mt-0.5" style={{ color: 'var(--sub)' }}>
+                        {person.is_bank ? 'Bank staff' : homes.find((h) => h.id === (person.home_id || ''))?.name || '—'}
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        className="px-2 py-1 text-xs rounded-md ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                        onClick={save}
+                        disabled={saving}
+                    >
+                        {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                        type="button"
+                        className="px-2 py-1 text-xs rounded-md ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                        onClick={onClose}
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+
+            {/* Form */}
+            <div className="mt-3 grid grid-cols-1 gap-3">
+                {(isAdmin || isCompany || isManager) && (
+                    <>
+                        <div>
+                            <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                                Name
+                            </label>
+                            <input
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                                Email (leave blank to keep)
+                            </label>
+                            <input
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="new-email@example.com"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                                Password (leave blank to keep)
+                            </label>
+                            <input
+                                type="password"
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="••••••••"
+                            />
+                        </div>
+                    </>
+                )}
+
+                {isAdmin && (
+                    <div>
+                        <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                            Company (admin only)
+                        </label>
+                        <select
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={companyId}
+                            onChange={(e) => setCompanyId(e.target.value)}
+                        >
+                            <option value="">(Select company)</option>
+                            {companies.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {canChangeHome && (
+                    <div>
+                        <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                            {positionEdit === 'MANAGER' || currentlyManager ? 'Homes (select all that apply)' : 'Home'}
+                        </label>
+                        {positionEdit === 'MANAGER' || currentlyManager ? (
+                            <MultiSelect
+                                value={managerHomeIdsEdit}
+                                onChange={setManagerHomeIdsEdit}
+                                options={homes.map((h) => ({ value: h.id, label: h.name }))}
+                            />
+                        ) : (
+                            <select
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={homeId}
+                                onChange={(e) => setHomeId(e.target.value)}
+                                disabled={bankMode}
+                                aria-disabled={bankMode}
+                                title={bankMode ? 'Home is locked when position is Bank' : undefined}
+                            >
+                                <option value="">(No fixed home)</option>
+                                {homes.map((h) => (
+                                    <option key={h.id} value={h.id}>
+                                        {h.name}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                        {bankMode && (
+                            <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
+                                Position is <b>Bank</b>; home is not applicable.
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* Role & Position */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className={`${canChangeAppRole ? '' : 'opacity-60'}`}>
+                        <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                            Role {viewerId === person.user_id && "(you can’t change your own role)"}
+                        </label>
+                        <select
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={appRole}
+                            onChange={(e) => {
+                                const v = e.target.value as AppLevel;
+                                setAppRole(v);
+                                setPositionEdit('');
+                                setCompanyPositionsEdit([]);
+                            }}
+                            disabled={!canChangeAppRole}
+                        >
+                            <option value="">(No change)</option>
+                            {allowedAppLevels.map((lvl) => (
+                                <option key={lvl} value={lvl}>
+                                    {LEVEL_LABELS[lvl]}
+                                </option>
+                            ))}
+                        </select>
+                        {!isAdmin && canChangeAppRole && (
+                            <p className="mt-1 text-[11px]" style={{ color: 'var(--sub)' }}>
+                                You can assign roles up to <b>{LEVEL_LABELS[viewerCap]}</b>.
+                            </p>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                            Position
+                        </label>
+                        {appRole === '4_STAFF' && (
+                            <select
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={positionEdit}
+                                onChange={(e) => setPositionEdit(e.target.value as PositionValue)}
+                            >
+                                <option value="">(No change)</option>
+                                <option value="BANK">Bank</option>
+                                <option value="RESIDENTIAL">Residential</option>
+                                <option value="TEAM_LEADER">Team Leader</option>
+                            </select>
+                        )}
+                        {appRole === '3_MANAGER' && (
+                            <select
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={positionEdit}
+                                onChange={(e) => setPositionEdit(e.target.value as PositionValue)}
+                            >
+                                <option value="">(No change)</option>
+                                <option value="MANAGER">Manager</option>
+                                <option value="DEPUTY_MANAGER">Deputy Manager</option>
+                            </select>
+                        )}
+                        {appRole === '2_COMPANY' && (
+                            <div
+                                className="mt-1 rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)', borderColor: 'var(--ring)' }}
+                            >
+                                Company positions are managed separately.
+                            </div>
+                        )}
+                        {appRole === '1_ADMIN' && (
+                            <div
+                                className="mt-1 rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)', borderColor: 'var(--ring)' }}
+                            >
+                                Admin has no position.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function InlineRename({
+    kind,
+    initial,
+    onSave,
+    onCancel,
+}: {
+    kind: 'company' | 'home';
+    initial: string;
+    onSave: (newName: string) => void | Promise<void | boolean>;
+    onCancel: () => void;
+}) {
+    const [val, setVal] = useState(initial);
+    const [saving, setSaving] = useState(false);
+    const label = kind === 'company' ? 'Company name' : 'Home name';
+
+    return (
+        <div
+            className="flex items-center gap-2 px-3 py-2 border-b"
+            style={{ borderColor: 'var(--ring)', background: 'var(--panel-bg)' }}
+        >
+            <label className="text-xs" style={{ color: 'var(--ink)' }}>
+                {label}
+            </label>
+            <input
+                className="flex-1 px-2 py-1 text-xs rounded-md ring-1"
+                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                value={val}
+                onChange={(e) => setVal(e.target.value)}
+            />
+            <button
+                type="button"
+                className="px-2 py-1 text-xs rounded-md ring-1"
+                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                onClick={async () => {
+                    setSaving(true);
+                    try {
+                        await onSave(val.trim());
+                    } finally {
+                        setSaving(false);
+                    }
+                }}
+                disabled={saving || !val.trim() || val.trim() === initial.trim()}
+            >
+                {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+                type="button"
+                className="px-2 py-1 text-xs rounded-md ring-1"
+                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                onClick={onCancel}
+            >
+                Cancel
+            </button>
+        </div>
+    );
+}
+
 
 function Tabbed({
     isAdmin,
     isCompany,
     isManager,
+    preset,
+    onConsumePreset,
 }: {
     isAdmin: boolean;
     isCompany: boolean;
     isManager: boolean;
+    preset?: SimplePreset | null;     // NEW
+    onConsumePreset?: () => void;     // NEW
 }) {
-    type Tab = "PEOPLE" | "HOMES" | "COMPANIES";
-    const [tab, setTab] = useState<Tab>("PEOPLE");
+    type Tab = 'PEOPLE' | 'HOMES' | 'COMPANIES';
+    const [tab, setTab] = useState<Tab>('PEOPLE');
 
     const showHomes = isAdmin || isCompany;
     const showCompanies = isAdmin;
 
+    useEffect(() => {
+        if (!preset) return;
+        if (preset.tab) setTab(preset.tab);
+        onConsumePreset?.(); // prevent re-trigger
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [preset]);
+
+
     return (
         <div className="space-y-4">
-            <div className="inline-flex rounded-lg ring-1 ring-gray-300 bg-white shadow-sm overflow-hidden">
-                <TabBtn active={tab === "PEOPLE"} onClick={() => setTab("PEOPLE")}>
+            <div
+                className="inline-flex rounded-lg overflow-hidden"
+                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', boxShadow: 'none' }}
+            >
+                <TabBtn active={tab === 'PEOPLE'} onClick={() => setTab('PEOPLE')}>
                     People
                 </TabBtn>
                 {showHomes && (
-                    <TabBtn active={tab === "HOMES"} onClick={() => setTab("HOMES")}>
+                    <TabBtn active={tab === 'HOMES'} onClick={() => setTab('HOMES')}>
                         Homes
                     </TabBtn>
                 )}
                 {showCompanies && (
-                    <TabBtn active={tab === "COMPANIES"} onClick={() => setTab("COMPANIES")}>
+                    <TabBtn active={tab === 'COMPANIES'} onClick={() => setTab('COMPANIES')}>
                         Companies
                     </TabBtn>
                 )}
             </div>
 
-            {tab === "PEOPLE" && (
-                <PeopleTab isAdmin={isAdmin} isCompany={isCompany} isManager={isManager} />
+            {tab === 'PEOPLE' && (
+                <PeopleTab
+                    isAdmin={isAdmin}
+                    isCompany={isCompany}
+                    isManager={isManager}
+                    initialFilterCompanyId={preset?.companyId} // NEW
+                    initialFilterHomeId={preset?.homeId}       // NEW
+                    initialSearch={preset?.search}             // NEW
+                />
             )}
-            {tab === "HOMES" && showHomes && (
-                <HomesTab isAdmin={isAdmin} isCompany={isCompany} />
-            )}
-            {tab === "COMPANIES" && showCompanies && <CompaniesTab />}
+            {tab === 'HOMES' && showHomes && <HomesTab isAdmin={isAdmin} isCompany={isCompany} />}
+            {tab === 'COMPANIES' && showCompanies && <CompaniesTab />}
         </div>
+
     );
+
 }
 
 function TabBtn(
@@ -122,19 +1398,30 @@ function TabBtn(
         active,
         children,
         ...props
-    }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
+    }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean },
 ) {
     return (
         <button
-            className={`px-4 py-2 text-sm border-r last:border-r-0 transition ${active ? "bg-indigo-600 text-white" : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
+            className="px-4 py-2 text-sm border-r last:border-r-0 transition"
+            style={
+                active
+                    ? {
+                        background: BRAND_GRADIENT,
+                        color: '#FFFFFF',
+                        borderRightColor: 'var(--ring)',
+                    }
+                    : {
+                        background: 'var(--nav-item-bg)',
+                        color: 'var(--ink)',
+                        borderRightColor: 'var(--ring)',
+                    }
+            }
             {...props}
         >
             {children}
         </button>
     );
 }
-
 
 /* =====================
    PEOPLE TAB
@@ -147,14 +1434,20 @@ function PeopleTab({
     isAdmin,
     isCompany,
     isManager,
+    initialFilterCompanyId,
+    initialFilterHomeId,
+    initialSearch,
 }: {
     isAdmin: boolean;
     isCompany: boolean;
     isManager: boolean;
+    initialFilterCompanyId?: string; // NEW
+    initialFilterHomeId?: string;    // NEW
+    initialSearch?: string;          // NEW
 }) {
     // Scope
-    const [myCompanyId, setMyCompanyId] = useState<string>("");
-    const [myCompanyName, setMyCompanyName] = useState<string>("");
+    const [myCompanyId, setMyCompanyId] = useState<string>('');
+    const [myCompanyName, setMyCompanyName] = useState<string>('');
     const [companies, setCompanies] = useState<Company[]>([]);
     const [homesFilter, setHomesFilter] = useState<Home[]>([]);
     const [homesCreate, setHomesCreate] = useState<Home[]>([]);
@@ -165,35 +1458,33 @@ function PeopleTab({
         Array<{ user_id: string; full_name: string; home_id: string | null; is_bank: boolean }>
     >([]);
     const [nextFrom, setNextFrom] = useState<number | null>(0);
-    const [filterCompany, setFilterCompany] = useState<string>("");
-    const [filterHome, setFilterHome] = useState<string>("");
+    const [filterCompany, setFilterCompany] = useState<string>('');
+    const [filterHome, setFilterHome] = useState<string>('');
     const [loading, setLoading] = useState(false);
 
     // Create form
     const [creating, setCreating] = useState(false);
-    const [role, setRole] = useState<AppLevel>("4_STAFF"); // app-level
+    const [role, setRole] = useState<AppLevel>('4_STAFF'); // app-level
     const [isAdminRole, setIsAdminRole] = useState(false);
 
     // role-driven UI
-    const [position, setPosition] = useState<string>(""); // STAFF: RESIDENTIAL|TEAM_LEADER|BANK ; MANAGER: MANAGER|DEPUTY_MANAGER
+    const [position, setPosition] = useState<string>(''); // STAFF: RESIDENTIAL|TEAM_LEADER|BANK ; MANAGER: MANAGER|DEPUTY_MANAGER
     const [companyPositions, setCompanyPositions] = useState<string[]>([]); // COMPANY only
 
-    const [createCompanyId, setCreateCompanyId] = useState<string>("");
+    const [createCompanyId, setCreateCompanyId] = useState<string>('');
     // single-home for Staff/Deputy; multi-home ONLY for Manager=MANAGER
-    const [createHomeId, setCreateHomeId] = useState<string>("");
+    const [createHomeId, setCreateHomeId] = useState<string>('');
     const [createManagerHomeIds, setCreateManagerHomeIds] = useState<string[]>([]);
 
-
     // new user fields
-    const [fullName, setFullName] = useState("");
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
+    const [fullName, setFullName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
 
     // under the other useState hooks
-    const [search, setSearch] = useState("");
+    const [search, setSearch] = useState('');
 
     const filtersLiveRef = useRef(false);
-
 
     // add this effect (debounces search changes)
     useEffect(() => {
@@ -202,8 +1493,8 @@ function PeopleTab({
             resetAndLoad();
         }, 300); // adjust to taste (200–500ms)
         return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [search]); // ONLY search is debounced
-
 
     useEffect(() => {
         (async () => {
@@ -212,43 +1503,42 @@ function PeopleTab({
             if (!me) return;
 
             if (isAdmin) {
-                const co = await supabase.from("companies").select("id,name").order("name");
+                const co = await supabase.from('companies').select('id,name').order('name');
                 const list = (co.data || []) as Company[];
                 setCompanies(list);
                 if (!filterCompany && list.length) setFilterCompany(list[0].id);
                 if (!createCompanyId && list.length) setCreateCompanyId(list[0].id);
             } else if (isCompany) {
                 const cm = await supabase
-                    .from("company_memberships")
-                    .select("company_id")
-                    .eq("user_id", me)
+                    .from('company_memberships')
+                    .select('company_id')
+                    .eq('user_id', me)
                     .maybeSingle();
-                const cid = cm.data?.company_id || "";
+                const cid = cm.data?.company_id || '';
                 setMyCompanyId(cid);
                 setCreateCompanyId(cid);
 
                 if (cid) {
-                    const co = await supabase.from("companies").select("name").eq("id", cid).maybeSingle();
-                    setMyCompanyName(co.data?.name || "");
+                    const co = await supabase.from('companies').select('name').eq('id', cid).maybeSingle();
+                    setMyCompanyName(co.data?.name || '');
                 }
             }
 
-            await resetAndLoad();               // initial fetch
-            filtersLiveRef.current = true;      // NOW allow filter-triggered reloads
+            await resetAndLoad(); // initial fetch
+            filtersLiveRef.current = true; // NOW allow filter-triggered reloads
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin, isCompany, isManager]);
-
 
     // Company users: homes in their company
     useEffect(() => {
         (async () => {
             if (!isCompany || !myCompanyId) return;
             const h = await supabase
-                .from("homes")
-                .select("id,name,company_id")
-                .eq("company_id", myCompanyId)
-                .order("name");
+                .from('homes')
+                .select('id,name,company_id')
+                .eq('company_id', myCompanyId)
+                .order('name');
             const list = (h.data || []) as Home[];
             setHomesFilter(list);
             setHomesCreate(list);
@@ -264,10 +1554,10 @@ function PeopleTab({
             const me = u.user?.id;
             if (!me) return;
 
-            const managed = await supabase.rpc("home_ids_managed_by", { p_user: me });
+            const managed = await supabase.rpc('home_ids_managed_by', { p_user: me });
             const ids = (managed.data || []) as string[];
             if (ids.length) {
-                const h = await supabase.from("homes").select("id,name,company_id").in("id", ids).order("name");
+                const h = await supabase.from('homes').select('id,name,company_id').in('id', ids).order('name');
                 const list = (h.data || []) as Home[];
                 setHomesFilter(list);
                 setHomesCreate(list);
@@ -282,12 +1572,12 @@ function PeopleTab({
     useEffect(() => {
         (async () => {
             if (!isAdmin) return;
-            const cid = filterCompany || "";
+            const cid = filterCompany || '';
             if (!cid) {
                 setHomesFilter([]);
                 return;
             }
-            const h = await supabase.from("homes").select("id,name,company_id").eq("company_id", cid).order("name");
+            const h = await supabase.from('homes').select('id,name,company_id').eq('company_id', cid).order('name');
             setHomesFilter((h.data || []) as Home[]);
         })();
     }, [isAdmin, filterCompany]);
@@ -296,22 +1586,42 @@ function PeopleTab({
     useEffect(() => {
         (async () => {
             if (!isAdmin) return;
-            const cid = createCompanyId || "";
+            const cid = createCompanyId || '';
             if (!cid) {
                 setHomesCreate([]);
                 return;
             }
-            const h = await supabase.from("homes").select("id,name,company_id").eq("company_id", cid).order("name");
+            const h = await supabase.from('homes').select('id,name,company_id').eq('company_id', cid).order('name');
             setHomesCreate((h.data || []) as Home[]);
         })();
     }, [isAdmin, createCompanyId]);
 
     useEffect(() => {
-        if (!filtersLiveRef.current) return;  // ignore changes during initial boot
+        if (!filtersLiveRef.current) return; // ignore changes during initial boot
         resetAndLoad();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterCompany, filterHome]);
 
+    useEffect(() => {
+        let touched = false;
+        if (typeof initialSearch === 'string' && initialSearch.length) {
+            setSearch(initialSearch);
+            touched = true;
+        }
+        if (typeof initialFilterCompanyId === 'string' && initialFilterCompanyId) {
+            setFilterCompany(initialFilterCompanyId);
+            touched = true;
+        }
+        if (typeof initialFilterHomeId === 'string') {
+            setFilterHome(initialFilterHomeId);
+            touched = true;
+        }
+        if (touched) {
+            void resetAndLoad();
+        }
+        // run only once on mount
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     async function resetAndLoad() {
         setRows([]);
@@ -334,8 +1644,7 @@ function PeopleTab({
 
     // Stable key: prefer "bank" when is_bank, otherwise the home id, otherwise "company"
     const rowKey = (r: { user_id: string; home_id: string | null; is_bank: boolean }) =>
-        `${r.user_id}:${r.is_bank ? "bank" : (r.home_id ?? "company")}`;
-
+        `${r.user_id}:${r.is_bank ? 'bank' : r.home_id ?? 'company'}`;
 
     async function loadMore(from?: number | null) {
         if (loading) return;
@@ -353,7 +1662,6 @@ function PeopleTab({
 
             let base: PersonRecord[] = [];
 
-
             if (isAdmin) {
                 const cid = filterCompany || myCompanyId || createCompanyId || companies[0]?.id || null;
                 if (!cid) {
@@ -362,7 +1670,7 @@ function PeopleTab({
                     return;
                 }
                 const { data, error } = await supabase
-                    .rpc("list_company_people", { p_company_id: cid })
+                    .rpc('list_company_people', { p_company_id: cid })
                     .range(f, f + PAGE_SIZE - 1);
                 if (error) throw error;
                 base = data || [];
@@ -372,19 +1680,19 @@ function PeopleTab({
                 if (!userId) return;
 
                 const cm = await supabase
-                    .from("company_memberships")
-                    .select("company_id")
-                    .eq("user_id", userId)
+                    .from('company_memberships')
+                    .select('company_id')
+                    .eq('user_id', userId)
                     .maybeSingle();
-                const cid = cm.data?.company_id ?? "";
+                const cid = cm.data?.company_id ?? '';
                 if (!cid) return;
                 const { data, error } = await supabase
-                    .rpc("list_company_people", { p_company_id: cid })
+                    .rpc('list_company_people', { p_company_id: cid })
                     .range(f, f + PAGE_SIZE - 1);
                 if (error) throw error;
                 base = data || [];
             } else if (isManager) {
-                const { data, error } = await supabase.rpc("list_manager_people");
+                const { data, error } = await supabase.rpc('list_manager_people');
                 if (error) throw error;
                 type PersonRecord = {
                     user_id: string;
@@ -407,16 +1715,16 @@ function PeopleTab({
 
             if (filterHome) {
                 list = list.filter((r) =>
-                    filterHome === "BANK"
+                    filterHome === 'BANK'
                         ? r.is_bank
-                        : filterHome === "COMPANY"
-                            ? (!r.is_bank && !r.home_id) // company-level members (no home, not bank)
-                            : r.home_id === filterHome
+                        : filterHome === 'COMPANY'
+                            ? !r.is_bank && !r.home_id // company-level members (no home, not bank)
+                            : r.home_id === filterHome,
                 );
             }
             if (search.trim()) {
                 const q = search.trim().toLowerCase();
-                list = list.filter((r) => (r.full_name || "").toLowerCase().includes(q));
+                list = list.filter((r) => (r.full_name || '').toLowerCase().includes(q));
             }
 
             setRows((prev) => {
@@ -435,34 +1743,34 @@ function PeopleTab({
         e.preventDefault();
         setCreating(true);
         try {
-            if (!fullName || !email) throw new Error("Name and email are required");
+            if (!fullName || !email) throw new Error('Name and email are required');
 
-            const isManagerManager = !isAdminRole && role === "3_MANAGER" && position === "MANAGER";
+            const isManagerManager = !isAdminRole && role === '3_MANAGER' && position === 'MANAGER';
 
             // put these minimal types near the top of the component (or above createPerson)
-            type CreatePosition = "" | "BANK" | "RESIDENTIAL" | "TEAM_LEADER" | "MANAGER" | "DEPUTY_MANAGER";
+            type CreatePosition = '' | 'BANK' | 'RESIDENTIAL' | 'TEAM_LEADER' | 'MANAGER' | 'DEPUTY_MANAGER';
 
             type CreateUserPayload = {
                 full_name: string;
                 email: string;
                 password?: string;
-                role: AppLevel;                         // "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF"
+                role: AppLevel; // "1_ADMIN" | "2_COMPANY" | "3_MANAGER" | "4_STAFF"
                 company_id: string | null;
-                home_id: string | null;                 // null when manager with multiple homes or bank/no fixed home
-                manager_home_ids?: string[];            // only when role is manager=MANAGER (multi-home)
+                home_id: string | null; // null when manager with multiple homes or bank/no fixed home
+                manager_home_ids?: string[]; // only when role is manager=MANAGER (multi-home)
                 position: CreatePosition;
-                company_positions: string[];            // used for company-level role extras
+                company_positions: string[]; // used for company-level role extras
             };
 
             const payload: CreateUserPayload = {
                 full_name: fullName,
                 email,
                 ...(password ? { password } : {}),
-                role: (isAdminRole ? "1_ADMIN" : role) as AppLevel,
-                company_id: isAdmin ? (createCompanyId || null) : (myCompanyId || null),
+                role: (isAdminRole ? '1_ADMIN' : role) as AppLevel,
+                company_id: isAdmin ? createCompanyId || null : myCompanyId || null,
 
                 // single-home for Staff/Deputy; null for Manager=MANAGER to signal multi-home
-                home_id: isManagerManager ? null : (createHomeId || null),
+                home_id: isManagerManager ? null : createHomeId || null,
 
                 // only include when truly a multi-home manager
                 ...(isManagerManager ? { manager_home_ids: createManagerHomeIds } : {}),
@@ -471,84 +1779,104 @@ function PeopleTab({
                 company_positions: companyPositions,
             };
 
-            const res = await authFetch("/api/admin/create-user", {
-                method: "POST",
+            const res = await authFetch('/api/admin/create-user', {
+                method: 'POST',
                 body: JSON.stringify(payload),
             });
-            if (!res.ok) throw new Error((await res.json())?.error || "Failed to create user");
+            if (!res.ok) throw new Error((await res.json())?.error || 'Failed to create user');
 
-            setFullName("");
-            setEmail("");
-            setPassword("");
-            setPosition("");
+            setFullName('');
+            setEmail('');
+            setPassword('');
+            setPosition('');
             setCompanyPositions([]);
             setIsAdminRole(false);
             await resetAndLoad();
         } catch (err) {
             if (err instanceof Error) {
+                // eslint-disable-next-line no-alert
                 alert(err.message);
             } else {
-                alert("Failed");
+                // eslint-disable-next-line no-alert
+                alert('Failed');
             }
-        }
-         finally {
+        } finally {
             setCreating(false);
         }
     }
 
     function randomPassword() {
-        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-        let out = "";
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+        let out = '';
         for (let i = 0; i < 12; i++) out += chars[Math.floor(Math.random() * chars.length)];
         setPassword(out);
     }
 
     const companyIdContext = isAdmin
-        ? filterCompany || createCompanyId || myCompanyId || ""
+        ? filterCompany || createCompanyId || myCompanyId || ''
         : isCompany
             ? myCompanyId
-            : "";
+            : '';
 
-    const bankSelected = role === "4_STAFF" && position === "BANK";
+    const bankSelected = role === '4_STAFF' && position === 'BANK';
 
     useEffect(() => {
-        if (bankSelected && createHomeId) setCreateHomeId("");
+        if (bankSelected && createHomeId) setCreateHomeId('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [bankSelected]);
 
     return (
         <div className="space-y-4">
             {/* Create person */}
-            <section className="rounded-2xl border border-gray-300 bg-white shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-900">Create person</h2>
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                    Create person
+                </h2>
                 <form onSubmit={createPerson} className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                        <label className="block text-sm">Full name</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Full name
+                        </label>
                         <input
-                            className="mt-1 w-full rounded-lg border p-2 text-sm"
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={fullName}
                             onChange={(e) => setFullName(e.target.value)}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm">Email</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Email
+                        </label>
                         <input
                             type="email"
-                            className="mt-1 w-full rounded-lg border p-2 text-sm"
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm">Password</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Password
+                        </label>
                         <div className="mt-1 flex gap-2">
                             <input
-                                className="flex-1 rounded-lg border p-2 text-sm"
+                                className="flex-1 rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="(optional)"
                             />
-                            <button type="button" onClick={randomPassword} className="rounded-lg border px-3 text-sm">
+                            <button
+                                type="button"
+                                onClick={randomPassword}
+                                className="rounded-md px-3 text-sm ring-1 transition"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                            >
                                 Generate
                             </button>
                         </div>
@@ -556,17 +1884,20 @@ function PeopleTab({
 
                     {/* Role FIRST — drives position UI */}
                     <div>
-                        <label className="block text-sm">Role</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Role
+                        </label>
                         <select
-                            className="mt-1 w-full rounded-lg border p-2 text-sm"
-                            value={isAdminRole ? "1_ADMIN" : role}
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={isAdminRole ? '1_ADMIN' : role}
                             onChange={(e) => {
                                 const v = e.target.value as AppLevel;
-                                setIsAdminRole(v === "1_ADMIN");
+                                setIsAdminRole(v === '1_ADMIN');
                                 setRole(v);
-                                setPosition("");
+                                setPosition('');
                                 setCompanyPositions([]);
-                                setCreateHomeId("");
+                                setCreateHomeId('');
                                 setCreateManagerHomeIds([]); // reset multi-home when switching roles
                             }}
                         >
@@ -580,10 +1911,13 @@ function PeopleTab({
                     {/* Company (not applicable for pure Admin) */}
                     {!isAdminRole && (
                         <div>
-                            <label className="block text-sm">Company</label>
+                            <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                                Company
+                            </label>
                             {isAdmin ? (
                                 <select
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={createCompanyId}
                                     onChange={(e) => setCreateCompanyId(e.target.value)}
                                 >
@@ -596,8 +1930,9 @@ function PeopleTab({
                                 </select>
                             ) : (
                                 <input
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm bg-gray-50"
-                                    value={myCompanyName || "(Your company)"}
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                    value={myCompanyName || '(Your company)'}
                                     readOnly
                                 />
                             )}
@@ -606,13 +1941,15 @@ function PeopleTab({
 
                     {/* Home (hidden for Company; also disabled/cleared for Bank) */}
                     {/* Home(s): single for Staff/Deputy, MULTI for Manager=MANAGER */}
-                    {!isAdminRole && role !== "2_COMPANY" && (
+                    {!isAdminRole && role !== '2_COMPANY' && (
                         <div>
-                            <label className="block text-sm">
-                                {role === "3_MANAGER" && position === "MANAGER" ? "Homes (select all that apply)" : "Home"}
+                            <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                                {role === '3_MANAGER' && position === 'MANAGER'
+                                    ? 'Homes (select all that apply)'
+                                    : 'Home'}
                             </label>
 
-                            {role === "3_MANAGER" && position === "MANAGER" ? (
+                            {role === '3_MANAGER' && position === 'MANAGER' ? (
                                 homesCreate.length ? (
                                     <MultiSelect
                                         value={createManagerHomeIds}
@@ -620,20 +1957,26 @@ function PeopleTab({
                                         options={homesCreate.map((h) => ({ value: h.id, label: h.name }))}
                                     />
                                 ) : (
-                                    <div className="mt-1 rounded-lg border p-2 text-xs text-gray-600 bg-gray-50">
-                                        {isAdmin
-                                            ? "Pick a company first to load homes."
-                                            : "No homes available in your scope."}
+                                    <div
+                                        className="mt-1 rounded-md px-2 py-2 text-xs ring-1"
+                                        style={{
+                                            background: 'var(--nav-item-bg)',
+                                            color: 'var(--sub)',
+                                            borderColor: 'var(--ring)',
+                                        }}
+                                    >
+                                        {isAdmin ? 'Pick a company first to load homes.' : 'No homes available in your scope.'}
                                     </div>
                                 )
                             ) : (
                                 <select
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm"
-                                    value={bankSelected ? "" : createHomeId}
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                    value={bankSelected ? '' : createHomeId}
                                     onChange={(e) => setCreateHomeId(e.target.value)}
                                     disabled={bankSelected}
                                     aria-disabled={bankSelected}
-                                    title={bankSelected ? "Home is not applicable when position is Bank" : undefined}
+                                    title={bankSelected ? 'Home is not applicable when position is Bank' : undefined}
                                 >
                                     <option value="">(No fixed home / Bank)</option>
                                     {homesCreate.map((h) => (
@@ -645,7 +1988,7 @@ function PeopleTab({
                             )}
 
                             {isManager && (
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p className="text-xs mt-1" style={{ color: 'var(--sub)' }}>
                                     Managers can only create people for the homes they manage.
                                 </p>
                             )}
@@ -653,11 +1996,14 @@ function PeopleTab({
                     )}
 
                     {/* Position/subrole driven by Role */}
-                    {!isAdminRole && role === "4_STAFF" && (
+                    {!isAdminRole && role === '4_STAFF' && (
                         <div>
-                            <label className="block text-sm">Position</label>
+                            <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                                Position
+                            </label>
                             <select
-                                className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={position}
                                 onChange={(e) => setPosition(e.target.value)}
                             >
@@ -666,15 +2012,20 @@ function PeopleTab({
                                 <option value="RESIDENTIAL">Residential</option>
                                 <option value="TEAM_LEADER">Team Leader</option>
                             </select>
-                            <p className="text-[11px] text-gray-500 mt-1">Bank staff will not be linked to a home.</p>
+                            <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
+                                Bank staff will not be linked to a home.
+                            </p>
                         </div>
                     )}
 
-                    {!isAdminRole && role === "3_MANAGER" && (
+                    {!isAdminRole && role === '3_MANAGER' && (
                         <div>
-                            <label className="block text-sm">Position</label>
+                            <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                                Position
+                            </label>
                             <select
-                                className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={position}
                                 onChange={(e) => setPosition(e.target.value)}
                             >
@@ -685,38 +2036,52 @@ function PeopleTab({
                         </div>
                     )}
 
-                    {role === "2_COMPANY" && (
+                    {role === '2_COMPANY' && (
                         <div>
-                            <label className="block text-sm">Company positions</label>
+                            <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                                Company positions
+                            </label>
                             <MultiSelect
                                 value={companyPositions}
                                 onChange={setCompanyPositions}
                                 options={[
-                                    { value: "OWNER", label: "Owner" },
-                                    { value: "FINANCE_OFFICER", label: "Finance Officer" },
-                                    { value: "SITE_MANAGER", label: "Site Manager" },
+                                    { value: 'OWNER', label: 'Owner' },
+                                    { value: 'FINANCE_OFFICER', label: 'Finance Officer' },
+                                    { value: 'SITE_MANAGER', label: 'Site Manager' },
                                 ]}
                             />
                         </div>
                     )}
 
                     <div className="md:col-span-3">
-                        <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" disabled={creating}>
-                            {creating ? "Creating…" : "Create person"}
+                        <button
+                            className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                            disabled={creating}
+                        >
+                            {creating ? 'Creating…' : 'Create person'}
                         </button>
-                        <span className="ml-3 text-[12px] text-gray-500">Creation calls /api/admin/create-user.</span>
+                        <span className="ml-3 text-[12px]" style={{ color: 'var(--sub)' }}>
+                            Creation calls /api/admin/create-user.
+                        </span>
                     </div>
                 </form>
             </section>
 
             {/* List & search */}
-            <section className="rounded-2xl border border-gray-300 bg-white shadow-sm p-4">
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
                 <div className="flex flex-wrap gap-3 items-end">
                     {isAdmin && (
                         <div>
-                            <label className="block text-sm">Company</label>
+                            <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                                Company
+                            </label>
                             <select
-                                className="mt-1 rounded-lg border p-2 text-sm"
+                                className="mt-1 rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={filterCompany}
                                 onChange={(e) => setFilterCompany(e.target.value)}
                             >
@@ -730,9 +2095,12 @@ function PeopleTab({
                         </div>
                     )}
                     <div>
-                        <label className="block text-sm">Home</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Home
+                        </label>
                         <select
-                            className="mt-1 rounded-lg border p-2 text-sm"
+                            className="mt-1 rounded-md px-2 py-2 ring-1 text-sm"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={filterHome}
                             onChange={(e) => setFilterHome(e.target.value)}
                         >
@@ -747,9 +2115,12 @@ function PeopleTab({
                         </select>
                     </div>
                     <div className="flex-1 min-w-[200px]">
-                        <label className="block text-sm">Search</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Search
+                        </label>
                         <input
-                            className="mt-1 w-full rounded-lg border p-2 text-sm"
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search name"
@@ -757,10 +2128,10 @@ function PeopleTab({
                     </div>
                 </div>
 
-                <div className="mt-4 divide-y">
+                <div className="mt-4 divide-y" style={{ borderColor: 'var(--ring)' }}>
                     {rows.map((r) => (
                         <PersonRow
-                            key={`${r.user_id}:${r.is_bank ? "bank" : (r.home_id ?? "company")}`}
+                            key={`${r.user_id}:${r.is_bank ? 'bank' : r.home_id ?? 'company'}`}
                             row={r}
                             homes={homesFilter}
                             companies={companies}
@@ -777,14 +2148,17 @@ function PeopleTab({
                     {nextFrom != null && (
                         <button
                             onClick={() => loadMore()}
-                            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                            className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             disabled={loading}
                         >
-                            {loading ? "Loading…" : "Next"}
+                            {loading ? 'Loading…' : 'Next'}
                         </button>
                     )}
                     {nextFrom == null && rows.length > 0 && (
-                        <div className="text-sm text-gray-500">End of results.</div>
+                        <div className="text-sm" style={{ color: 'var(--sub)' }}>
+                            End of results.
+                        </div>
                     )}
                 </div>
             </section>
@@ -814,36 +2188,35 @@ function PersonRow({
     const [editing, setEditing] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    const [name, setName] = useState(row.full_name || "");
-    const [email, setEmail] = useState<string>("");
-    const [password, setPassword] = useState<string>("");
+    const [name, setName] = useState(row.full_name || '');
+    const [email, setEmail] = useState<string>('');
+    const [password, setPassword] = useState<string>('');
 
-    const [companyId, setCompanyId] = useState<string>("");
-    const [homeId, setHomeId] = useState<string>(row.home_id || "");
-    type PositionValue = "" | "BANK" | "RESIDENTIAL" | "TEAM_LEADER" | "MANAGER" | "DEPUTY_MANAGER";
-    const [positionEdit, setPositionEdit] = useState<PositionValue>("");
+    const [companyId, setCompanyId] = useState<string>('');
+    const [homeId, setHomeId] = useState<string>(row.home_id || '');
+    type PositionValue = '' | 'BANK' | 'RESIDENTIAL' | 'TEAM_LEADER' | 'MANAGER' | 'DEPUTY_MANAGER';
+    const [positionEdit, setPositionEdit] = useState<PositionValue>('');
 
     const [managerHomeIdsEdit, setManagerHomeIdsEdit] = useState<string[]>([]);
     const [currentlyManager, setCurrentlyManager] = useState(false);
     const [companyPositionsEdit, setCompanyPositionsEdit] = useState<string[]>([]);
 
-    const [appRole, setAppRole] = useState<AppLevel | "">("");
+    const [appRole, setAppRole] = useState<AppLevel | ''>('');
     const [viewerId, setViewerId] = useState<string | null>(null);
 
-    const U = (s?: string | null) => (s ?? "").trim().toUpperCase();
+    const U = (s?: string | null) => (s ?? '').trim().toUpperCase();
     const asStringArray = (v: unknown): string[] =>
         Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
 
-    const [chipText, setChipText] = useState<string>("");
-    const [chipTone, setChipTone] = useState<"manager" | "staff" | "company" | "bank" | "admin" | "default">("default");
-
+    const [chipText, setChipText] = useState<string>('');
+    const [chipTone, setChipTone] = useState<'manager' | 'staff' | 'company' | 'bank' | 'admin' | 'default'>('default');
 
     useEffect(() => {
-        setName(row.full_name || "");
+        setName(row.full_name || '');
     }, [row.user_id, row.full_name]);
 
     useEffect(() => {
-        setHomeId(row.home_id || "");
+        setHomeId(row.home_id || '');
     }, [row.user_id, row.home_id, row.is_bank]);
 
     useEffect(() => {
@@ -855,21 +2228,21 @@ function PersonRow({
 
     useEffect(() => {
         if (editing && isAdmin && !companyId) {
-            setCompanyId(companies[0]?.id || "");
+            setCompanyId(companies[0]?.id || '');
         }
     }, [editing, isAdmin, companyId, companies]);
 
     useEffect(() => {
         const load = async () => {
             if (!editing) return;
-            const wantsManagerMulti = positionEdit === "MANAGER" || currentlyManager;
+            const wantsManagerMulti = positionEdit === 'MANAGER' || currentlyManager;
             if (!wantsManagerMulti) return;
             if (managerHomeIdsEdit.length > 0) return;
             const { data, error } = await supabase
-                .from("home_memberships")
-                .select("home_id")
-                .eq("user_id", row.user_id)
-                .eq("role", "MANAGER");
+                .from('home_memberships')
+                .select('home_id')
+                .eq('user_id', row.user_id)
+                .eq('role', 'MANAGER');
             if (!error && data) {
                 const ids = (data as { home_id: string }[]).map((d) => d.home_id);
                 setManagerHomeIdsEdit(ids);
@@ -887,8 +2260,8 @@ function PersonRow({
                 // Bank row
                 if (row.is_bank) {
                     if (!cancelled) {
-                        setChipText("Staff — Bank");
-                        setChipTone("bank");
+                        setChipText('Staff — Bank');
+                        setChipTone('bank');
                     }
                     return;
                 }
@@ -896,29 +2269,29 @@ function PersonRow({
                 // Home row: read membership for THIS home to resolve subrole
                 if (row.home_id) {
                     const { data, error } = await supabase
-                        .from("home_memberships")
-                        .select("role, manager_subrole, staff_subrole")
-                        .eq("user_id", row.user_id)
-                        .eq("home_id", row.home_id)
+                        .from('home_memberships')
+                        .select('role, manager_subrole, staff_subrole')
+                        .eq('user_id', row.user_id)
+                        .eq('home_id', row.home_id)
                         .maybeSingle();
 
                     if (!error && data) {
-                        const U = (s?: string | null) => (s ?? "").trim().toUpperCase();
+                        const U = (s?: string | null) => (s ?? '').trim().toUpperCase();
                         const role = U(data.role); // "MANAGER" | "STAFF" | null
                         const mSub = U(data.manager_subrole); // "MANAGER" | "DEPUTY_MANAGER" | null
-                        const sSub = U(data.staff_subrole);   // "RESIDENTIAL" | "TEAM_LEADER" | null
+                        const sSub = U(data.staff_subrole); // "RESIDENTIAL" | "TEAM_LEADER" | null
 
-                        if (role === "MANAGER") {
-                            const label = mSub === "DEPUTY_MANAGER" ? "Manager — Deputy" : "Manager — Manager";
+                        if (role === 'MANAGER') {
+                            const label = mSub === 'DEPUTY_MANAGER' ? 'Manager — Deputy' : 'Manager — Manager';
                             if (!cancelled) {
                                 setChipText(label);
-                                setChipTone("manager");
+                                setChipTone('manager');
                             }
                         } else {
-                            const label = sSub === "TEAM_LEADER" ? "Staff — Team Leader" : "Staff — Residential";
+                            const label = sSub === 'TEAM_LEADER' ? 'Staff — Team Leader' : 'Staff — Residential';
                             if (!cancelled) {
                                 setChipText(label);
-                                setChipTone("staff");
+                                setChipTone('staff');
                             }
                         }
                         return;
@@ -927,21 +2300,21 @@ function PersonRow({
 
                 // Company-only row: pull company positions (array) if any
                 const { data: cm } = await supabase
-                    .from("company_memberships")
-                    .select("positions")
-                    .eq("user_id", row.user_id)
+                    .from('company_memberships')
+                    .select('positions')
+                    .eq('user_id', row.user_id)
                     .maybeSingle();
 
                 const positions = Array.isArray(cm?.positions) ? cm!.positions : [];
-                const label = positions.length ? `Company — ${positions.join(", ")}` : "Company — Member";
+                const label = positions.length ? `Company — ${positions.join(', ')}` : 'Company — Member';
                 if (!cancelled) {
                     setChipText(label);
-                    setChipTone("company");
+                    setChipTone('company');
                 }
             } catch {
                 if (!cancelled) {
-                    setChipText("");
-                    setChipTone("default");
+                    setChipText('');
+                    setChipTone('default');
                 }
             }
         }
@@ -952,87 +2325,90 @@ function PersonRow({
         };
     }, [row.user_id, row.home_id, row.is_bank]);
 
-
     async function prefillFromServer() {
         try {
             const cm = await supabase
-                .from("company_memberships")
-                .select("company_id, positions")
-                .eq("user_id", row.user_id)
+                .from('company_memberships')
+                .select('company_id, positions')
+                .eq('user_id', row.user_id)
                 .maybeSingle();
             if (cm.data?.company_id) setCompanyId(cm.data.company_id);
             setCompanyPositionsEdit(asStringArray(cm.data?.positions));
-        } catch { }
+        } catch {
+            /* noop */
+        }
 
         try {
-            const rpc = await supabase.rpc("home_ids_managed_by", { p_user: row.user_id });
+            const rpc = await supabase.rpc('home_ids_managed_by', { p_user: row.user_id });
             const managerIds: string[] = (rpc.data || []) as string[];
             if (managerIds.length > 0) {
                 setManagerHomeIdsEdit(managerIds);
                 setCurrentlyManager(true);
-                setAppRole("3_MANAGER");
-                setPositionEdit("MANAGER");
+                setAppRole('3_MANAGER');
+                setPositionEdit('MANAGER');
                 return;
             }
         } catch (e) {
-            console.error("prefill: home_ids_managed_by failed", e);
+            // eslint-disable-next-line no-console
+            console.error('prefill: home_ids_managed_by failed', e);
         }
 
         type HomeMembership = {
             home_id: string;
-            role: "MANAGER" | "STAFF" | null;
-            manager_subrole: "MANAGER" | "DEPUTY_MANAGER" | null;
-            staff_subrole: "RESIDENTIAL" | "TEAM_LEADER" | null;
+            role: 'MANAGER' | 'STAFF' | null;
+            manager_subrole: 'MANAGER' | 'DEPUTY_MANAGER' | null;
+            staff_subrole: 'RESIDENTIAL' | 'TEAM_LEADER' | null;
         };
         let hmsRaw: HomeMembership[] | null = null;
         try {
             const { data } = await supabase
-                .from("home_memberships")
-                .select("home_id, role, manager_subrole, staff_subrole")
-                .eq("user_id", row.user_id);
+                .from('home_memberships')
+                .select('home_id, role, manager_subrole, staff_subrole')
+                .eq('user_id', row.user_id);
             hmsRaw = data || [];
         } catch (e) {
-            console.warn("prefill: home_memberships blocked/failed", e);
+            // eslint-disable-next-line no-console
+            console.warn('prefill: home_memberships blocked/failed', e);
         }
 
-        const U = (s?: string | null) => (s ?? "").trim().toUpperCase();
+        const U2 = (s?: string | null) => (s ?? '').trim().toUpperCase();
         const hms = (hmsRaw ?? []).map((r) => ({
             home_id: r.home_id,
-            role: (U(r.role) as "MANAGER" | "STAFF" | null) || null,
-            manager_subrole: (U(r.manager_subrole) as "MANAGER" | "DEPUTY_MANAGER" | null) || null,
-            staff_subrole: (U(r.staff_subrole) as "RESIDENTIAL" | "TEAM_LEADER" | null) || null,
+            role: (U2(r.role) as 'MANAGER' | 'STAFF' | null) || null,
+            manager_subrole: (U2(r.manager_subrole) as 'MANAGER' | 'DEPUTY_MANAGER' | null) || null,
+            staff_subrole: (U2(r.staff_subrole) as 'RESIDENTIAL' | 'TEAM_LEADER' | null) || null,
         }));
 
-        const deputy = hms.find((r) => r.role === "MANAGER" && r.manager_subrole === "DEPUTY_MANAGER");
+        const deputy = hms.find((r) => r.role === 'MANAGER' && r.manager_subrole === 'DEPUTY_MANAGER');
         if (deputy) {
-            setAppRole("3_MANAGER");
-            setPositionEdit("DEPUTY_MANAGER");
+            setAppRole('3_MANAGER');
+            setPositionEdit('DEPUTY_MANAGER');
             setHomeId(deputy.home_id);
             return;
         }
-        const teamLead = hms.find((r) => r.role === "STAFF" && r.staff_subrole === "TEAM_LEADER");
+        const teamLead = hms.find((r) => r.role === 'STAFF' && r.staff_subrole === 'TEAM_LEADER');
         if (teamLead) {
-            setAppRole("4_STAFF");
-            setPositionEdit("TEAM_LEADER");
+            setAppRole('4_STAFF');
+            setPositionEdit('TEAM_LEADER');
             setHomeId(teamLead.home_id);
             return;
         }
-        const staffAny = hms.find((r) => r.role === "STAFF");
+        const staffAny = hms.find((r) => r.role === 'STAFF');
         if (staffAny) {
-            setAppRole("4_STAFF");
-            setPositionEdit("RESIDENTIAL");
+            setAppRole('4_STAFF');
+            setPositionEdit('RESIDENTIAL');
             setHomeId(staffAny.home_id);
             return;
         }
         if (row.is_bank) {
-            setAppRole("4_STAFF");
-            setPositionEdit("BANK");
-            setHomeId("");
+            setAppRole('4_STAFF');
+            setPositionEdit('BANK');
+            setHomeId('');
             return;
         }
         if (row.home_id) {
-            setAppRole("4_STAFF");
-            setPositionEdit("RESIDENTIAL");
+            setAppRole('4_STAFF');
+            setPositionEdit('RESIDENTIAL');
             setHomeId(row.home_id);
         }
     }
@@ -1044,29 +2420,29 @@ function PersonRow({
     const canChangeHome = isAdmin || isCompany || isManager;
 
     const LEVEL_RANK: Record<AppLevel, number> = {
-        "1_ADMIN": 1,
-        "2_COMPANY": 2,
-        "3_MANAGER": 3,
-        "4_STAFF": 4,
+        '1_ADMIN': 1,
+        '2_COMPANY': 2,
+        '3_MANAGER': 3,
+        '4_STAFF': 4,
     };
     const LEVEL_LABELS: Record<AppLevel, string> = {
-        "1_ADMIN": "Admin",
-        "2_COMPANY": "Company",
-        "3_MANAGER": "Manager",
-        "4_STAFF": "Staff",
+        '1_ADMIN': 'Admin',
+        '2_COMPANY': 'Company',
+        '3_MANAGER': 'Manager',
+        '4_STAFF': 'Staff',
     };
-    const viewerCap: AppLevel = isAdmin ? "1_ADMIN" : isCompany ? "2_COMPANY" : "3_MANAGER";
+    const viewerCap: AppLevel = isAdmin ? '1_ADMIN' : isCompany ? '2_COMPANY' : '3_MANAGER';
     const canChangeAppRole = (isAdmin || isCompany || isManager) && viewerId !== row.user_id;
-    const allowedAppLevels: AppLevel[] = (["1_ADMIN", "2_COMPANY", "3_MANAGER", "4_STAFF"] as AppLevel[]).filter(
-        (l) => LEVEL_RANK[l] >= LEVEL_RANK[viewerCap]
+    const allowedAppLevels: AppLevel[] = (['1_ADMIN', '2_COMPANY', '3_MANAGER', '4_STAFF'] as AppLevel[]).filter(
+        (l) => LEVEL_RANK[l] >= LEVEL_RANK[viewerCap],
     );
 
     const bankMode =
-        (appRole === "4_STAFF" && positionEdit === "BANK") || (!positionEdit && row.is_bank);
+        (appRole === '4_STAFF' && positionEdit === 'BANK') || (!positionEdit && row.is_bank);
 
     useEffect(() => {
-        if (bankMode && homeId) setHomeId("");
-    }, [bankMode]);
+        if (bankMode && homeId) setHomeId('');
+    }, [bankMode, homeId]);
 
     async function handleEditClick() {
         await prefillFromServer();
@@ -1093,8 +2469,8 @@ function PersonRow({
 
             const body: UpdatePersonBody = { user_id: row.user_id };
 
-            const trimmedName = (name || "").trim();
-            if (canEditName && trimmedName && trimmedName !== (row.full_name || "")) {
+            const trimmedName = (name || '').trim();
+            if (canEditName && trimmedName && trimmedName !== (row.full_name || '')) {
                 body.full_name = trimmedName;
             }
             if (canEditEmail && email.trim()) {
@@ -1109,7 +2485,7 @@ function PersonRow({
             }
 
             if (canChangeHome) {
-                const isManagerManager = appRole === "3_MANAGER" && positionEdit === "MANAGER";
+                const isManagerManager = appRole === '3_MANAGER' && positionEdit === 'MANAGER';
                 if (isManagerManager) {
                     body.set_manager_homes = { home_ids: managerHomeIdsEdit };
                 } else if (bankMode) {
@@ -1134,26 +2510,26 @@ function PersonRow({
             }
 
             if (positionEdit) {
-                if (positionEdit === "BANK") {
+                if (positionEdit === 'BANK') {
                     // no-op
-                } else if (positionEdit === "MANAGER") {
+                } else if (positionEdit === 'MANAGER') {
                     body.ensure_role_manager = true;
                 } else {
                     const targetHome = homeId || row.home_id;
-                    if (!targetHome) throw new Error("Select a home before assigning this position.");
-                    let apiRole: "STAFF" | "TEAM_LEADER" | "MANAGER" | "DEPUTY_MANAGER";
+                    if (!targetHome) throw new Error('Select a home before assigning this position.');
+                    let apiRole: 'STAFF' | 'TEAM_LEADER' | 'MANAGER' | 'DEPUTY_MANAGER';
                     switch (positionEdit) {
-                        case "RESIDENTIAL":
-                            apiRole = "STAFF";
+                        case 'RESIDENTIAL':
+                            apiRole = 'STAFF';
                             break;
-                        case "TEAM_LEADER":
-                            apiRole = "TEAM_LEADER";
+                        case 'TEAM_LEADER':
+                            apiRole = 'TEAM_LEADER';
                             break;
-                        case "DEPUTY_MANAGER":
-                            apiRole = "DEPUTY_MANAGER";
+                        case 'DEPUTY_MANAGER':
+                            apiRole = 'DEPUTY_MANAGER';
                             break;
                         default:
-                            apiRole = "STAFF";
+                            apiRole = 'STAFF';
                     }
                     body.set_home_role = { home_id: targetHome, role: apiRole };
                 }
@@ -1161,36 +2537,39 @@ function PersonRow({
 
             if (canChangeAppRole && appRole) {
                 if (!allowedAppLevels.includes(appRole)) {
-                    throw new Error("You are not allowed to assign that role.");
+                    throw new Error('You are not allowed to assign that role.');
                 }
                 body.set_level = {
                     level: appRole,
-                    company_id: appRole === "2_COMPANY" ? (companyId || companyIdContext || null) : null,
+                    company_id: appRole === '2_COMPANY' ? (companyId || companyIdContext || null) : null,
                 };
             }
 
-            const res = await authFetch("/api/admin/people/update", {
-                method: "PATCH",
+            const res = await authFetch('/api/admin/people/update', {
+                method: 'PATCH',
                 body: JSON.stringify(body),
             });
             if (!res.ok) {
-                let message = "Failed to update";
+                let message = 'Failed to update';
                 try {
                     const j = await res.json();
                     if (j?.error) message = j.error;
-                } catch { }
+                } catch {
+                    /* noop */
+                }
                 throw new Error(message);
             }
 
             setEditing(false);
             if (onAfterSave) await onAfterSave?.();
-            setEmail("");
-            setPassword("");
-            setPositionEdit("");
+            setEmail('');
+            setPassword('');
+            setPositionEdit('');
             setCompanyPositionsEdit([]);
-            setAppRole("");
+            setAppRole('');
         } catch (err) {
-            alert(err instanceof Error ? err.message : "Failed to save");
+            // eslint-disable-next-line no-alert
+            alert(err instanceof Error ? err.message : 'Failed to save');
         } finally {
             setSaving(false);
         }
@@ -1202,9 +2581,15 @@ function PersonRow({
                 {!editing ? (
                     <div className="flex items-start justify-between gap-3">
                         <div>
-                            <div className="font-medium text-gray-900">{name || "(No name)"}</div>
-                            <div className="text-xs text-gray-500">
-                                {row.is_bank ? "Bank staff" : row.home_id ? homes.find((h) => h.id === row.home_id)?.name || "Home" : "—"}
+                            <div className="font-medium" style={{ color: 'var(--ink)' }}>
+                                {name || '(No name)'}
+                            </div>
+                            <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                                {row.is_bank
+                                    ? 'Bank staff'
+                                    : row.home_id
+                                        ? homes.find((h) => h.id === row.home_id)?.name || 'Home'
+                                        : '—'}
                             </div>
                         </div>
                         {chipText ? <RoleChip text={chipText} tone={chipTone} /> : null}
@@ -1213,9 +2598,12 @@ function PersonRow({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {canEditName && (
                             <div>
-                                <label className="block text-xs text-gray-600">Name</label>
+                                <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                                    Name
+                                </label>
                                 <input
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                 />
@@ -1223,11 +2611,12 @@ function PersonRow({
                         )}
                         {canEditEmail && (
                             <div>
-                                <label className="block text-xs text-gray-600">
+                                <label className="block text-xs" style={{ color: 'var(--ink)' }}>
                                     Email (leave blank to keep)
                                 </label>
                                 <input
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="new-email@example.com"
@@ -1236,12 +2625,13 @@ function PersonRow({
                         )}
                         {canEditPassword && (
                             <div>
-                                <label className="block text-xs text-gray-600">
+                                <label className="block text-xs" style={{ color: 'var(--ink)' }}>
                                     Password (leave blank to keep)
                                 </label>
                                 <input
                                     type="password"
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
@@ -1250,9 +2640,12 @@ function PersonRow({
                         )}
                         {canChangeCompany && (
                             <div>
-                                <label className="block text-xs text-gray-600">Company (admin only)</label>
+                                <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                                    Company (admin only)
+                                </label>
                                 <select
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={companyId}
                                     onChange={(e) => setCompanyId(e.target.value)}
                                 >
@@ -1267,20 +2660,17 @@ function PersonRow({
                         )}
                         {canChangeHome && (
                             <div>
-                                <label className="block text-xs text-gray-600">
-                                    {positionEdit === "MANAGER" || currentlyManager
-                                        ? "Homes (select all that apply)"
-                                        : "Home"}
+                                <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                                    {positionEdit === 'MANAGER' || currentlyManager ? 'Homes (select all that apply)' : 'Home'}
                                 </label>
                                 {(() => {
-                                    const showManagerMulti =
-                                        positionEdit === "MANAGER" || currentlyManager;
+                                    const showManagerMulti = positionEdit === 'MANAGER' || currentlyManager;
                                     const homesUnion = (() => {
                                         const map = new Map<string, Home>();
                                         homes.forEach((h) => map.set(h.id, h));
                                         managerHomeIdsEdit.forEach((id) => {
                                             if (!map.has(id)) {
-                                                map.set(id, { id, name: "(out of scope)", company_id: "" });
+                                                map.set(id, { id, name: '(out of scope)', company_id: '' });
                                             }
                                         });
                                         return Array.from(map.values());
@@ -1296,14 +2686,13 @@ function PersonRow({
                                         />
                                     ) : (
                                         <select
-                                            className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                            className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                             value={homeId}
                                             onChange={(e) => setHomeId(e.target.value)}
                                             disabled={bankMode}
                                             aria-disabled={bankMode}
-                                            title={
-                                                bankMode ? "Home is locked when position is Bank" : undefined
-                                            }
+                                            title={bankMode ? 'Home is locked when position is Bank' : undefined}
                                         >
                                             <option value="">(No fixed home)</option>
                                             {homesUnion.map((h) => (
@@ -1315,24 +2704,25 @@ function PersonRow({
                                     );
                                 })()}
                                 {bankMode && (
-                                    <p className="text-[11px] text-gray-500 mt-1">
+                                    <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
                                         Position is <b>Bank</b>; home is not applicable.
                                     </p>
                                 )}
                             </div>
                         )}
                         <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                            <div className={`${canChangeAppRole ? "" : "opacity-60"}`}>
-                                <label className="block text-xs text-gray-600">
+                            <div className={`${canChangeAppRole ? '' : 'opacity-60'}`}>
+                                <label className="block text-xs" style={{ color: 'var(--ink)' }}>
                                     Role {viewerId === row.user_id && "(you can’t change your own role)"}
                                 </label>
                                 <select
-                                    className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                    className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={appRole}
                                     onChange={(e) => {
                                         const v = e.target.value as AppLevel;
                                         setAppRole(v);
-                                        setPositionEdit("");
+                                        setPositionEdit('');
                                         setCompanyPositionsEdit([]);
                                     }}
                                     disabled={!canChangeAppRole}
@@ -1345,16 +2735,19 @@ function PersonRow({
                                     ))}
                                 </select>
                                 {!isAdmin && canChangeAppRole && (
-                                    <p className="mt-1 text-[11px] text-gray-500">
+                                    <p className="mt-1 text-[11px]" style={{ color: 'var(--sub)' }}>
                                         You can assign roles up to <b>{LEVEL_LABELS[viewerCap]}</b>.
                                     </p>
                                 )}
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-600">Position</label>
-                                {appRole === "4_STAFF" && (
+                                <label className="block text-xs" style={{ color: 'var(--ink)' }}>
+                                    Position
+                                </label>
+                                {appRole === '4_STAFF' && (
                                     <select
-                                        className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                        className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                         value={positionEdit}
                                         onChange={(e) => setPositionEdit(e.target.value as PositionValue)}
                                     >
@@ -1364,9 +2757,10 @@ function PersonRow({
                                         <option value="TEAM_LEADER">Team Leader</option>
                                     </select>
                                 )}
-                                {appRole === "3_MANAGER" && (
+                                {appRole === '3_MANAGER' && (
                                     <select
-                                        className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                        className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                         value={positionEdit}
                                         onChange={(e) => setPositionEdit(e.target.value as PositionValue)}
                                     >
@@ -1375,15 +2769,18 @@ function PersonRow({
                                         <option value="DEPUTY_MANAGER">Deputy Manager</option>
                                     </select>
                                 )}
-                                {appRole === "2_COMPANY" && (
-                                    <div className="mt-1">
-                                        <div className="rounded-lg border p-2 text-sm bg-gray-50 text-gray-500">
-                                            Company positions are managed separately.
-                                        </div>
+                                {appRole === '2_COMPANY' && (
+                                    <div className="mt-1 rounded-md px-2 py-2 ring-1 text-sm"
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)', borderColor: 'var(--ring)' }}
+                                    >
+                                        Company positions are managed separately.
                                     </div>
                                 )}
-                                {appRole === "1_ADMIN" && (
-                                    <div className="mt-1 rounded-lg border p-2 text-sm bg-gray-50 text-gray-500">
+                                {appRole === '1_ADMIN' && (
+                                    <div
+                                        className="mt-1 rounded-md px-2 py-2 ring-1 text-sm"
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)', borderColor: 'var(--ring)' }}
+                                    >
                                         Admin has no position.
                                     </div>
                                 )}
@@ -1395,7 +2792,8 @@ function PersonRow({
             {!editing ? (
                 <button
                     onClick={handleEditClick}
-                    className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                    className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                 >
                     Edit
                 </button>
@@ -1403,25 +2801,27 @@ function PersonRow({
                 <div className="flex items-center gap-2">
                     <button
                         onClick={save}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                        className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         disabled={saving}
                     >
-                        {saving ? "Saving…" : "Save"}
+                        {saving ? 'Saving…' : 'Save'}
                     </button>
                     <button
                         onClick={() => {
                             setEditing(false);
-                            setName(row.full_name || "");
-                            setEmail("");
-                            setPassword("");
-                            setCompanyId("");
-                            setHomeId(row.home_id || "");
-                            setPositionEdit("");
+                            setName(row.full_name || '');
+                            setEmail('');
+                            setPassword('');
+                            setCompanyId('');
+                            setHomeId(row.home_id || '');
+                            setPositionEdit('');
                             setCompanyPositionsEdit([]);
-                            setAppRole("");
+                            setAppRole('');
                             setManagerHomeIdsEdit([]);
                         }}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                        className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                     >
                         Cancel
                     </button>
@@ -1430,7 +2830,6 @@ function PersonRow({
         </div>
     );
 }
-
 
 function MultiSelect({
     value,
@@ -1446,56 +2845,72 @@ function MultiSelect({
     };
     return (
         <div className="mt-1 flex flex-wrap gap-2">
-            {options.map((o) => (
-                <button
-                    key={o.value}
-                    type="button"
-                    className={`px-2 py-1 text-xs rounded border ${value.includes(o.value) ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "hover:bg-gray-50"
-                        }`}
-                    onClick={() => toggle(o.value)}
-                >
-                    {o.label}
-                </button>
-            ))}
+            {options.map((o) => {
+                const selected = value.includes(o.value);
+                return (
+                    <button
+                        key={o.value}
+                        type="button"
+                        className="px-2 py-1 text-xs rounded-md ring-1 transition"
+                        style={{
+                            background: 'var(--nav-item-bg)',
+                            borderColor: selected ? 'var(--ring-strong)' : 'var(--ring)',
+                            color: selected ? 'var(--brand-link)' : 'var(--ink)',
+                        }}
+                        onClick={() => toggle(o.value)}
+                    >
+                        {o.label}
+                    </button>
+                );
+            })}
         </div>
     );
 }
 
 function RoleChip({
     text,
-    tone = "default",
+    tone = 'default',
 }: {
     text: string;
-    tone?: "manager" | "staff" | "company" | "bank" | "admin" | "default";
+    tone?: 'manager' | 'staff' | 'company' | 'bank' | 'admin' | 'default';
 }) {
-    // subtle tone variants
-    const styles: Record<string, string> = {
-        manager: "bg-amber-50 text-amber-800 border-amber-200",
-        staff: "bg-indigo-50 text-indigo-800 border-indigo-200",
-        company: "bg-sky-50 text-sky-800 border-sky-200",
-        bank: "bg-emerald-50 text-emerald-800 border-emerald-200",
-        admin: "bg-rose-50 text-rose-800 border-rose-200",
-        default: "bg-gray-100 text-gray-700 border-gray-200",
+    // Light mode base + Orbit overrides
+    const toneMap: Record<
+        NonNullable<typeof tone>,
+        string
+    > = {
+        manager:
+            'bg-amber-50 text-amber-800 ring-amber-200 [data-orbit="1"]:bg-amber-500/10 [data-orbit="1"]:text-amber-200 [data-orbit="1"]:ring-amber-400/25',
+        staff:
+            'bg-indigo-50 text-indigo-800 ring-indigo-200 [data-orbit="1"]:bg-indigo-500/10 [data-orbit="1"]:text-indigo-200 [data-orbit="1"]:ring-indigo-400/25',
+        company:
+            'bg-sky-50 text-sky-800 ring-sky-200 [data-orbit="1"]:bg-sky-500/10 [data-orbit="1"]:text-sky-200 [data-orbit="1"]:ring-sky-400/25',
+        bank:
+            'bg-emerald-50 text-emerald-800 ring-emerald-200 [data-orbit="1"]:bg-emerald-500/10 [data-orbit="1"]:text-emerald-200 [data-orbit="1"]:ring-emerald-400/25',
+        admin:
+            'bg-rose-50 text-rose-800 ring-rose-200 [data-orbit="1"]:bg-rose-500/10 [data-orbit="1"]:text-rose-200 [data-orbit="1"]:ring-rose-400/25',
+        default:
+            'bg-gray-100 text-gray-700 ring-gray-200 [data-orbit="1"]:bg-white/5 [data-orbit="1"]:text-gray-200 [data-orbit="1"]:ring-white/20',
     };
+
     return (
         <span
-            className={`inline-block rounded-full border px-2.5 py-1 text-[11px] font-medium ${styles[tone] ?? styles.default}`}
+            className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${toneMap[tone] ?? toneMap.default}`}
         >
             {text}
         </span>
     );
 }
 
-
 /* =====================
    HOMES TAB
    ===================== */
 function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean }) {
     const [companies, setCompanies] = useState<Company[]>([]);
-    const [companyId, setCompanyId] = useState<string>("");
-    const [companyName, setCompanyName] = useState<string>("");
+    const [companyId, setCompanyId] = useState<string>('');
+    const [companyName, setCompanyName] = useState<string>('');
     const [homes, setHomes] = useState<Home[]>([]);
-    const [name, setName] = useState("");
+    const [name, setName] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -1505,31 +2920,32 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
             if (!me) return;
 
             if (isAdmin) {
-                const { data: co } = await supabase.from("companies").select("id,name").order("name");
+                const { data: co } = await supabase.from('companies').select('id,name').order('name');
                 setCompanies(co ?? []);
                 if (!companyId && co?.[0]?.id) setCompanyId(co[0].id);
             } else if (isCompany) {
                 const { data: cm } = await supabase
-                    .from("company_memberships")
-                    .select("company_id")
-                    .eq("user_id", me)
+                    .from('company_memberships')
+                    .select('company_id')
+                    .eq('user_id', me)
                     .maybeSingle();
 
-                const cid = cm?.company_id || "";
+                const cid = (cm as { company_id?: string } | null)?.company_id || '';
                 setCompanyId(cid);
 
                 if (cid) {
                     const { data: co } = await supabase
-                        .from("companies")
-                        .select("name")
-                        .eq("id", cid)
+                        .from('companies')
+                        .select('name')
+                        .eq('id', cid)
                         .maybeSingle();
-                    setCompanyName(co?.name || "");
+                    setCompanyName((co as { name?: string } | null)?.name || '');
                 } else {
-                    setCompanyName("");
+                    setCompanyName('');
                 }
             }
         })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin, isCompany, companyId]);
 
     useEffect(() => {
@@ -1539,11 +2955,11 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
                 return;
             }
             const { data: list } = await supabase
-                .from("homes")
-                .select("id,name,company_id")
-                .eq("company_id", companyId)
-                .order("name");
-            setHomes(list ?? []);
+                .from('homes')
+                .select('id,name,company_id')
+                .eq('company_id', companyId)
+                .order('name');
+            setHomes((list as Home[]) ?? []);
         })();
     }, [companyId]);
 
@@ -1552,23 +2968,24 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
         if (!companyId || !name.trim()) return;
         setSaving(true);
         try {
-            const res = await authFetch("/api/admin/homes", {
-                method: "POST",
+            const res = await authFetch('/api/admin/homes', {
+                method: 'POST',
                 body: JSON.stringify({ company_id: companyId, name: name.trim() }),
             });
             if (!res.ok) {
                 const j = await res.json().catch(() => ({}));
-                throw new Error(j?.error || "Failed to create home");
+                throw new Error((j as { error?: string })?.error || 'Failed to create home');
             }
-            setName("");
+            setName('');
             const { data: list } = await supabase
-                .from("homes")
-                .select("id,name,company_id")
-                .eq("company_id", companyId)
-                .order("name");
-            setHomes(list ?? []);
+                .from('homes')
+                .select('id,name,company_id')
+                .eq('company_id', companyId)
+                .order('name');
+            setHomes((list as Home[]) ?? []);
         } catch (e) {
-            const msg = e instanceof Error ? e.message : "Failed to create home";
+            const msg = e instanceof Error ? e.message : 'Failed to create home';
+            // eslint-disable-next-line no-alert
             alert(msg);
         } finally {
             setSaving(false);
@@ -1576,33 +2993,42 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
     }
 
     async function renameHome(id: string, newName: string) {
-        const res = await authFetch("/api/admin/homes", {
-            method: "PATCH",
+        const res = await authFetch('/api/admin/homes', {
+            method: 'PATCH',
             body: JSON.stringify({ home_id: id, name: newName.trim() }),
         });
         if (!res.ok) {
             const j = await res.json().catch(() => ({}));
-            alert(j?.error || "Failed to rename home");
+            // eslint-disable-next-line no-alert
+            alert((j as { error?: string })?.error || 'Failed to rename home');
             return;
         }
         const { data: list } = await supabase
-            .from("homes")
-            .select("id,name,company_id")
-            .eq("company_id", companyId)
-            .order("name");
-        setHomes(list ?? []);
+            .from('homes')
+            .select('id,name,company_id')
+            .eq('company_id', companyId)
+            .order('name');
+        setHomes((list as Home[]) ?? []);
     }
 
     return (
         <div className="space-y-4">
-            <section className="rounded-2xl border border-gray-300 bg-white shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-900">Create home</h2>
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                    Create home
+                </h2>
                 <form onSubmit={addHome} className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                        <label className="block text-sm">Company</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Company
+                        </label>
                         {isAdmin ? (
                             <select
-                                className="mt-1 w-full rounded-lg border p-2 text-sm"
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={companyId}
                                 onChange={(e) => setCompanyId(e.target.value)}
                             >
@@ -1614,54 +3040,70 @@ function HomesTab({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boolean
                             </select>
                         ) : (
                             <input
-                                className="mt-1 w-full rounded-lg border p-2 text-sm bg-gray-50"
-                                value={companyName || "(Your company)"}
+                                className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={companyName || '(Your company)'}
                                 readOnly
                             />
                         )}
                     </div>
                     <div>
-                        <label className="block text-sm">Home name</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Home name
+                        </label>
                         <input
-                            className="mt-1 w-full rounded-lg border p-2 text-sm"
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                         />
                     </div>
                     <div className="self-end">
-                        <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" disabled={saving}>
-                            {saving ? "Creating…" : "Create home"}
+                        <button
+                            className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                            disabled={saving}
+                        >
+                            {saving ? 'Creating…' : 'Create home'}
                         </button>
                     </div>
                 </form>
             </section>
 
-            <section className="rounded-2xl border border-gray-300 bg-white shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-900">Homes</h2>
-                <ul className="mt-3 divide-y">
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                    Homes
+                </h2>
+                <ul className="mt-3 divide-y" style={{ borderColor: 'var(--ring)' }}>
                     {homes.map((h) => (
                         <EditableRow key={h.id} label={h.name} onSave={(val) => renameHome(h.id, val)} />
                     ))}
-                    {!homes.length && <li className="py-3 text-sm text-gray-500">No homes yet.</li>}
+                    {!homes.length && (
+                        <li className="py-3 text-sm" style={{ color: 'var(--sub)' }}>
+                            No homes yet.
+                        </li>
+                    )}
                 </ul>
             </section>
         </div>
     );
 }
 
-
 /* =====================
    COMPANIES TAB (Admin)
    ===================== */
 function CompaniesTab() {
     const [companies, setCompanies] = useState<Company[]>([]);
-    const [name, setName] = useState("");
+    const [name, setName] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         (async () => {
-            const { data: co } = await supabase.from("companies").select("id,name").order("name");
-            setCompanies(co ?? []);
+            const { data: co } = await supabase.from('companies').select('id,name').order('name');
+            setCompanies((co as Company[]) ?? []);
         })();
     }, []);
 
@@ -1670,19 +3112,20 @@ function CompaniesTab() {
         if (!name.trim()) return;
         setSaving(true);
         try {
-            const res = await authFetch("/api/admin/companies", {
-                method: "POST",
+            const res = await authFetch('/api/admin/companies', {
+                method: 'POST',
                 body: JSON.stringify({ name: name.trim() }),
             });
             if (!res.ok) {
                 const j = await res.json().catch(() => ({}));
-                throw new Error(j?.error || "Failed to create company");
+                throw new Error((j as { error?: string })?.error || 'Failed to create company');
             }
-            setName("");
-            const { data: co } = await supabase.from("companies").select("id,name").order("name");
-            setCompanies(co ?? []);
+            setName('');
+            const { data: co } = await supabase.from('companies').select('id,name').order('name');
+            setCompanies((co as Company[]) ?? []);
         } catch (e) {
-            const msg = e instanceof Error ? e.message : "Failed to create company";
+            const msg = e instanceof Error ? e.message : 'Failed to create company';
+            // eslint-disable-next-line no-alert
             alert(msg);
         } finally {
             setSaving(false);
@@ -1690,53 +3133,74 @@ function CompaniesTab() {
     }
 
     async function renameCompany(id: string, newName: string) {
-        const res = await authFetch("/api/admin/companies", {
-            method: "PATCH",
+        const res = await authFetch('/api/admin/companies', {
+            method: 'PATCH',
             body: JSON.stringify({ company_id: id, name: newName.trim() }),
         });
         if (!res.ok) {
             const j = await res.json().catch(() => ({}));
-            alert(j?.error || "Failed to rename company");
+            // eslint-disable-next-line no-alert
+            alert((j as { error?: string })?.error || 'Failed to rename company');
             return;
         }
-        const { data: co } = await supabase.from("companies").select("id,name").order("name");
-        setCompanies(co ?? []);
+        const { data: co } = await supabase.from('companies').select('id,name').order('name');
+        setCompanies((co as Company[]) ?? []);
     }
 
     return (
         <div className="space-y-4">
-            <section className="rounded-2xl border border-gray-300 bg-white shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-900">Create company</h2>
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                    Create company
+                </h2>
                 <form onSubmit={addCompany} className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="md:col-span-2">
-                        <label className="block text-sm">Company name</label>
+                        <label className="block text-sm" style={{ color: 'var(--ink)' }}>
+                            Company name
+                        </label>
                         <input
-                            className="mt-1 w-full rounded-lg border p-2 text-sm"
+                            className="mt-1 w-full rounded-md px-2 py-2 ring-1 text-sm"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                         />
                     </div>
                     <div className="self-end">
-                        <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50" disabled={saving}>
-                            {saving ? "Creating…" : "Create company"}
+                        <button
+                            className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                            disabled={saving}
+                        >
+                            {saving ? 'Creating…' : 'Create company'}
                         </button>
                     </div>
                 </form>
             </section>
 
-            <section className="rounded-2xl border border-gray-300 bg-white shadow-sm p-4">
-                <h2 className="text-sm font-semibold text-gray-900">Companies</h2>
-                <ul className="mt-3 divide-y">
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                    Companies
+                </h2>
+                <ul className="mt-3 divide-y" style={{ borderColor: 'var(--ring)' }}>
                     {companies.map((c) => (
                         <EditableRow key={c.id} label={c.name} onSave={(val) => renameCompany(c.id, val)} />
                     ))}
-                    {!companies.length && <li className="py-3 text-sm text-gray-500">No companies yet.</li>}
+                    {!companies.length && (
+                        <li className="py-3 text-sm" style={{ color: 'var(--sub)' }}>
+                            No companies yet.
+                        </li>
+                    )}
                 </ul>
             </section>
         </div>
     );
 }
-
 
 /* =====================
    Small editable row
@@ -1759,29 +3223,41 @@ function EditableRow({ label, onSave }: { label: string; onSave: (v: string) => 
             <div className="flex-1 min-w-0">
                 {edit ? (
                     <input
-                        className="w-full rounded-lg border p-2 text-sm"
+                        className="w-full rounded-md px-2 py-2 ring-1 text-sm"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                         value={val}
                         onChange={(e) => setVal(e.target.value)}
                     />
                 ) : (
-                    <div className="font-medium text-gray-900">{label}</div>
+                    <div className="font-medium" style={{ color: 'var(--ink)' }}>
+                        {label}
+                    </div>
                 )}
             </div>
             {edit ? (
                 <div className="flex items-center gap-2">
                     <button
                         onClick={save}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                        className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         disabled={saving}
                     >
-                        {saving ? "Saving…" : "Save"}
+                        {saving ? 'Saving…' : 'Save'}
                     </button>
-                    <button onClick={() => setEdit(false)} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">
+                    <button
+                        onClick={() => setEdit(false)}
+                        className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                    >
                         Cancel
                     </button>
                 </div>
             ) : (
-                <button onClick={() => setEdit(true)} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">
+                <button
+                    onClick={() => setEdit(true)}
+                    className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                >
                     Rename
                 </button>
             )}

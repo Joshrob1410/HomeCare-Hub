@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel } from '@/supabase/roles';
 
+/* ========= Theme ========= */
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
+
 /* ========= Types ========= */
 type Level = '1_ADMIN' | '2_COMPANY' | '3_MANAGER' | '4_STAFF';
 
@@ -14,24 +18,24 @@ type Course = {
     company_id: string;
     name: string;
     refresher_years: number | null;
-    training_type: string;          // keep as string to match DB values
-    mandatory: boolean;             // global mandatory (Everyone)
+    training_type: string; // keep as string to match DB values
+    mandatory: boolean; // global mandatory (Everyone)
     mandatory_dsl?: boolean | null; // true when targets (specific people) exist ➜ shows "Conditional"
     due_soon_days: number;
     link?: string | null;
 };
 
 type RecordV = {
-    id: string;                      // real id or synthetic "assignment:user"
+    id: string; // real id or synthetic "assignment:user"
     user_id: string;
     course_id: string;
-    date_completed: string | null;   // nullable for pending rows (assignments)
+    date_completed: string | null; // nullable for pending rows (assignments)
     certificate_path: string | null;
     company_id: string;
     course_name: string;
     refresher_years: number | null;
     training_type: string;
-    mandatory: boolean;              // legacy global (from view)
+    mandatory: boolean; // legacy global (from view)
     due_soon_days: number;
     next_due_date: string | null;
     status: 'UP_TO_DATE' | 'DUE_SOON' | 'OVERDUE';
@@ -65,45 +69,104 @@ export default function TrainingPage() {
     }, [showTeam, showSet, showCourses, tab]);
 
     return (
-        <div className="p-6 space-y-6">
-            <h1 className="text-2xl font-semibold">Training</h1>
+        <div className="p-6 space-y-6" style={{ color: 'var(--ink)' }}>
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--ink)' }}>
+                Training
+            </h1>
 
-            {/* Tabs */}
-            <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
-                <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>My Training</TabBtn>
-                {showTeam && <TabBtn active={tab === 'TEAM'} onClick={() => setTab('TEAM')}>Team Training</TabBtn>}
-                {showSet && <TabBtn active={tab === 'SET'} onClick={() => setTab('SET')}>Set Training</TabBtn>}
-                {showCourses && <TabBtn active={tab === 'COURSES'} onClick={() => setTab('COURSES')}>Course Settings</TabBtn>}
+            {/* Tabs (match payslips) */}
+            <div className="flex gap-2">
+                <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>
+                    My Training
+                </TabBtn>
+                {showTeam && (
+                    <TabBtn active={tab === 'TEAM'} onClick={() => setTab('TEAM')}>
+                        Team Training
+                    </TabBtn>
+                )}
+                {showSet && (
+                    <TabBtn active={tab === 'SET'} onClick={() => setTab('SET')}>
+                        Set Training
+                    </TabBtn>
+                )}
+                {showCourses && (
+                    <TabBtn
+                        active={tab === 'COURSES'}
+                        onClick={() => setTab('COURSES')}
+                    >
+                        Course Settings
+                    </TabBtn>
+                )}
             </div>
 
             {tab === 'MY' && <MyTraining />}
-            {tab === 'TEAM' && showTeam && <TeamTraining isAdmin={isAdmin} isCompany={isCompany} />}
-            {tab === 'SET' && showSet && <SetTraining isAdmin={isAdmin} isCompany={isCompany} isManager={isManager} />}
+            {tab === 'TEAM' && showTeam && (
+                <TeamTraining isAdmin={isAdmin} isCompany={isCompany} />
+            )}
+            {tab === 'SET' && showSet && (
+                <SetTraining
+                    isAdmin={isAdmin}
+                    isCompany={isCompany}
+                    isManager={isManager}
+                />
+            )}
             {tab === 'COURSES' && showCourses && <CourseSettings isAdmin={isAdmin} />}
+
+            {/* --- Orbit-only native control fixes (scoped) --- */}
+            <style jsx global>{`
+        [data-orbit='1'] select,
+        [data-orbit='1'] input[type='number'],
+        [data-orbit='1'] input[type='date'] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit='1'] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit='1'] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit='1'] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
 
 function TabBtn(
-    { active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
+    {
+        active,
+        children,
+        ...props
+    }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean },
 ) {
+    const style = active
+        ? {
+            background: BRAND_GRADIENT,
+            color: '#FFFFFF',
+            borderColor: 'var(--ring-strong)',
+        }
+        : {
+            background: 'var(--nav-item-bg)',
+            color: 'var(--ink)',
+            borderColor: 'var(--ring)',
+        };
     return (
         <button
-            className={[
-                "px-4 py-2 text-sm",
-                // active = indigo pill
-                active
-                    ? "bg-indigo-50 text-indigo-700"
-                    // inactive = darker text on mobile, lighter on ≥sm
-                    : "text-gray-800 sm:text-gray-700 hover:bg-gray-50",
-            ].join(" ")}
+            className="px-4 py-2 text-sm rounded-md ring-1 transition"
+            style={style}
             {...props}
         >
             {children}
         </button>
     );
 }
-
 
 /* ========= Small UI atoms ========= */
 
@@ -123,9 +186,9 @@ function CoursePicker({
 
     const items = useMemo(() => {
         const q = value.trim().toLowerCase();
-        const base = q ? courses.filter(c => c.name.toLowerCase().includes(q)) : courses;
+        const base = q ? courses.filter((c) => c.name.toLowerCase().includes(q)) : courses;
         const seen = new Set<string>();
-        const cleaned = base.filter(c => {
+        const cleaned = base.filter((c) => {
             const k = c.name.toLowerCase();
             if (seen.has(k)) return false;
             seen.add(k);
@@ -137,7 +200,8 @@ function CoursePicker({
     useEffect(() => {
         if (!open) setHighlight(0);
         else if (highlight >= items.length) setHighlight(items.length - 1);
-    }, [open, items.length]); // eslint-disable-line
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, items.length]);
 
     function commit(val: string) {
         onChange(val);
@@ -147,19 +211,40 @@ function CoursePicker({
     return (
         <div className="relative">
             <input
-                className="w-full border rounded-lg px-3 py-2"
+                className="w-full rounded-lg px-3 py-2 ring-1"
+                style={{
+                    background: 'var(--nav-item-bg)',
+                    color: 'var(--ink)',
+                    borderColor: 'var(--ring)',
+                }}
                 placeholder={placeholder}
                 value={value}
-                onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+                onChange={(e) => {
+                    onChange(e.target.value);
+                    setOpen(true);
+                }}
                 onFocus={() => setOpen(true)}
-                onBlur={() => { requestAnimationFrame(() => setOpen(false)); }}
+                onBlur={() => {
+                    requestAnimationFrame(() => setOpen(false));
+                }}
                 onKeyDown={(e) => {
                     if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) setOpen(true);
                     if (!open) return;
-                    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, items.length - 1)); }
-                    if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
-                    if (e.key === 'Enter') { e.preventDefault(); if (items[highlight]) commit(items[highlight].name); }
-                    if (e.key === 'Escape') { setOpen(false); }
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setHighlight((h) => Math.min(h + 1, items.length - 1));
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setHighlight((h) => Math.max(h - 1, 0));
+                    }
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (items[highlight]) commit(items[highlight].name);
+                    }
+                    if (e.key === 'Escape') {
+                        setOpen(false);
+                    }
                 }}
                 aria-autocomplete="list"
                 aria-expanded={open}
@@ -170,23 +255,34 @@ function CoursePicker({
                 <div
                     id="course-combobox-list"
                     role="listbox"
-                    className="absolute z-50 mt-1 w-full rounded-xl border bg-white shadow-lg ring-1 ring-gray-200 max-h-64 overflow-auto"
+                    className="absolute z-50 mt-1 w-full rounded-xl ring-1 shadow-lg max-h-64 overflow-auto"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                 >
                     {items.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500">No matches</div>
-                    ) : items.map((c, i) => (
-                        <button
-                            key={c.id}
-                            role="option"
-                            aria-selected={i === highlight}
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => commit(c.name)}
-                            className={`w-full text-left px-3 py-2 text-sm ${i === highlight ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
-                        >
-                            <div className="font-medium text-gray-900">{c.name}</div>
-                        </button>
-                    ))}
+                        <div className="px-3 py-2 text-sm" style={{ color: 'var(--sub)' }}>
+                            No matches
+                        </div>
+                    ) : (
+                        items.map((c, i) => (
+                            <button
+                                key={c.id}
+                                role="option"
+                                aria-selected={i === highlight}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => commit(c.name)}
+                                className="w-full text-left px-3 py-2 text-sm"
+                                style={{
+                                    background: i === highlight ? 'var(--nav-item-bg-hover)' : 'transparent',
+                                    color: 'var(--ink)',
+                                }}
+                            >
+                                <div className="font-medium" style={{ color: 'var(--ink)' }}>
+                                    {c.name}
+                                </div>
+                            </button>
+                        ))
+                    )}
                 </div>
             )}
         </div>
@@ -197,7 +293,7 @@ function CertificateCell({ path }: { path?: string | null }) {
     const [signing, setSigning] = useState(false);
     const [url, setUrl] = useState<string | null>(null);
 
-    if (!path) return <span className="text-gray-500">—</span>;
+    if (!path) return <span style={{ color: 'var(--sub)' }}>—</span>;
 
     async function getUrl() {
         try {
@@ -208,8 +304,7 @@ function CertificateCell({ path }: { path?: string | null }) {
                 throw new Error('Could not open certificate');
             }
 
-            const { data, error } = await supabase
-                .storage
+            const { data, error } = await supabase.storage
                 .from('certificates')
                 .createSignedUrl(path, 60 * 10);
 
@@ -220,6 +315,7 @@ function CertificateCell({ path }: { path?: string | null }) {
                 e instanceof Error && typeof e.message === 'string'
                     ? e.message
                     : 'Could not open certificate';
+            // eslint-disable-next-line no-alert
             alert(message);
         } finally {
             setSigning(false);
@@ -231,8 +327,11 @@ function CertificateCell({ path }: { path?: string | null }) {
             href={url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 underline text-indigo-700"
-            onClick={() => { /* keep link */ }}
+            className="underline"
+            style={{ color: 'var(--brand-link)' }}
+            onClick={() => {
+                /* keep link */
+            }}
         >
             View
         </a>
@@ -241,7 +340,12 @@ function CertificateCell({ path }: { path?: string | null }) {
             type="button"
             onClick={getUrl}
             disabled={signing}
-            className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+            className="rounded-md px-2 py-1 text-xs ring-1 disabled:opacity-60 transition"
+            style={{
+                background: 'var(--nav-item-bg)',
+                color: 'var(--ink)',
+                borderColor: 'var(--ring)',
+            }}
         >
             {signing ? 'Loading…' : 'View'}
         </button>
@@ -263,13 +367,13 @@ function MyTraining() {
     // user already has (record or assignment)
     const ownedCourseIds = useMemo(() => {
         const s = new Set<string>();
-        records.forEach(r => s.add(r.course_id));
+        records.forEach((r) => s.add(r.course_id));
         return s;
     }, [records]);
 
     // only show courses the user doesn't already have
     const availableCourses = useMemo(() => {
-        return courses.filter(c => !ownedCourseIds.has(c.id));
+        return courses.filter((c) => !ownedCourseIds.has(c.id));
     }, [courses, ownedCourseIds]);
 
     const [loading, setLoading] = useState(true);
@@ -283,30 +387,51 @@ function MyTraining() {
 
     const [confirmDelete, setConfirmDelete] = useState(false);
 
-
     useEffect(() => {
         (async () => {
-            setLoading(true); setErr(null);
+            setLoading(true);
+            setErr(null);
 
             const { data: uRes, error: uErr } = await supabase.auth.getUser();
             if (uErr || !uRes?.user?.id) {
-                setErr('Not signed in'); setLoading(false); return;
+                setErr('Not signed in');
+                setLoading(false);
+                return;
             }
             const me = uRes.user.id;
             setUid(me);
 
             // Determine company id
             let cid = '';
-            const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', me).limit(1).maybeSingle();
+            const cm = await supabase
+                .from('company_memberships')
+                .select('company_id')
+                .eq('user_id', me)
+                .limit(1)
+                .maybeSingle();
             if (cm.data?.company_id) {
                 cid = cm.data.company_id;
             } else {
-                const hm = await supabase.from('home_memberships').select('home_id').eq('user_id', me).limit(1).maybeSingle();
+                const hm = await supabase
+                    .from('home_memberships')
+                    .select('home_id')
+                    .eq('user_id', me)
+                    .limit(1)
+                    .maybeSingle();
                 if (hm.data?.home_id) {
-                    const h = await supabase.from('homes').select('company_id').eq('id', hm.data.home_id).single();
+                    const h = await supabase
+                        .from('homes')
+                        .select('company_id')
+                        .eq('id', hm.data.home_id)
+                        .single();
                     if (h.data?.company_id) cid = h.data.company_id;
                 } else {
-                    const bm = await supabase.from('bank_memberships').select('company_id').eq('user_id', me).limit(1).maybeSingle();
+                    const bm = await supabase
+                        .from('bank_memberships')
+                        .select('company_id')
+                        .eq('user_id', me)
+                        .limit(1)
+                        .maybeSingle();
                     if (bm.data?.company_id) cid = bm.data.company_id;
                 }
             }
@@ -317,14 +442,12 @@ function MyTraining() {
             const c = cid ? await cq.eq('company_id', cid) : await cq;
             if (c.error) setErr(c.error.message);
             else {
-                const list: Course[] = Array.isArray(c.data)
-                    ? (c.data as Course[])
-                    : [];
+                const list: Course[] = Array.isArray(c.data) ? (c.data as Course[]) : [];
                 setCourses(list);
 
                 // mark which courses have any individual targets
                 if (list.length) {
-                    const ids = list.map(x => x.id);
+                    const ids = list.map((x) => x.id);
                     const t = await supabase
                         .from('course_mandatory_targets')
                         .select('course_id')
@@ -341,7 +464,6 @@ function MyTraining() {
                 }
             }
 
-
             // My records
             const r = await supabase
                 .from('training_records_v')
@@ -351,9 +473,7 @@ function MyTraining() {
             if (r.error) {
                 setErr(r.error.message);
             } else {
-                setRecords(
-                    (Array.isArray(r.data) ? r.data : []) as typeof records
-                );
+                setRecords((Array.isArray(r.data) ? r.data : []) as typeof records);
             }
 
             // Targeted mandatory (conditional) that applies to ME
@@ -365,11 +485,12 @@ function MyTraining() {
                 const ids = new Set<string>(
                     Array.isArray(t.data)
                         ? t.data
-                            .filter((row): row is { course_id: string } =>
-                                typeof (row as { course_id?: unknown }).course_id === 'string'
+                            .filter(
+                                (row): row is { course_id: string } =>
+                                    typeof (row as { course_id?: unknown }).course_id === 'string',
                             )
                             .map((row) => row.course_id)
-                        : []
+                        : [],
                 );
                 setMyMandatoryCourseIds(ids);
             }
@@ -380,39 +501,40 @@ function MyTraining() {
 
     const courseMap = useMemo(() => {
         const m = new Map<string, Course>();
-        availableCourses.forEach(c => m.set(c.name.toLowerCase(), c));
+        availableCourses.forEach((c) => m.set(c.name.toLowerCase(), c));
         return m;
     }, [availableCourses]);
 
     // map by ID for table rows
     const courseById = useMemo(() => {
         const m = new Map<string, Course>();
-        courses.forEach(c => m.set(c.id, c));
+        courses.forEach((c) => m.set(c.id, c));
         return m;
     }, [courses]);
 
     // pending assignment ids in my view
     const pendingAssignedCourseIds = useMemo(() => {
         const s = new Set<string>();
-        records.forEach(r => { if (!r.date_completed) s.add(r.course_id); });
+        records.forEach((r) => {
+            if (!r.date_completed) s.add(r.course_id);
+        });
         return s;
     }, [records]);
 
     // required courses for ME (global or targeted only)
     const requiredCourseIds = useMemo(() => {
         const s = new Set<string>();
-        courses.forEach(c => {
+        courses.forEach((c) => {
             if (c.mandatory || myMandatoryCourseIds.has(c.id)) s.add(c.id);
         });
         return s;
     }, [courses, myMandatoryCourseIds]);
 
-
     const mandatoryTotal = requiredCourseIds.size;
 
     const mandatoryCompleted = useMemo(() => {
         const done = new Set<string>();
-        records.forEach(r => {
+        records.forEach((r) => {
             if (requiredCourseIds.has(r.course_id) && r.status === 'UP_TO_DATE') {
                 done.add(r.course_id);
             }
@@ -434,7 +556,8 @@ function MyTraining() {
 
     // Add a training record for the selected course
     async function onAddRecord(e: React.FormEvent) {
-        e.preventDefault(); setErr(null);
+        e.preventDefault();
+        setErr(null);
         try {
             if (!uid) throw new Error('Not signed in.');
             if (!companyId) throw new Error('Could not determine your company.');
@@ -459,70 +582,112 @@ function MyTraining() {
                 const path = `${recordId}/${Date.now()}-${safe}`;
                 const up = await supabase.storage.from('certificates').upload(path, file, { upsert: true });
                 if (up.error) throw up.error;
-                const upd = await supabase.from('training_records').update({ certificate_path: path }).eq('id', recordId);
+                const upd = await supabase
+                    .from('training_records')
+                    .update({ certificate_path: path })
+                    .eq('id', recordId);
                 if (upd.error) throw upd.error;
             }
 
             // 3) stamp assignment complete if this fulfilled one
-            const { error: completeErr } = await supabase.rpc('assignment_complete_for_record', { p_record_id: recordId });
+            const { error: completeErr } = await supabase.rpc('assignment_complete_for_record', {
+                p_record_id: recordId,
+            });
             if (completeErr) console.warn('assignment_complete_for_record:', completeErr.message);
 
             // reset + refresh
-            setCourseName(''); setDateCompleted(''); setFile(null);
+            setCourseName('');
+            setDateCompleted('');
+            setFile(null);
             await refreshList();
         } catch (e) {
             const message =
-                e instanceof Error && typeof e.message === 'string'
-                    ? e.message
-                    : 'Failed to add record';
+                e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to add record';
             setErr(message);
         } finally {
             setSaving(false);
         }
     }
 
-    if (loading) return <p>Loading…</p>;
+    if (loading) return <p style={{ color: 'var(--sub)' }}>Loading…</p>;
 
     return (
         <div className="space-y-6">
             {/* Add form + Summary */}
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Left: Add record */}
-                <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-3">
-                    <h2 className="text-base font-semibold">Add training</h2>
+                <div
+                    className="rounded-lg p-4 space-y-3 ring-1"
+                    style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+                >
+                    <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                        Add training
+                    </h2>
                     <form onSubmit={onAddRecord} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="sm:col-span-2">
-                            <label className="block text-sm mb-1">Course</label>
+                            <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                                Course
+                            </label>
                             <CoursePicker
                                 courses={availableCourses.map(({ id, name }) => ({ id, name }))}
                                 value={courseName}
                                 onChange={setCourseName}
                                 placeholder="Search courses…"
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs mt-1" style={{ color: 'var(--sub)' }}>
                                 {companyId ? 'Courses for your company.' : 'Courses you can access.'}
                             </p>
                         </div>
                         <div>
-                            <label className="block text-sm mb-1">Date completed</label>
+                            <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                                Date completed
+                            </label>
                             <input
                                 type="date"
-                                className="w-full border rounded-lg px-3 py-2"
+                                className="w-full rounded-lg px-3 py-2 ring-1"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
                                 value={dateCompleted}
-                                onChange={e => setDateCompleted(e.target.value)}
+                                onChange={(e) => setDateCompleted(e.target.value)}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-sm mb-1">Certificate (optional)</label>
-                            <input type="file" className="w-full border rounded-lg px-3 py-2" onChange={e => setFile(e.target.files?.[0] || null)} />
+                            <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                                Certificate (optional)
+                            </label>
+                            <input
+                                type="file"
+                                className="w-full rounded-lg px-3 py-2 ring-1"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
+                                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                            />
                         </div>
                         <div className="sm:col-span-2">
-                            <button disabled={saving} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">
+                            <button
+                                disabled={saving}
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-50"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
+                            >
                                 {saving ? 'Saving…' : 'Submit'}
                             </button>
                         </div>
-                        {err && <p className="sm:col-span-2 text-sm text-rose-600">{err}</p>}
+                        {err && (
+                            <p className="sm:col-span-2 text-sm" style={{ color: '#dc2626' }}>
+                                {err}
+                            </p>
+                        )}
                     </form>
                 </div>
 
@@ -536,14 +701,24 @@ function MyTraining() {
 
             {/* List (fixed height, scroll) */}
             <section className="space-y-2">
-                <h2 className="text-base font-semibold">My records</h2>
+                <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                    My records
+                </h2>
                 {records.length === 0 ? (
-                    <p className="text-sm text-gray-600">No training logged yet.</p>
+                    <p className="text-sm" style={{ color: 'var(--sub)' }}>
+                        No training logged yet.
+                    </p>
                 ) : (
-                    <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50">
+                    <div
+                        className="rounded-lg ring-1"
+                        style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+                    >
                         <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
                             <table className="min-w-full text-sm">
-                                <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
+                                <thead
+                                    className="sticky top-0 z-10"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                                >
                                     <tr>
                                         <th className="text-left p-2">Course</th>
                                         <th className="text-left p-2">Completed</th>
@@ -558,12 +733,17 @@ function MyTraining() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {records.map(r => {
+                                    {records.map((r) => {
                                         const course = courseById.get(r.course_id);
                                         const mandatoryLabel = course
-                                            ? (course.mandatory ? 'Yes' : (coursesWithTargets.has(course.id) ? 'Conditional' : 'No'))
-                                            : (r.mandatory ? 'Yes' : 'No');
-
+                                            ? course.mandatory
+                                                ? 'Yes'
+                                                : coursesWithTargets.has(course.id)
+                                                    ? 'Conditional'
+                                                    : 'No'
+                                            : r.mandatory
+                                                ? 'Yes'
+                                                : 'No';
 
                                         return (
                                             <MyRow
@@ -604,12 +784,19 @@ function MyRow({
 
     const isPending = !r.date_completed; // synthetic assignment rows
 
-    const badgeCls =
+    // Light-mode base + Orbit overrides (like payslips banners)
+    const badgeBase =
         r.status === 'OVERDUE'
             ? 'bg-rose-50 text-rose-700 ring-rose-100'
             : r.status === 'DUE_SOON'
                 ? 'bg-amber-50 text-amber-700 ring-amber-100'
                 : 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+    const badgeOrbit =
+        r.status === 'OVERDUE'
+            ? '[data-orbit="1"]:bg-rose-500/10 [data-orbit="1"]:text-rose-200 [data-orbit="1"]:ring-rose-400/25'
+            : r.status === 'DUE_SOON'
+                ? '[data-orbit="1"]:bg-amber-500/10 [data-orbit="1"]:text-amber-200 [data-orbit="1"]:ring-amber-400/25'
+                : '[data-orbit="1"]:bg-emerald-500/10 [data-orbit="1"]:text-emerald-200 [data-orbit="1"]:ring-emerald-400/25';
 
     async function downloadCert() {
         if (!r.certificate_path) return;
@@ -646,18 +833,26 @@ function MyRow({
                     const path = `${recordId}/${Date.now()}-${safe}`;
                     const up = await supabase.storage.from('certificates').upload(path, file, { upsert: true });
                     if (up.error) throw up.error;
-                    const upd = await supabase.from('training_records').update({ certificate_path: path }).eq('id', recordId);
+                    const upd = await supabase
+                        .from('training_records')
+                        .update({ certificate_path: path })
+                        .eq('id', recordId);
                     if (upd.error) throw upd.error;
                 }
 
-                const { error: completeErr } = await supabase.rpc('assignment_complete_for_record', { p_record_id: recordId });
+                const { error: completeErr } = await supabase.rpc('assignment_complete_for_record', {
+                    p_record_id: recordId,
+                });
                 if (completeErr) console.warn('assignment_complete_for_record:', completeErr.message);
 
                 setEditing(false);
                 await refresh();
             } else {
                 // update existing record
-                const upd = await supabase.from('training_records').update({ date_completed: date }).eq('id', r.id);
+                const upd = await supabase
+                    .from('training_records')
+                    .update({ date_completed: date })
+                    .eq('id', r.id);
                 if (upd.error) throw upd.error;
 
                 if (file) {
@@ -665,7 +860,10 @@ function MyRow({
                     const path = `${r.id}/${Date.now()}-${safe}`;
                     const up = await supabase.storage.from('certificates').upload(path, file, { upsert: true });
                     if (up.error) throw up.error;
-                    const upd2 = await supabase.from('training_records').update({ certificate_path: path }).eq('id', r.id);
+                    const upd2 = await supabase
+                        .from('training_records')
+                        .update({ certificate_path: path })
+                        .eq('id', r.id);
                     if (upd2.error) throw upd2.error;
                 }
 
@@ -674,9 +872,8 @@ function MyRow({
             }
         } catch (e) {
             const message =
-                e instanceof Error && typeof e.message === 'string'
-                    ? e.message
-                    : 'Failed to save';
+                e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to save';
+            // eslint-disable-next-line no-alert
             alert(message);
         } finally {
             setBusy(false);
@@ -693,38 +890,58 @@ function MyRow({
             await refresh();
         } catch (e) {
             const message =
-                e instanceof Error && typeof e.message === 'string'
-                    ? e.message
-                    : 'Failed to delete';
+                e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to delete';
+            // eslint-disable-next-line no-alert
             alert(message);
         } finally {
             setBusy(false);
         }
     }
 
-
     return (
-        <tr className="border-t align-top">
-            <td className="p-2">{r.course_name}</td>
-            <td className="p-2">{r.date_completed ? new Date(r.date_completed).toLocaleDateString() : '—'}</td>
-            <td className="p-2">{r.next_due_date ? new Date(r.next_due_date).toLocaleDateString() : '—'}</td>
-            <td className="p-2">{r.refresher_years ? `${r.refresher_years} yr${r.refresher_years > 1 ? 's' : ''}` : '—'}</td>
-            <td className="p-2">{r.training_type}</td>
-            <td className="p-2">{mandatoryLabel}</td>
+        <tr className="align-top border-t" style={{ borderColor: 'var(--ring)' }}>
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                {r.course_name}
+            </td>
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                {r.date_completed ? new Date(r.date_completed).toLocaleDateString() : '—'}
+            </td>
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                {r.next_due_date ? new Date(r.next_due_date).toLocaleDateString() : '—'}
+            </td>
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                {r.refresher_years ? `${r.refresher_years} yr${r.refresher_years > 1 ? 's' : ''}` : '—'}
+            </td>
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                {r.training_type}
+            </td>
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                {mandatoryLabel}
+            </td>
             <td className="p-2">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${badgeCls}`}>
+                <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${badgeBase} ${badgeOrbit}`}
+                >
                     {r.status === 'OVERDUE' ? 'Overdue' : r.status === 'DUE_SOON' ? 'Due soon' : 'Up to date'}
                 </span>
             </td>
             <td className="p-2">
                 {courseLink ? (
-                    <a href={courseLink} target="_blank" rel="noreferrer" className="underline">Open</a>
-                ) : '—'}
+                    <a href={courseLink} target="_blank" rel="noreferrer" className="underline" style={{ color: 'var(--brand-link)' }}>
+                        Open
+                    </a>
+                ) : (
+                    '—'
+                )}
             </td>
             <td className="p-2">
                 {r.certificate_path ? (
-                    <button onClick={downloadCert} className="underline">Download</button>
-                ) : '—'}
+                    <button onClick={downloadCert} className="underline" style={{ color: 'var(--brand-link)' }}>
+                        Download
+                    </button>
+                ) : (
+                    '—'
+                )}
             </td>
             <td className="p-2">
                 {/* Not editing & not showing delete confirm */}
@@ -733,7 +950,12 @@ function MyRow({
                         {!r.date_completed ? (
                             <button
                                 onClick={() => setEditing(true)}
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
                             >
                                 Mark complete
                             </button>
@@ -741,13 +963,23 @@ function MyRow({
                             <>
                                 <button
                                     onClick={() => setEditing(true)}
-                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                        borderColor: 'var(--ring)',
+                                    }}
                                 >
                                     Edit
                                 </button>
                                 <button
                                     onClick={() => setConfirmDelete(true)}
-                                    className="rounded border px-2 py-1 text-xs hover:bg-rose-50 border-rose-200 text-rose-700"
+                                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        borderColor: 'var(--ring)',
+                                        color: '#b91c1c',
+                                    }}
                                 >
                                     Delete
                                 </button>
@@ -756,24 +988,36 @@ function MyRow({
                     </div>
                 )}
 
-                {/* Inline red confirm box (same style as Course Settings) */}
+                {/* Inline red confirm box */}
                 {!editing && confirmDelete && (
-                    <div className="space-y-2 min-w-[260px] rounded-lg border p-2 bg-rose-50 border-rose-200">
-                        <div className="text-xs text-rose-800">
+                    <div
+                        className="space-y-2 min-w-[260px] rounded-lg p-2 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                    >
+                        <div className="text-xs" style={{ color: '#7f1d1d' }} data-orbit="0">
+                            Delete this “{r.course_name}” record? This cannot be undone.
+                        </div>
+                        <div className="text-xs hidden [data-orbit='1']:block [data-orbit='1']:text-rose-200">
                             Delete this “{r.course_name}” record? This cannot be undone.
                         </div>
                         <div className="flex gap-2">
                             <button
                                 disabled={busy}
                                 onClick={onDelete}
-                                className="rounded px-2 py-1 text-xs bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+                                className="rounded px-2 py-1 text-xs text-white transition"
+                                style={{ background: '#B91C1C' }}
                             >
                                 {busy ? 'Deleting…' : 'Delete'}
                             </button>
                             <button
                                 disabled={busy}
                                 onClick={() => setConfirmDelete(false)}
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                className="rounded px-2 py-1 text-xs ring-1 transition"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
                             >
                                 Cancel
                             </button>
@@ -786,27 +1030,51 @@ function MyRow({
                     <div className="space-y-1 min-w-[220px]">
                         <input
                             type="date"
-                            className="border rounded px-2 py-1 text-xs w-full"
+                            className="rounded px-2 py-1 text-xs w-full ring-1"
+                            style={{
+                                background: 'var(--nav-item-bg)',
+                                color: 'var(--ink)',
+                                borderColor: 'var(--ring)',
+                            }}
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
                         />
                         <input
                             type="file"
-                            className="border rounded px-2 py-1 text-xs w-full"
+                            className="rounded px-2 py-1 text-xs w-full ring-1"
+                            style={{
+                                background: 'var(--nav-item-bg)',
+                                color: 'var(--ink)',
+                                borderColor: 'var(--ring)',
+                            }}
                             onChange={(e) => setFile(e.target.files?.[0] || null)}
                         />
                         <div className="flex gap-2">
                             <button
                                 disabled={busy}
                                 onClick={save}
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                className="rounded px-2 py-1 text-xs ring-1 transition disabled:opacity-60"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
                             >
                                 {busy ? 'Saving…' : !r.date_completed ? 'Save & complete' : 'Save'}
                             </button>
                             <button
                                 disabled={busy}
-                                onClick={() => { setEditing(false); setDate(r.date_completed || ''); setFile(null); }}
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                onClick={() => {
+                                    setEditing(false);
+                                    setDate(r.date_completed || '');
+                                    setFile(null);
+                                }}
+                                className="rounded px-2 py-1 text-xs ring-1 transition"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
                             >
                                 Cancel
                             </button>
@@ -814,7 +1082,6 @@ function MyRow({
                     </div>
                 )}
             </td>
-
         </tr>
     );
 }
@@ -825,7 +1092,9 @@ type Status = 'UP_TO_DATE' | 'DUE_SOON' | 'OVERDUE';
 
 function summarize(records: { status: Status }[]) {
     const total = records.length;
-    let upToDate = 0, dueSoon = 0, overdue = 0;
+    let upToDate = 0,
+        dueSoon = 0,
+        overdue = 0;
     for (const r of records) {
         if (r.status === 'UP_TO_DATE') upToDate++;
         else if (r.status === 'DUE_SOON') dueSoon++;
@@ -838,13 +1107,23 @@ function LegendRow({ color, label, value }: { color: string; label: string; valu
     return (
         <div className="flex items-center gap-2">
             <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: color }} />
-            <span className="text-gray-700">{label}</span>
-            <span className="ml-auto tabular-nums text-gray-900">{value}</span>
+            <span style={{ color: 'var(--ink)' }}>{label}</span>
+            <span className="ml-auto tabular-nums" style={{ color: 'var(--ink)' }}>
+                {value}
+            </span>
         </div>
     );
 }
 
-function StatusPie({ upToDate, dueSoon, overdue }: { upToDate: number; dueSoon: number; overdue: number }) {
+function StatusPie({
+    upToDate,
+    dueSoon,
+    overdue,
+}: {
+    upToDate: number;
+    dueSoon: number;
+    overdue: number;
+}) {
     const total = upToDate + dueSoon + overdue;
     const a = total ? (overdue / total) * 360 : 0;
     const b = total ? (dueSoon / total) * 360 : 0;
@@ -857,11 +1136,18 @@ function StatusPie({ upToDate, dueSoon, overdue }: { upToDate: number; dueSoon: 
     return (
         <div className="flex items-center gap-4">
             <div className="relative h-36 w-36 rounded-full flex-none" style={{ background: bg }}>
-                <div className="absolute inset-4 rounded-full bg-white border" />
+                <div
+                    className="absolute inset-4 rounded-full ring-1"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                />
                 <div className="absolute inset-0 grid place-items-center">
                     <div className="text-center">
-                        <div className="text-lg font-semibold">{total}</div>
-                        <div className="text-[11px] text-gray-500">total</div>
+                        <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+                            {total}
+                        </div>
+                        <div className="text-[11px]" style={{ color: 'var(--sub)' }}>
+                            total
+                        </div>
                     </div>
                 </div>
             </div>
@@ -894,51 +1180,92 @@ function Donut({
         acc = to;
         return `${seg.color} ${from}deg ${to}deg`;
     });
-    const bg =
-        total ? `conic-gradient(${stops.join(",")})` : "conic-gradient(#e5e7eb 0deg 360deg)";
+    const bg = total ? `conic-gradient(${stops.join(',')})` : 'conic-gradient(#e5e7eb 0deg 360deg)';
     const holeInset = Math.max(12, Math.round(size * 0.2)); // thickness of the ring
 
     return (
         <div className="relative" style={{ width: size, height: size }}>
             <div className="absolute inset-0 rounded-full" style={{ background: bg }} />
-            <div className="absolute rounded-full bg-white border" style={{ inset: `${holeInset}px` }} />
+            <div
+                className="absolute rounded-full ring-1"
+                style={{ inset: `${holeInset}px`, background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+            />
             <div className="absolute inset-0 grid place-items-center">
-                {centerLabel ? <div className="text-lg font-semibold">{centerLabel}</div> : null}
+                {centerLabel ? (
+                    <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+                        {centerLabel}
+                    </div>
+                ) : null}
             </div>
         </div>
     );
 }
 
-
 function StatCard({
-    label, value, sub, tone,
-}: { label: string; value: number; sub?: string; tone: 'emerald' | 'amber' | 'rose' }) {
+    label,
+    value,
+    sub,
+    tone,
+}: {
+    label: string;
+    value: number;
+    sub?: string;
+    tone: 'emerald' | 'amber' | 'rose';
+}) {
     const badge =
-        tone === 'emerald' ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' :
-            tone === 'amber' ? 'bg-amber-50 text-amber-700 ring-amber-100' :
-                'bg-rose-50 text-rose-700 ring-rose-100';
+        tone === 'emerald'
+            ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+            : tone === 'amber'
+                ? 'bg-amber-50 text-amber-700 ring-amber-100'
+                : 'bg-rose-50 text-rose-700 ring-rose-100';
+
+    const badgeOrbit =
+        tone === 'emerald'
+            ? '[data-orbit="1"]:bg-emerald-500/10 [data-orbit="1"]:text-emerald-200 [data-orbit="1"]:ring-emerald-400/25'
+            : tone === 'amber'
+                ? '[data-orbit="1"]:bg-amber-500/10 [data-orbit="1"]:text-amber-200 [data-orbit="1"]:ring-amber-400/25'
+                : '[data-orbit="1"]:bg-rose-500/10 [data-orbit="1"]:text-rose-200 [data-orbit="1"]:ring-rose-400/25';
 
     return (
-        <div className="rounded-lg border p-2 text-center">
-            <div className={`mx-auto mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${badge}`}>
+        <div
+            className="rounded-lg p-2 text-center ring-1"
+            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+        >
+            <div
+                className={`mx-auto mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${badge} ${badgeOrbit}`}
+            >
                 {label}
             </div>
-            <div className="text-xl font-semibold leading-6 tabular-nums">{value}</div>
-            {sub && <div className="text-xs text-gray-500">{sub}</div>}
+            <div className="text-xl font-semibold leading-6 tabular-nums" style={{ color: 'var(--ink)' }}>
+                {value}
+            </div>
+            {sub && (
+                <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                    {sub}
+                </div>
+            )}
         </div>
     );
 }
 
 function MandatoryCard({ completed, total }: { completed: number; total: number }) {
     return (
-        <div className="inline-block rounded-lg border p-3 text-center w-fit">
-            <div className="mb-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 bg-indigo-50 text-indigo-700 ring-indigo-100">
+        <div
+            className="inline-block rounded-lg p-3 text-center w-fit ring-1"
+            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+        >
+            <div
+                className="mb-2 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 bg-indigo-50 text-indigo-700 ring-indigo-100
+        [data-orbit='1']:bg-indigo-500/10 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25"
+            >
                 Mandatory completed
             </div>
-            <div className="text-xl font-semibold leading-6 tabular-nums">
+            <div className="text-xl font-semibold leading-6 tabular-nums" style={{ color: 'var(--ink)' }}>
                 {completed}/{total}
             </div>
-            <div className="text-xs text-gray-500">up to date</div>
+            <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                up to date
+            </div>
         </div>
     );
 }
@@ -961,8 +1288,13 @@ function TrainingSummary({
         typeof mandatoryCompleted === 'number' && typeof mandatoryTotal === 'number';
 
     return (
-        <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-3 space-y-3">
-            <h2 className="text-base font-semibold">{title}</h2>
+        <section
+            className="rounded-lg p-3 space-y-3 ring-1"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+        >
+            <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                {title}
+            </h2>
 
             <div className="grid grid-cols-3 gap-2">
                 <StatCard label="Up to date" value={upToDate} sub={`${pct(upToDate)}%`} tone="emerald" />
@@ -1031,9 +1363,10 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
     // courses that have any individual targets (-> Conditional if not Everyone)
     const [coursesWithTargets, setCoursesWithTargets] = useState<Set<string>>(new Set());
 
-
     // Compliance resources (NEW)
-    const [roster, setRoster] = useState<{ id: string; name: string; home_id?: string | null; is_bank?: boolean }[]>([]);
+    const [roster, setRoster] = useState<
+        { id: string; name: string; home_id?: string | null; is_bank?: boolean }[]
+    >([]);
     const [perUserRequired, setPerUserRequired] = useState<Map<string, Set<string>>>(new Map()); // user → required course ids
     const [courseNameById, setCourseNameById] = useState<Map<string, string>>(new Map());
     const [complianceLoading, setComplianceLoading] = useState(true);
@@ -1070,8 +1403,8 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                 id?: unknown;
                 roles?: {
                     bank?: unknown;
-                    staff_home?: unknown;            // could be string id or {id,name} or null
-                    manager_homes?: unknown;         // could be string[] or {id,name}[]
+                    staff_home?: unknown; // could be string id or {id,name} or null
+                    manager_homes?: unknown; // could be string[] or {id,name}[]
                 };
             };
 
@@ -1122,20 +1455,35 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
     // helper: same fallback chain used in MyTraining
     async function getCompanyIdForUser(me: string) {
-        const cm = await supabase.from('company_memberships')
-            .select('company_id').eq('user_id', me).limit(1).maybeSingle();
+        const cm = await supabase
+            .from('company_memberships')
+            .select('company_id')
+            .eq('user_id', me)
+            .limit(1)
+            .maybeSingle();
         if (cm.data?.company_id) return cm.data.company_id;
 
-        const hm = await supabase.from('home_memberships')
-            .select('home_id').eq('user_id', me).limit(1).maybeSingle();
+        const hm = await supabase
+            .from('home_memberships')
+            .select('home_id')
+            .eq('user_id', me)
+            .limit(1)
+            .maybeSingle();
         if (hm.data?.home_id) {
-            const h = await supabase.from('homes')
-                .select('company_id').eq('id', hm.data.home_id).single();
+            const h = await supabase
+                .from('homes')
+                .select('company_id')
+                .eq('id', hm.data.home_id)
+                .single();
             if (h.data?.company_id) return h.data.company_id;
         }
 
-        const bm = await supabase.from('bank_memberships')
-            .select('company_id').eq('user_id', me).limit(1).maybeSingle();
+        const bm = await supabase
+            .from('bank_memberships')
+            .select('company_id')
+            .eq('user_id', me)
+            .limit(1)
+            .maybeSingle();
         return bm.data?.company_id || '';
     }
 
@@ -1168,9 +1516,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                 }
             } catch (e) {
                 const message =
-                    e instanceof Error && typeof e.message === 'string'
-                        ? e.message
-                        : 'Failed to load';
+                    e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to load';
                 setErr(message);
                 setHomes([]);
                 setList([]);
@@ -1178,7 +1524,6 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                 setRoster([]);
                 setPerUserRequired(new Map());
                 setCourseNameById(new Map());
-
             }
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1198,16 +1543,13 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                 return;
             }
 
-
             setLoading(true);
             setErr(null);
             try {
                 await loadForCompany(companyId);
             } catch (e) {
                 const message =
-                    e instanceof Error && typeof e.message === 'string'
-                        ? e.message
-                        : 'Failed to load';
+                    e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to load';
                 setErr(message);
                 setHomes([]);
                 setList([]);
@@ -1230,12 +1572,12 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                 .filter((c): c is { id: string } => typeof (c as { id?: unknown }).id === 'string')
                 .map((c) => c.id)
             : [];
-        if (!ids.length) { setCoursesWithTargets(new Set()); return; }
+        if (!ids.length) {
+            setCoursesWithTargets(new Set());
+            return;
+        }
 
-        const t = await supabase
-            .from('course_mandatory_targets')
-            .select('course_id')
-            .in('course_id', ids);
+        const t = await supabase.from('course_mandatory_targets').select('course_id').in('course_id', ids);
 
         const set = new Set<string>();
         (Array.isArray(t.data) ? t.data : []).forEach((row) => {
@@ -1246,7 +1588,6 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         setCoursesWithTargets(set);
     }
 
-
     async function loadForCompany(cid: string) {
         // 1) Homes in company (for scoping + labels)
         const homesRes = await supabase.from('homes').select('id,name').eq('company_id', cid);
@@ -1254,40 +1595,39 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         const homesArr = Array.isArray(homesRes.data) ? homesRes.data : [];
         setHomes(homesArr);
 
-        const companyHomeIds = homesArr.map(h => h.id);
-        const homeNameById = new Map<string, string>(homesArr.map(h => [h.id, h.name]));
+        const companyHomeIds = homesArr.map((h) => h.id);
+        const homeNameById = new Map<string, string>(homesArr.map((h) => [h.id, h.name]));
 
         // 2) Base roster (staff + bank) via RPC
         const rosterRes = await supabase.rpc('list_company_people', { p_company_id: cid });
         if (rosterRes.error) throw rosterRes.error;
-        const baseRoster: { id: string; name: string; home_id: string | null; is_bank: boolean }[] =
-            (Array.isArray(rosterRes.data) ? rosterRes.data : []).map((r) => {
-                const row = r as {
-                    user_id?: unknown;
-                    full_name?: unknown;
-                    name?: unknown;
-                    home_id?: unknown;
-                    is_bank?: unknown;
-                };
+        const baseRoster: { id: string; name: string; home_id: string | null; is_bank: boolean }[] = (
+            Array.isArray(rosterRes.data) ? rosterRes.data : []
+        ).map((r) => {
+            const row = r as {
+                user_id?: unknown;
+                full_name?: unknown;
+                name?: unknown;
+                home_id?: unknown;
+                is_bank?: unknown;
+            };
 
-                const user_id = typeof row.user_id === 'string' ? row.user_id : '';
-                const full_name =
-                    typeof row.full_name === 'string' && row.full_name ? row.full_name : undefined;
-                const alt_name =
-                    typeof row.name === 'string' && row.name ? row.name : undefined;
+            const user_id = typeof row.user_id === 'string' ? row.user_id : '';
+            const full_name =
+                typeof row.full_name === 'string' && row.full_name ? row.full_name : undefined;
+            const alt_name = typeof row.name === 'string' && row.name ? row.name : undefined;
 
-                const name =
-                    full_name ??
-                    alt_name ??
-                    (user_id ? user_id.slice(0, 8) : '');
+            const name = full_name ?? alt_name ?? (user_id ? user_id.slice(0, 8) : '');
 
-                const home_id =
-                    typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
+            const home_id =
+                typeof row.home_id === 'string' || row.home_id === null
+                    ? (row.home_id as string | null)
+                    : null;
 
-                const is_bank = Boolean(row.is_bank);
+            const is_bank = Boolean(row.is_bank);
 
-                return { id: user_id, name, home_id, is_bank };
-            });
+            return { id: user_id, name, home_id, is_bank };
+        });
 
         // 3) Add ALL managers of company homes (even with 0 records)
         let extraManagers: { id: string; home_id: string | null }[] = [];
@@ -1313,7 +1653,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                 }
             });
 
-            const already = new Set(baseRoster.map(p => p.id));
+            const already = new Set(baseRoster.map((p) => p.id));
             extraManagers = Array.from(firstHomeByUser.entries())
                 .filter(([uid]) => !already.has(uid))
                 .map(([uid, hid]) => ({ id: uid, home_id: hid ?? null }));
@@ -1327,7 +1667,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         // 5) Merge roster: staff+bank + all managers
         const mergedRoster: { id: string; name: string; home_id: string | null; is_bank: boolean }[] = [
             ...baseRoster,
-            ...extraManagers.map(m => ({
+            ...extraManagers.map((m) => ({
                 id: m.id,
                 name: m.id.slice(0, 8), // temp, will overwrite from profiles
                 home_id: m.home_id,
@@ -1341,22 +1681,16 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                 ...mergedRoster.map((p) => p.id),
                 ...(Array.isArray(recRows)
                     ? recRows
-                        .filter(
-                            (r): r is { user_id: string } =>
-                                typeof (r as { user_id?: unknown }).user_id === 'string'
-                        )
+                        .filter((r): r is { user_id: string } => typeof (r as { user_id?: unknown }).user_id === 'string')
                         .map((r) => r.user_id)
                     : []),
-            ])
+            ]),
         ).filter(Boolean);
 
         type ProfileRow = { user_id: string; full_name: string | null };
 
         const profiles = allUserIds.length
-            ? await supabase
-                .from('profiles')
-                .select('user_id, full_name')
-                .in('user_id', allUserIds)
+            ? await supabase.from('profiles').select('user_id, full_name').in('user_id', allUserIds)
             : { data: [] as ProfileRow[], error: null };
         if (profiles.error) throw profiles.error;
 
@@ -1366,23 +1700,22 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             if (typeof user_id !== 'string') return;
 
             const full_nameVal = (p as { full_name?: unknown }).full_name;
-            const full_name =
-                typeof full_nameVal === 'string' ? full_nameVal.trim() : '';
+            const full_name = typeof full_nameVal === 'string' ? full_nameVal.trim() : '';
 
             nameById.set(user_id, full_name);
         });
 
         // 7) Final roster with proper names
-        const finalRoster = mergedRoster.map(p => ({
+        const finalRoster = mergedRoster.map((p) => ({
             ...p,
             name: nameById.get(p.id) || p.name || p.id.slice(0, 8),
         }));
         setRoster(finalRoster);
 
         // quick maps for decorating rows
-        const nameByUser = new Map<string, string>(finalRoster.map(p => [p.id, p.name]));
-        const homeIdByUser = new Map<string, string | null>(finalRoster.map(p => [p.id, p.home_id]));
-        const isBankByUser = new Map<string, boolean>(finalRoster.map(p => [p.id, p.is_bank]));
+        const nameByUser = new Map<string, string>(finalRoster.map((p) => [p.id, p.name]));
+        const homeIdByUser = new Map<string, string | null>(finalRoster.map((p) => [p.id, p.home_id]));
+        const isBankByUser = new Map<string, boolean>(finalRoster.map((p) => [p.id, p.is_bank]));
 
         // 8) Decorated rows for TEAM table
         const rows: Row[] = (Array.isArray(recRows) ? recRows : []).map((r) => {
@@ -1396,15 +1729,9 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
             return {
                 ...row,
-                user_name:
-                    nameByUser.get(user_id) ||
-                    (user_id ? user_id.slice(0, 8) : ''),
+                user_name: nameByUser.get(user_id) || (user_id ? user_id.slice(0, 8) : ''),
                 home_id: hid,
-                home_label: hid
-                    ? homeNameById.get(hid) || null
-                    : isBankByUser.get(user_id)
-                        ? 'Bank staff'
-                        : null,
+                home_label: hid ? homeNameById.get(hid) || null : isBankByUser.get(user_id) ? 'Bank staff' : null,
                 is_bank: Boolean(isBankByUser.get(user_id)),
             } as Row;
         });
@@ -1413,20 +1740,20 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         // 9) Build set of courses that have any targets (for “Conditional”)
         await fetchCoursesWithTargetsForCompany(cid);
 
-
         // 10) Build compliance inputs (includes managers even if they have zero records)
         await buildRosterAndComplianceForCompany(cid, finalRoster, rows);
     }
 
     async function loadForManager(me: string) {
         // managed homes
-        const mh = await supabase.from('home_memberships').select('home_id').eq('user_id', me).eq('role', 'MANAGER');
+        const mh = await supabase
+            .from('home_memberships')
+            .select('home_id')
+            .eq('user_id', me)
+            .eq('role', 'MANAGER');
         const managed = Array.isArray(mh.data)
             ? mh.data
-                .filter(
-                    (x): x is { home_id: string } =>
-                        typeof (x as { home_id?: unknown }).home_id === 'string'
-                )
+                .filter((x): x is { home_id: string } => typeof (x as { home_id?: unknown }).home_id === 'string')
                 .map((x) => x.home_id)
             : [];
         if (managed.length === 0) {
@@ -1440,31 +1767,33 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
         const h = await supabase.from('homes').select('id,name,company_id').in('id', managed);
         const hs = Array.isArray(h.data) ? h.data : [];
-        setHomes(hs.map(x => ({ id: x.id, name: x.name })));
+        setHomes(hs.map((x) => ({ id: x.id, name: x.name })));
         const cid = hs[0]?.company_id || '';
 
         // people ids for those homes
-        const stf = await supabase.from('home_memberships').select('user_id').in('home_id', managed).eq('role', 'STAFF');
-        const mgr = await supabase.from('home_memberships').select('user_id').in('home_id', managed).eq('role', 'MANAGER');
+        const stf = await supabase
+            .from('home_memberships')
+            .select('user_id')
+            .in('home_id', managed)
+            .eq('role', 'STAFF');
+        const mgr = await supabase
+            .from('home_memberships')
+            .select('user_id')
+            .in('home_id', managed)
+            .eq('role', 'MANAGER');
         const ids = Array.from(
             new Set([
                 ...(Array.isArray(stf.data)
                     ? stf.data
-                        .filter(
-                            (x): x is { user_id: string } =>
-                                typeof (x as { user_id?: unknown }).user_id === 'string'
-                        )
+                        .filter((x): x is { user_id: string } => typeof (x as { user_id?: unknown }).user_id === 'string')
                         .map((x) => x.user_id)
                     : []),
                 ...(Array.isArray(mgr.data)
                     ? mgr.data
-                        .filter(
-                            (x): x is { user_id: string } =>
-                                typeof (x as { user_id?: unknown }).user_id === 'string'
-                        )
+                        .filter((x): x is { user_id: string } => typeof (x as { user_id?: unknown }).user_id === 'string')
                         .map((x) => x.user_id)
                     : []),
-            ])
+            ]),
         );
         if (ids.length === 0) {
             setList([]);
@@ -1486,8 +1815,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             if (typeof user_id !== 'string') return;
 
             const full_nameVal = (p as { full_name?: unknown }).full_name;
-            const full_name =
-                typeof full_nameVal === 'string' ? full_nameVal : '';
+            const full_name = typeof full_nameVal === 'string' ? full_nameVal : '';
 
             nameMap.set(user_id, full_name);
         });
@@ -1499,18 +1827,13 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             const roles = rolesByUser.get(rec.user_id);
             const label =
                 roles?.staff_home?.name ??
-                (roles?.manager_homes?.length
-                    ? roles.manager_homes.map((h) => h.name).join(', ')
-                    : null);
+                (roles?.manager_homes?.length ? roles.manager_homes.map((h2) => h2.name).join(', ') : null);
 
             return {
                 ...rec,
                 user_name: nameMap.get(rec.user_id) || '',
                 home_label: label,
-                is_bank:
-                    !!roles?.bank &&
-                    !roles?.staff_home &&
-                    !(roles?.manager_homes?.length),
+                is_bank: !!roles?.bank && !roles?.staff_home && !(roles?.manager_homes?.length),
                 roles,
             } as Row;
         });
@@ -1524,18 +1847,15 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
     /* ===== Compliance helpers (per-person mandatory) ===== */
     async function buildRosterAndComplianceForCompany(
         cid: string,
-        roster: { id: string; name: string; home_id?: string | null; is_bank?: boolean }[],
+        rosterIn: { id: string; name: string; home_id?: string | null; is_bank?: boolean }[],
         rows: Row[],
     ) {
         setComplianceLoading(true);
         try {
-            setRoster(roster);
+            setRoster(rosterIn);
 
             // course metadata for names + global mandatory
-            const allCourses = await supabase
-                .from('courses')
-                .select('id,name,mandatory')
-                .eq('company_id', cid);
+            const allCourses = await supabase.from('courses').select('id,name,mandatory').eq('company_id', cid);
 
             const nameById = new Map<string, string>();
             const globalMandatory = new Set<string>();
@@ -1556,13 +1876,12 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             setCourseNameById(nameById);
 
             // individual targets (Conditional)
-            // individual targets (Conditional)
             const targetsByUser = new Map<string, Set<string>>();
-            if (roster.length) {
+            if (rosterIn.length) {
                 const t = await supabase
                     .from('course_mandatory_targets')
                     .select('user_id,course_id')
-                    .in('user_id', roster.map(p => p.id));
+                    .in('user_id', rosterIn.map((p) => p.id));
                 (Array.isArray(t.data) ? t.data : []).forEach((row) => {
                     const r = row as { user_id?: unknown; course_id?: unknown };
 
@@ -1579,10 +1898,10 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
             // required = global ∪ targets   (❌ no assignments here)
             const required = new Map<string, Set<string>>();
-            for (const p of roster) {
+            for (const p of rosterIn) {
                 const s = new Set<string>();
-                globalMandatory.forEach(id => s.add(id));
-                (targetsByUser.get(p.id) || new Set()).forEach(id => s.add(id));
+                globalMandatory.forEach((id) => s.add(id));
+                (targetsByUser.get(p.id) || new Set()).forEach((id) => s.add(id));
                 required.set(p.id, s);
             }
             setPerUserRequired(required);
@@ -1596,7 +1915,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         rolesByUser: Map<string, Roles>,
         managed: string[],
         cid: string,
-        rows: Row[]
+        rows: Row[],
     ) {
         setComplianceLoading(true);
         try {
@@ -1637,10 +1956,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
             const allIds = Array.from(new Set<string>([...stfIds, ...mgrIds]));
 
             const prof = allIds.length
-                ? await supabase
-                    .from('profiles')
-                    .select('user_id, full_name')
-                    .in('user_id', allIds)
+                ? await supabase.from('profiles').select('user_id, full_name').in('user_id', allIds)
                 : { data: [] as ProfileRow[] };
 
             const nameMap = new Map<string, string>();
@@ -1668,10 +1984,7 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
             // Course names + global mandatory (for this company)
             const allCourses = cid
-                ? await supabase
-                    .from('courses')
-                    .select('id,name,mandatory')
-                    .eq('company_id', cid)
+                ? await supabase.from('courses').select('id,name,mandatory').eq('company_id', cid)
                 : { data: [] as CourseRow[] };
 
             const nameById = new Map<string, string>();
@@ -1737,8 +2050,6 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         }
     }
 
-
-
     const showHomeFilter = isAdmin || isCompany || level === '3_MANAGER';
 
     function mandatoryInfoForRow(r: Row) {
@@ -1748,16 +2059,16 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
         return { label: 'No', isMandatory: false, isConditional: false };
     }
 
-
     // filtered rows for TEAM table
     const filtered = useMemo(() => {
         let rows = [...list];
 
-        if (status !== 'ALL') rows = rows.filter(r => r.status === status);
-        if (hasCert !== 'ALL') rows = rows.filter(r => hasCert === 'YES' ? !!r.certificate_path : !r.certificate_path);
+        if (status !== 'ALL') rows = rows.filter((r) => r.status === status);
+        if (hasCert !== 'ALL')
+            rows = rows.filter((r) => (hasCert === 'YES' ? !!r.certificate_path : !r.certificate_path));
 
         if (mandatory !== 'ALL') {
-            rows = rows.filter(r => {
+            rows = rows.filter((r) => {
                 const info = mandatoryInfoForRow(r);
                 if (mandatory === 'YES') return info.isMandatory && !info.isConditional;
                 if (mandatory === 'CONDITIONAL') return info.isConditional;
@@ -1767,56 +2078,79 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
 
         if (homeId) {
             if (homeId === 'BANK') {
-                rows = rows.filter(r => r.is_bank);
+                rows = rows.filter((r) => r.is_bank);
             } else {
-                rows = rows.filter(r => r.home_id === homeId);
+                rows = rows.filter((r) => r.home_id === homeId);
             }
         }
 
         const q = search.trim().toLowerCase();
-        if (q) rows = rows.filter(r =>
-            (r.user_name || '').toLowerCase().includes(q) ||
-            (r.course_name || '').toLowerCase().includes(q)
-        );
+        if (q)
+            rows = rows.filter(
+                (r) =>
+                    (r.user_name || '').toLowerCase().includes(q) ||
+                    (r.course_name || '').toLowerCase().includes(q),
+            );
 
-        return rows.sort((a, b) =>
-            (a.user_name || '').localeCompare(b.user_name || '') ||
-            (a.course_name || '').localeCompare(b.course_name || '')
+        return rows.sort(
+            (a, b) =>
+                (a.user_name || '').localeCompare(b.user_name || '') ||
+                (a.course_name || '').localeCompare(b.course_name || ''),
         );
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [list, status, hasCert, mandatory, homeId, search, coursesWithTargets]);
 
-
-    if (loading) return <p>Loading…</p>;
-    if (err) return <p className="text-rose-600">{err}</p>;
+    if (loading) return <p style={{ color: 'var(--sub)' }}>Loading…</p>;
+    if (err) return <p style={{ color: '#dc2626' }}>{err}</p>;
 
     return (
-        <div className="space-y-4">
-            {/* Secondary tabs */}
-            <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
-                <TabBtn active={subTab === 'TEAM'} onClick={() => setSubTab('TEAM')}>Team</TabBtn>
-                <TabBtn active={subTab === 'COMPLIANCE'} onClick={() => setSubTab('COMPLIANCE')}>Compliance</TabBtn>
+        <div className="space-y-4" style={{ color: 'var(--ink)' }}>
+            {/* Secondary tabs (match payslips style) */}
+            <div className="flex gap-2">
+                <TabBtn active={subTab === 'TEAM'} onClick={() => setSubTab('TEAM')}>
+                    Team
+                </TabBtn>
+                <TabBtn active={subTab === 'COMPLIANCE'} onClick={() => setSubTab('COMPLIANCE')}>
+                    Compliance
+                </TabBtn>
             </div>
 
             {/* TEAM TAB */}
             {subTab === 'TEAM' && (
                 <>
                     {/* Filters */}
-                    <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-3">
+                    <div
+                        className="rounded-lg p-3 ring-1"
+                        style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+                    >
                         <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
                             <div className="md:col-span-2">
-                                <label className="block text-xs text-gray-600 mb-1">Search (name or course)</label>
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                    Search (name or course)
+                                </label>
                                 <input
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                        borderColor: 'var(--ring)',
+                                    }}
                                     value={search}
-                                    onChange={e => setSearch(e.target.value)}
+                                    onChange={(e) => setSearch(e.target.value)}
                                     placeholder="e.g., John, First Aid"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-600 mb-1">Status</label>
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                    Status
+                                </label>
                                 <select
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                        borderColor: 'var(--ring)',
+                                    }}
                                     value={status}
                                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                                         setStatus(e.target.value as 'ALL' | 'UP_TO_DATE' | 'DUE_SOON' | 'OVERDUE')
@@ -1829,9 +2163,16 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-600 mb-1">Certificate</label>
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                    Certificate
+                                </label>
                                 <select
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                        borderColor: 'var(--ring)',
+                                    }}
                                     value={hasCert}
                                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                                         setHasCert(e.target.value as 'ALL' | 'YES' | 'NO')
@@ -1843,9 +2184,16 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-600 mb-1">Mandatory</label>
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                    Mandatory
+                                </label>
                                 <select
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                        borderColor: 'var(--ring)',
+                                    }}
                                     value={mandatory}
                                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                                         setMandatory(e.target.value as 'ALL' | 'YES' | 'CONDITIONAL' | 'NO')
@@ -1859,15 +2207,26 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                             </div>
                             {showHomeFilter && (
                                 <div>
-                                    <label className="block text-xs text-gray-600 mb-1">Home</label>
+                                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                        Home
+                                    </label>
                                     <select
-                                        className="w-full border rounded-lg px-3 py-2"
+                                        className="w-full rounded-lg px-3 py-2 ring-1"
+                                        style={{
+                                            background: 'var(--nav-item-bg)',
+                                            color: 'var(--ink)',
+                                            borderColor: 'var(--ring)',
+                                        }}
                                         value={homeId}
-                                        onChange={e => setHomeId(e.target.value)}
+                                        onChange={(e) => setHomeId(e.target.value)}
                                     >
                                         <option value="">All</option>
                                         <option value="BANK">Bank staff</option>
-                                        {homes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                                        {homes.map((h) => (
+                                            <option key={h.id} value={h.id}>
+                                                {h.name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                             )}
@@ -1878,9 +2237,15 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                     <TrainingSummary records={filtered} title="Training summary (filtered)" />
 
                     {/* Table */}
-                    <div className="overflow-x-auto rounded-xl border bg-white shadow-sm ring-1 ring-gray-50">
+                    <div
+                        className="overflow-x-auto rounded-lg ring-1"
+                        style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+                    >
                         <table className="min-w-full text-sm">
-                            <thead className="bg-gray-50 text-gray-600">
+                            <thead
+                                className="sticky top-0 z-10"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                            >
                                 <tr>
                                     <th className="text-left p-2">Person</th>
                                     <th className="text-left p-2">Home</th>
@@ -1894,24 +2259,50 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                             </thead>
                             <tbody>
                                 {filtered.map((r, i) => {
-                                    const badge =
-                                        r.status === 'OVERDUE' ? 'bg-rose-50 text-rose-700 ring-rose-100' :
-                                            r.status === 'DUE_SOON' ? 'bg-amber-50 text-amber-700 ring-amber-100' :
-                                                'bg-emerald-50 text-emerald-700 ring-emerald-100';
+                                    const badgeBase =
+                                        r.status === 'OVERDUE'
+                                            ? 'bg-rose-50 text-rose-700 ring-rose-100'
+                                            : r.status === 'DUE_SOON'
+                                                ? 'bg-amber-50 text-amber-700 ring-amber-100'
+                                                : 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+                                    const badgeOrbit =
+                                        r.status === 'OVERDUE'
+                                            ? '[data-orbit="1"]:bg-rose-500/10 [data-orbit="1"]:text-rose-200 [data-orbit="1"]:ring-rose-400/25'
+                                            : r.status === 'DUE_SOON'
+                                                ? '[data-orbit="1"]:bg-amber-500/10 [data-orbit="1"]:text-amber-200 [data-orbit="1"]:ring-amber-400/25'
+                                                : '[data-orbit="1"]:bg-emerald-500/10 [data-orbit="1"]:text-emerald-200 [data-orbit="1"]:ring-emerald-400/25';
 
                                     const mand = mandatoryInfoForRow(r).label;
 
                                     return (
-                                        <tr key={`${r.id}-${i}`} className="border-t align-top">
-                                            <td className="p-2">{r.user_name || r.user_id.slice(0, 8)}</td>
-                                            <td className="p-2">{r.home_label || '—'}</td>
-                                            <td className="p-2">{r.course_name}</td>
-                                            <td className="p-2">{r.date_completed ? new Date(r.date_completed).toLocaleDateString() : '—'}</td>
-                                            <td className="p-2">{r.next_due_date ? new Date(r.next_due_date).toLocaleDateString() : '—'}</td>
-                                            <td className="p-2">{mand}</td>
+                                        <tr key={`${r.id}-${i}`} className="align-top border-t" style={{ borderColor: 'var(--ring)' }}>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                                {r.user_name || r.user_id.slice(0, 8)}
+                                            </td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                                {r.home_label || '—'}
+                                            </td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                                {r.course_name}
+                                            </td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                                {r.date_completed ? new Date(r.date_completed).toLocaleDateString() : '—'}
+                                            </td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                                {r.next_due_date ? new Date(r.next_due_date).toLocaleDateString() : '—'}
+                                            </td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                                {mand}
+                                            </td>
                                             <td className="p-2">
-                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs ring-1 ${badge}`}>
-                                                    {r.status === 'OVERDUE' ? 'Overdue' : r.status === 'DUE_SOON' ? 'Due soon' : 'Up to date'}
+                                                <span
+                                                    className={`inline-flex px-2 py-0.5 rounded-full text-xs ring-1 ${badgeBase} ${badgeOrbit}`}
+                                                >
+                                                    {r.status === 'OVERDUE'
+                                                        ? 'Overdue'
+                                                        : r.status === 'DUE_SOON'
+                                                            ? 'Due soon'
+                                                            : 'Up to date'}
                                                 </span>
                                             </td>
                                             <td className="p-2">
@@ -1921,7 +2312,11 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
                                     );
                                 })}
                                 {filtered.length === 0 && (
-                                    <tr><td className="p-2 text-gray-500" colSpan={8}>No records match your filters.</td></tr>
+                                    <tr>
+                                        <td className="p-2 text-sm" style={{ color: 'var(--sub)' }} colSpan={8}>
+                                            No records match your filters.
+                                        </td>
+                                    </tr>
                                 )}
                             </tbody>
                         </table>
@@ -1949,26 +2344,32 @@ function TeamTraining({ isAdmin, isCompany }: { isAdmin: boolean; isCompany: boo
    ========================= */
 
 function KPI({ label, value, tone }: { label: string; value: number | string; tone?: 'rose' | 'default' }) {
-    const badge = tone === 'rose'
-        ? 'bg-rose-50 text-rose-700 ring-rose-100'
-        : 'bg-indigo-50 text-indigo-700 ring-indigo-100';
+    const badgeBase =
+        tone === 'rose'
+            ? 'bg-rose-50 text-rose-700 ring-rose-100'
+            : 'bg-indigo-50 text-indigo-700 ring-indigo-100';
+    const badgeOrbit =
+        tone === 'rose'
+            ? '[data-orbit="1"]:bg-rose-500/10 [data-orbit="1"]:text-rose-200 [data-orbit="1"]:ring-rose-400/25'
+            : '[data-orbit="1"]:bg-indigo-500/10 [data-orbit="1"]:text-indigo-200 [data-orbit="1"]:ring-indigo-400/25';
 
     return (
-        <div className="rounded-lg border p-3 text-center">
-            <div className={`mx-auto mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${badge}`}>
+        <div className="rounded-lg p-3 ring-1" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}>
+            <div className={`mx-auto mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${badgeBase} ${badgeOrbit}`}>
                 {label}
             </div>
             <div className="text-xl font-semibold leading-6 tabular-nums">{value}</div>
         </div>
     );
 }
+
 function ComplianceAnalytics({
     loading,
     roster,
     homes,
     records,
-    perUserRequired,  // Map<user_id, Set<course_id>>
-    courseNameById,   // Map<course_id, name>
+    perUserRequired,
+    courseNameById,
 }: {
     loading: boolean;
     roster: { id: string; name: string; home_id?: string | null; is_bank?: boolean }[];
@@ -1998,22 +2399,21 @@ function ComplianceAnalytics({
 
     const homesById = useMemo(() => {
         const m = new Map<string, string>();
-        homes.forEach(h => m.set(h.id, h.name));
+        homes.forEach((h) => m.set(h.id, h.name));
         return m;
     }, [homes]);
 
     const peopleSubset = useMemo(() => {
         let list = [...roster];
         if (homeId) {
-            if (homeId === 'BANK') list = list.filter(p => !!p.is_bank);
-            else list = list.filter(p => p.home_id === homeId);
+            if (homeId === 'BANK') list = list.filter((p) => !!p.is_bank);
+            else list = list.filter((p) => p.home_id === homeId);
         }
         const q = search.trim().toLowerCase();
-        if (q) list = list.filter(p => (p.name || '').toLowerCase().includes(q));
+        if (q) list = list.filter((p) => (p.name || '').toLowerCase().includes(q));
         return list;
     }, [roster, homeId, search]);
 
-    // per-user up-to-date set
     const upToDateByUser = useMemo(() => {
         const map = new Map<string, Set<string>>();
         for (const r of records) {
@@ -2028,28 +2428,36 @@ function ComplianceAnalytics({
         const non: { person: (typeof roster)[number]; missing: string[] }[] = [];
         const ok: (typeof roster)[number][] = [];
 
-        subset.forEach(p => {
+        subset.forEach((p) => {
             const req = perUserRequired.get(p.id) ?? new Set<string>();
-            if (req.size === 0) { ok.push(p); return; }
+            if (req.size === 0) {
+                ok.push(p);
+                return;
+            }
             const got = upToDateByUser.get(p.id) ?? new Set<string>();
             const missingIds: string[] = [];
-            req.forEach(id => { if (!got.has(id)) missingIds.push(id); });
+            req.forEach((id) => {
+                if (!got.has(id)) missingIds.push(id);
+            });
             if (missingIds.length === 0) ok.push(p);
-            else non.push({ person: p, missing: missingIds.map(id => courseNameById.get(id) || 'Unknown') });
+            else non.push({ person: p, missing: missingIds.map((id) => courseNameById.get(id) || 'Unknown') });
         });
 
-        non.sort((a, b) => (a.person.name || '').localeCompare(b.person.name || '') || a.missing.length - b.missing.length);
+        non.sort(
+            (a, b) =>
+                (a.person.name || '').localeCompare(b.person.name || '') || a.missing.length - b.missing.length,
+        );
         return { compliant: ok, nonCompliant: non };
     }
 
-    function computeCourseCompliance(subset: typeof roster, courseId: string) {
+    function computeCourseCompliance(subset: typeof roster, cId: string) {
         const non: { person: (typeof roster)[number]; missing: string[] }[] = [];
         const ok: (typeof roster)[number][] = [];
 
-        subset.forEach(p => {
+        subset.forEach((p) => {
             const got = upToDateByUser.get(p.id);
-            if (got && got.has(courseId)) ok.push(p);
-            else non.push({ person: p, missing: [courseNameById.get(courseId) || 'Selected course'] });
+            if (got && got.has(cId)) ok.push(p);
+            else non.push({ person: p, missing: [courseNameById.get(cId) || 'Selected course'] });
         });
 
         non.sort((a, b) => (a.person.name || '').localeCompare(b.person.name || ''));
@@ -2058,7 +2466,11 @@ function ComplianceAnalytics({
 
     const { compliant, nonCompliant } = useMemo(() => {
         if (mode === 'MANDATORY') return computeMandatoryCompliance(peopleSubset);
-        if (!courseId) return { compliant: [] as typeof roster, nonCompliant: [] as { person: (typeof roster)[number]; missing: string[] }[] };
+        if (!courseId)
+            return {
+                compliant: [] as typeof roster,
+                nonCompliant: [] as { person: (typeof roster)[number]; missing: string[] }[],
+            };
         return computeCourseCompliance(peopleSubset, courseId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mode, courseId, peopleSubset, upToDateByUser, perUserRequired, courseNameById]);
@@ -2071,7 +2483,7 @@ function ComplianceAnalytics({
     const topMissing = useMemo(() => {
         if (mode !== 'MANDATORY') return [] as { name: string; count: number }[];
         const freq = new Map<string, number>();
-        nonCompliant.forEach(nc => nc.missing.forEach(name => freq.set(name, (freq.get(name) || 0) + 1)));
+        nonCompliant.forEach((nc) => nc.missing.forEach((name) => freq.set(name, (freq.get(name) || 0) + 1)));
         return Array.from(freq.entries())
             .map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count)
@@ -2083,18 +2495,23 @@ function ComplianceAnalytics({
         for (const h of homes) bucket.set(h.id, { name: h.name, compliant: 0, total: 0 });
         bucket.set('BANK', { name: 'Bank staff', compliant: 0, total: 0 });
 
-        const setIds = new Set(compliant.map(p => p.id));
+        const setIds = new Set(compliant.map((p) => p.id));
         for (const p of peopleSubset) {
-            const key = p.is_bank ? 'BANK' : (p.home_id || 'BANK');
-            if (!bucket.has(key)) bucket.set(key, { name: homesById.get(key) || 'Unknown', compliant: 0, total: 0 });
+            const key = p.is_bank ? 'BANK' : p.home_id || 'BANK';
+            if (!bucket.has(key))
+                bucket.set(key, { name: homesById.get(key) || 'Unknown', compliant: 0, total: 0 });
             const entry = bucket.get(key)!;
             entry.total += 1;
             if (setIds.has(p.id)) entry.compliant += 1;
         }
 
         return Array.from(bucket.entries())
-            .map(([id, v]) => ({ id, ...v, rate: v.total ? Math.round((v.compliant / v.total) * 100) : 0 }))
-            .filter(x => x.total > 0)
+            .map(([id, v]) => ({
+                id,
+                ...v,
+                rate: v.total ? Math.round((v.compliant / v.total) * 100) : 0,
+            }))
+            .filter((x) => x.total > 0)
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [peopleSubset, compliant, homes, homesById]);
 
@@ -2104,71 +2521,135 @@ function ComplianceAnalytics({
         for (const r of records) {
             if (r.course_id !== courseId) continue;
             const prev = byUser.get(r.user_id);
-            if (!prev || (r.status === 'UP_TO_DATE') || (r.status === 'DUE_SOON' && prev === 'OVERDUE')) {
+            if (!prev || r.status === 'UP_TO_DATE' || (r.status === 'DUE_SOON' && prev === 'OVERDUE')) {
                 byUser.set(r.user_id, r.status);
             }
         }
-        let up = 0, soon = 0, late = 0, missing = 0;
+        let up = 0,
+            soon = 0,
+            late = 0,
+            missing = 0;
         for (const p of peopleSubset) {
             const st = byUser.get(p.id);
-            if (!st) { missing++; continue; }
-            if (st === 'UP_TO_DATE') up++; else if (st === 'DUE_SOON') soon++; else late++;
+            if (!st) {
+                missing++;
+                continue;
+            }
+            if (st === 'UP_TO_DATE') up++;
+            else if (st === 'DUE_SOON') soon++;
+            else late++;
         }
         return { up, soon, late, missing };
     }, [mode, courseId, records, peopleSubset, nonCount]);
 
     function exportCSV() {
         const rows = [['Person', 'Home', 'Bank', mode === 'MANDATORY' ? 'Missing mandatory courses' : 'Missing course']];
-        nonCompliant.forEach(nc => {
-            const home = nc.person.is_bank ? '' : (nc.person.home_id ? (homesById.get(nc.person.home_id) || '') : '');
-            rows.push([nc.person.name || nc.person.id.slice(0, 8), home, nc.person.is_bank ? 'Yes' : 'No', nc.missing.join(' | ')]);
+        nonCompliant.forEach((nc) => {
+            const home = nc.person.is_bank ? '' : nc.person.home_id ? homesById.get(nc.person.home_id) || '' : '';
+            rows.push([
+                nc.person.name || nc.person.id.slice(0, 8),
+                home,
+                nc.person.is_bank ? 'Yes' : 'No',
+                nc.missing.join(' | '),
+            ]);
         });
-        const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const csv = rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `compliance-${mode.toLowerCase()}.csv`; a.click();
+        a.href = url;
+        a.download = `compliance-${mode.toLowerCase()}.csv`;
+        a.click();
         URL.revokeObjectURL(url);
     }
 
     return (
-        <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-4">
+        <section
+            className="rounded-xl p-4 space-y-4 ring-1"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+        >
             {/* Controls */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div
+                className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-lg p-3 ring-1"
+                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+            >
                 <div className="md:col-span-2">
-                    <label className="block text-xs text-gray-600 mb-1">Search people</label>
-                    <input className="w-full border rounded-lg px-3 py-2" value={search} onChange={e => setSearch(e.target.value)} placeholder="e.g., Jane Doe" />
+                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                        Search people
+                    </label>
+                    <input
+                        className="w-full rounded-lg px-3 py-2 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="e.g., Jane Doe"
+                    />
                 </div>
                 <div>
-                    <label className="block text-xs text-gray-600 mb-1">Home</label>
-                    <select className="w-full border rounded-lg px-3 py-2" value={homeId} onChange={e => setHomeId(e.target.value)}>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                        Home
+                    </label>
+                    <select
+                        className="w-full rounded-lg px-3 py-2 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                        value={homeId}
+                        onChange={(e) => setHomeId(e.target.value)}
+                    >
                         <option value="">All</option>
                         <option value="BANK">Bank staff</option>
-                        {homes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                        {homes.map((h) => (
+                            <option key={h.id} value={h.id}>
+                                {h.name}
+                            </option>
+                        ))}
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs text-gray-600 mb-1">View</label>
-                    <div className="flex items-center gap-2">
-                        <label className="inline-flex items-center gap-1 text-sm">
-                            <input type="radio" name="mode" value="MANDATORY" checked={mode === 'MANDATORY'} onChange={() => setMode('MANDATORY')} />
+                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                        View
+                    </label>
+                    <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--ink)' }}>
+                        <label className="inline-flex items-center gap-1">
+                            <input
+                                type="radio"
+                                name="mode"
+                                value="MANDATORY"
+                                checked={mode === 'MANDATORY'}
+                                onChange={() => setMode('MANDATORY')}
+                            />
                             <span>Mandatory</span>
                         </label>
-                        <label className="inline-flex items-center gap-1 text-sm">
-                            <input type="radio" name="mode" value="COURSE" checked={mode === 'COURSE'} onChange={() => setMode('COURSE')} />
+                        <label className="inline-flex items-center gap-1">
+                            <input
+                                type="radio"
+                                name="mode"
+                                value="COURSE"
+                                checked={mode === 'COURSE'}
+                                onChange={() => setMode('COURSE')}
+                            />
                             <span>Course</span>
                         </label>
                     </div>
                 </div>
                 {mode === 'COURSE' && (
                     <div className="md:col-span-2">
-                        <label className="block text-xs text-gray-600 mb-1">Course</label>
-                        <select className="w-full border rounded-lg px-3 py-2" value={courseId} onChange={e => setCourseId(e.target.value)}>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                            Course
+                        </label>
+                        <select
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={courseId}
+                            onChange={(e) => setCourseId(e.target.value)}
+                        >
                             <option value="">Select…</option>
-                            {Array.from(new Map(records.map(r => [r.course_id, r.course_name])).entries())
+                            {Array.from(new Map(records.map((r) => [r.course_id, r.course_name])).entries())
                                 .sort((a, b) => a[1].localeCompare(b[1]))
-                                .map(([id, name]) => <option key={id} value={id}>{name}</option>)
-                            }
+                                .map(([id, name]) => (
+                                    <option key={id} value={id}>
+                                        {name}
+                                    </option>
+                                ))}
                         </select>
                     </div>
                 )}
@@ -2176,10 +2657,21 @@ function ComplianceAnalytics({
 
             {/* KPIs + Donut */}
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4">
-                <div className="rounded-xl border p-4">
+                <div
+                    className="rounded-xl p-4 ring-1"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                >
                     <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold">Compliance overview</h3>
-                        <button onClick={exportCSV} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Export CSV</button>
+                        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                            Compliance overview
+                        </h3>
+                        <button
+                            onClick={exportCSV}
+                            className="rounded px-2 py-1 text-xs ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                        >
+                            Export CSV
+                        </button>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
@@ -2198,12 +2690,12 @@ function ComplianceAnalytics({
                             centerLabel={`${rate}%`}
                             size={160}
                         />
-                        <div className="space-y-2 text-sm">
+                        <div className="space-y-2 text-sm" style={{ color: 'var(--ink)' }}>
                             <LegendRow color="#10b981" label="Compliant" value={compliantCount} />
                             <LegendRow color="#f43f5e" label="Non-compliant" value={nonCount} />
                             {mode === 'COURSE' && courseId && (
                                 <>
-                                    <div className="h-px bg-gray-200 my-2" />
+                                    <div className="h-px my-2" style={{ background: 'var(--ring)' }} />
                                     <LegendRow color="#10b981" label="Up to date" value={courseStatusCounts.up} />
                                     <LegendRow color="#f59e0b" label="Due soon" value={courseStatusCounts.soon} />
                                     <LegendRow color="#f43f5e" label="Overdue" value={courseStatusCounts.late} />
@@ -2216,45 +2708,63 @@ function ComplianceAnalytics({
 
                 {/* Top Missing + By Home */}
                 <div className="space-y-4">
-                    <div className="rounded-xl border p-4">
-                        <h3 className="text-sm font-semibold">Top missing courses</h3>
+                    <div
+                        className="rounded-xl p-4 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                    >
+                        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                            Top missing courses
+                        </h3>
                         {mode === 'COURSE' ? (
-                            <p className="text-xs text-gray-600 mt-2">
+                            <p className="text-xs mt-2" style={{ color: 'var(--sub)' }}>
                                 Pick a course in the filters to see detailed status breakdown on the left.
                             </p>
                         ) : topMissing.length === 0 ? (
-                            <p className="text-xs text-emerald-700 mt-2">Everyone is compliant 🎉</p>
+                            <p className="text-xs mt-2 [data-orbit=0]:text-emerald-700 [data-orbit=1]:text-emerald-300">
+                                Everyone is compliant 🎉
+                            </p>
                         ) : (
                             <ul className="mt-3 space-y-2">
                                 {topMissing.map((t) => (
-                                    <li key={t.name} className="flex items-center gap-2 text-sm">
-                                        <span className="inline-flex items-center rounded-full border px-2 py-0.5 bg-amber-50 text-amber-800">{t.name}</span>
-                                        <span className="ml-auto tabular-nums text-gray-700">{t.count}</span>
+                                    <li key={t.name} className="flex items-center gap-2 text-sm" style={{ color: 'var(--ink)' }}>
+                                        <span className="inline-flex items-center rounded-full px-2 py-0.5 ring-1 bg-amber-50 text-amber-800 ring-amber-100 [data-orbit=1]:bg-amber-500/10 [data-orbit=1]:text-amber-200 [data-orbit=1]:ring-amber-400/25">
+                                            {t.name}
+                                        </span>
+                                        <span className="ml-auto tabular-nums" style={{ color: 'var(--sub)' }}>
+                                            {t.count}
+                                        </span>
                                     </li>
                                 ))}
                             </ul>
                         )}
                     </div>
 
-                    <div className="rounded-xl border p-4">
-                        <h3 className="text-sm font-semibold">Compliance by home</h3>
+                    <div
+                        className="rounded-xl p-4 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                    >
+                        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                            Compliance by home
+                        </h3>
                         {byHome.length === 0 ? (
-                            <p className="text-xs text-gray-600 mt-2">No people in scope.</p>
+                            <p className="text-xs mt-2" style={{ color: 'var(--sub)' }}>
+                                No people in scope.
+                            </p>
                         ) : (
                             <ul className="mt-3 space-y-3">
-                                {byHome.map(h => (
+                                {byHome.map((h) => (
                                     <li key={h.id}>
-                                        <div className="flex items-center text-sm">
+                                        <div className="flex items-center text-sm" style={{ color: 'var(--ink)' }}>
                                             <span className="font-medium">{h.name}</span>
-                                            <span className="ml-2 text-xs text-gray-500">{h.compliant}/{h.total}</span>
-                                            <span className="ml-auto text-xs text-gray-600">{h.rate}%</span>
+                                            <span className="ml-2 text-xs" style={{ color: 'var(--sub)' }}>
+                                                {h.compliant}/{h.total}
+                                            </span>
+                                            <span className="ml-auto text-xs" style={{ color: 'var(--sub)' }}>
+                                                {h.rate}%
+                                            </span>
                                         </div>
-                                        <div className="h-2 rounded bg-gray-100 mt-1 overflow-hidden">
-                                            <div
-                                                className="h-2 bg-emerald-500"
-                                                style={{ width: `${h.rate}%` }}
-                                                title={`${h.rate}%`}
-                                            />
+                                        <div className="h-2 rounded mt-1 overflow-hidden" style={{ background: 'var(--ring)' }}>
+                                            <div className="h-2 bg-emerald-500" style={{ width: `${h.rate}%` }} title={`${h.rate}%`} />
                                         </div>
                                     </li>
                                 ))}
@@ -2265,27 +2775,47 @@ function ComplianceAnalytics({
             </div>
 
             {/* Non-compliant list */}
-            <div className="rounded-xl border p-4">
+            <div
+                className="rounded-xl p-4 ring-1"
+                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+            >
                 <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Who is not compliant</h3>
-                    <div className="text-xs text-gray-600">{nonCount} people</div>
+                    <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                        Who is not compliant
+                    </h3>
+                    <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                        {nonCount} people
+                    </div>
                 </div>
                 {loading ? (
-                    <div className="text-sm text-gray-600 mt-2">Checking…</div>
+                    <div className="text-sm mt-2" style={{ color: 'var(--sub)' }}>
+                        Checking…
+                    </div>
                 ) : nonCompliant.length === 0 ? (
-                    <div className="text-sm text-emerald-700 mt-2">Everyone is compliant 🎉</div>
+                    <div className="text-sm mt-2 [data-orbit=0]:text-emerald-700 [data-orbit=1]:text-emerald-300">
+                        Everyone is compliant 🎉
+                    </div>
                 ) : (
                     <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {nonCompliant.map(({ person, missing }) => (
-                            <div key={person.id} className="rounded-lg border p-3 bg-white">
+                            <div
+                                key={person.id}
+                                className="rounded-lg p-3 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                            >
                                 <div className="font-medium text-sm">{person.name || person.id.slice(0, 8)}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">
-                                    {person.is_bank ? 'Bank staff' : (person.home_id ? (homesById.get(person.home_id) || '—') : '—')}
+                                <div className="text-xs mt-0.5" style={{ color: 'var(--sub)' }}>
+                                    {person.is_bank ? 'Bank staff' : person.home_id ? homesById.get(person.home_id) || '—' : '—'}
                                 </div>
-                                <div className="text-xs text-gray-600 mt-2">Missing:</div>
+                                <div className="text-xs mt-2" style={{ color: 'var(--sub)' }}>
+                                    Missing:
+                                </div>
                                 <div className="mt-1 flex flex-wrap gap-1">
                                     {missing.map((m, i) => (
-                                        <span key={i} className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs bg-amber-50 text-amber-800">
+                                        <span
+                                            key={i}
+                                            className="inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1 bg-amber-50 text-amber-800 ring-amber-100 [data-orbit=1]:bg-amber-500/10 [data-orbit=1]:text-amber-200 [data-orbit=1]:ring-amber-400/25"
+                                        >
                                             {m}
                                         </span>
                                     ))}
@@ -2295,6 +2825,30 @@ function ComplianceAnalytics({
                     </div>
                 )}
             </div>
+
+            {/* Orbit-only select fixes (scoped) */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="date"],
+        [data-orbit="1"] input[type="text"] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </section>
     );
 }
@@ -2303,8 +2857,8 @@ function ComplianceAnalytics({
 PEOPLE PICKER (shared)
 ========================= */
 function PeoplePicker({
-    people,                 // full roster: { id, name, home_id, is_bank? }
-    homesById,              // Map<home_id, home_name> to show context
+    people,
+    homesById,
     selected,
     onChange,
     placeholder = 'Search people…',
@@ -2325,31 +2879,41 @@ function PeoplePicker({
 
     const list = useMemo(() => {
         const q = query.trim().toLowerCase();
-        const base = q
-            ? people.filter(p => (p.name || '').toLowerCase().includes(q))
-            : people;
-        // remove already selected from suggestions
-        return base.filter(p => !selectedSet.has(p.id)).slice(0, 50);
+        const base = q ? people.filter((p) => (p.name || '').toLowerCase().includes(q)) : people;
+        return base.filter((p) => !selectedSet.has(p.id)).slice(0, 50);
     }, [people, query, selectedSet]);
 
-    function add(id: string) { onChange([...selected, id]); setQuery(''); setOpen(false); }
-    function remove(id: string) { onChange(selected.filter(x => x !== id)); }
+    function add(id: string) {
+        onChange([...selected, id]);
+        setQuery('');
+        setOpen(false);
+    }
+    function remove(id: string) {
+        onChange(selected.filter((x) => x !== id));
+    }
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-2" style={{ color: 'var(--ink)' }}>
             {/* chips */}
             <div className="flex flex-wrap gap-2">
-                {selected.map(id => {
-                    const p = people.find(x => x.id === id);
+                {selected.map((id) => {
+                    const p = people.find((x) => x.id === id);
                     const label = p ? p.name : id.slice(0, 8);
-                    const ctx = p?.home_id ? homesById.get(p.home_id) : (p?.is_bank ? 'Bank staff' : '—');
+                    const ctx = p?.home_id ? homesById.get(p.home_id) : p?.is_bank ? 'Bank staff' : '—';
                     return (
-                        <span key={id} className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs">
-                            <span className="font-medium">{label}</span>
-                            <span className="text-gray-500">({ctx || '—'})</span>
+                        <span
+                            key={id}
+                            className="inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                        >
+                            <span className="font-medium" style={{ color: 'var(--ink)' }}>
+                                {label}
+                            </span>
+                            <span style={{ color: 'var(--sub)' }}>({ctx || '—'})</span>
                             <button
                                 type="button"
-                                className="rounded border px-1"
+                                className="rounded px-1 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                 onClick={() => remove(id)}
                                 disabled={disabled}
                             >
@@ -2358,41 +2922,66 @@ function PeoplePicker({
                         </span>
                     );
                 })}
-                {selected.length === 0 && <span className="text-xs text-gray-500">No one selected yet.</span>}
+                {selected.length === 0 && <span className="text-xs" style={{ color: 'var(--sub)' }}>No one selected yet.</span>}
             </div>
 
             {/* input + dropdown */}
             <div className="relative max-w-lg">
                 <input
                     disabled={disabled}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full rounded-lg px-3 py-2 ring-1"
+                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     placeholder={placeholder}
                     value={query}
-                    onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+                    onChange={(e) => {
+                        setQuery(e.target.value);
+                        setOpen(true);
+                    }}
                     onFocus={() => setOpen(true)}
                     onBlur={() => requestAnimationFrame(() => setOpen(false))}
                     onKeyDown={(e) => {
                         if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) setOpen(true);
                         if (!open) return;
-                        if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, list.length - 1)); }
-                        if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
-                        if (e.key === 'Enter') { e.preventDefault(); if (list[highlight]) add(list[highlight].id); }
-                        if (e.key === 'Escape') { setOpen(false); }
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            setHighlight((h) => Math.min(h + 1, list.length - 1));
+                        }
+                        if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            setHighlight((h) => Math.max(h - 1, 0));
+                        }
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (list[highlight]) add(list[highlight].id);
+                        }
+                        if (e.key === 'Escape') {
+                            setOpen(false);
+                        }
                     }}
                 />
                 {open && list.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full rounded-xl border bg-white shadow-lg ring-1 ring-gray-200 max-h-64 overflow-auto">
+                    <div
+                        className="absolute z-50 mt-1 w-full rounded-xl ring-1 max-h-64 overflow-auto"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                    >
                         {list.map((p, i) => (
                             <button
                                 key={p.id}
                                 type="button"
                                 onMouseDown={(e) => e.preventDefault()}
+                                onMouseEnter={() => setHighlight(i)}
                                 onClick={() => add(p.id)}
-                                className={`w-full text-left px-3 py-2 text-sm ${i === highlight ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                                className="w-full text-left px-3 py-2 text-sm"
+                                style={{
+                                    background: i === highlight ? 'var(--nav-item-bg-hover)' : 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                }}
                             >
-                                <div className="font-medium text-gray-900">{p.name}</div>
-                                <div className="text-xs text-gray-500">
-                                    {p.home_id ? homesById.get(p.home_id) : (p.is_bank ? 'Bank staff' : '—')}
+                                <div className="font-medium" style={{ color: 'var(--ink)' }}>
+                                    {p.name}
+                                </div>
+                                <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                                    {p.home_id ? homesById.get(p.home_id) : p.is_bank ? 'Bank staff' : '—'}
                                 </div>
                             </button>
                         ))}
@@ -2419,7 +3008,7 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     const [people, setPeople] = useState<Person[]>([]);
     const homesById = useMemo(() => {
         const m = new Map<string, string>();
-        homes.forEach(h => m.set(h.id, h.name));
+        homes.forEach((h) => m.set(h.id, h.name));
         return m;
     }, [homes]);
 
@@ -2438,7 +3027,6 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     const [err, setErr] = useState<string | null>(null);
     const [ok, setOk] = useState<string | null>(null);
 
-    // Identify user + level
     useEffect(() => {
         (async () => {
             const [{ data: u }, lvl] = await Promise.all([supabase.auth.getUser(), getEffectiveLevel()]);
@@ -2447,11 +3035,12 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
         })();
     }, []);
 
-    // Load company/homes/people/courses per role
     useEffect(() => {
         (async () => {
             if (!uid) return;
-            setLoading(true); setErr(null); setOk(null);
+            setLoading(true);
+            setErr(null);
+            setOk(null);
 
             try {
                 if (isAdmin) {
@@ -2469,13 +3058,12 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 } else if (isManager) {
                     await loadManagerScope(uid);
                 } else {
-                    setHomes([]); setPeople([]); setCourses([]);
+                    setHomes([]);
+                    setPeople([]);
+                    setCourses([]);
                 }
             } catch (e) {
-                const message =
-                    e instanceof Error && typeof e.message === 'string'
-                        ? e.message
-                        : 'Failed to load';
+                const message = e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to load';
                 setErr(message);
             } finally {
                 setLoading(false);
@@ -2484,7 +3072,6 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [uid, isAdmin, isCompany, isManager, companyId]);
 
-    // When admin switches company, reload scope
     useEffect(() => {
         (async () => {
             if (!isAdmin || !companyId) return;
@@ -2494,13 +3081,11 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     }, [isAdmin, companyId]);
 
     async function loadAdminCompanyScope(cid: string) {
-        // homes in company
         const h = await supabase.from('homes').select('id,name').eq('company_id', cid);
         if (!h.error) {
             setHomes(Array.isArray(h.data) ? h.data : []);
         }
 
-        // people in company (incl bank)
         const roster = await supabase.rpc('list_company_people', { p_company_id: cid });
         const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
             const row = r as {
@@ -2512,20 +3097,15 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
 
             const user_id = typeof row.user_id === 'string' ? row.user_id : '';
             const full_name =
-                typeof row.full_name === 'string' && row.full_name.trim()
-                    ? row.full_name
-                    : user_id.slice(0, 8);
+                typeof row.full_name === 'string' && row.full_name.trim() ? row.full_name : user_id.slice(0, 8);
             const home_id =
-                typeof row.home_id === 'string' || row.home_id === null
-                    ? (row.home_id as string | null)
-                    : null;
+                typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
             const is_bank = Boolean(row.is_bank);
 
             return { id: user_id, name: full_name, home_id, is_bank };
         });
         setPeople(ps);
 
-        // courses
         const cs = await supabase.from('courses').select('id,name').eq('company_id', cid).order('name');
         if (!cs.error) {
             setCourses(Array.isArray(cs.data) ? cs.data : []);
@@ -2548,14 +3128,9 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
             };
 
             const user_id = typeof row.user_id === 'string' ? row.user_id : '';
-            const name =
-                typeof row.full_name === 'string' && row.full_name
-                    ? row.full_name
-                    : user_id.slice(0, 8);
+            const name = typeof row.full_name === 'string' && row.full_name ? row.full_name : user_id.slice(0, 8);
             const home_id =
-                typeof row.home_id === 'string' || row.home_id === null
-                    ? (row.home_id as string | null)
-                    : null;
+                typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
             const is_bank = Boolean(row.is_bank);
 
             return { id: user_id, name, home_id, is_bank };
@@ -2569,42 +3144,33 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     }
 
     async function loadManagerScope(me: string) {
-        // managed homes
         const mh = await supabase.from('home_memberships').select('home_id').eq('user_id', me).eq('role', 'MANAGER');
         const managedHomeIds = Array.isArray(mh.data)
             ? mh.data
-                .filter(
-                    (x): x is { home_id: string } =>
-                        typeof (x as { home_id?: unknown }).home_id === 'string'
-                )
+                .filter((x): x is { home_id: string } => typeof (x as { home_id?: unknown }).home_id === 'string')
                 .map((x) => x.home_id)
             : [];
-        if (managedHomeIds.length === 0) { setHomes([]); setPeople([]); setCourses([]); return; }
+        if (managedHomeIds.length === 0) {
+            setHomes([]);
+            setPeople([]);
+            setCourses([]);
+            return;
+        }
 
         const h = await supabase.from('homes').select('id,name,company_id').in('id', managedHomeIds);
         const hs = Array.isArray(h.data) ? h.data : [];
-        setHomes(hs.map(x => ({ id: x.id, name: x.name })));
+        setHomes(hs.map((x) => ({ id: x.id, name: x.name })));
         const cid = hs[0]?.company_id || '';
         setCompanyId(cid);
 
-        // people: staff in managed homes (no bank)
         const roster = await supabase.rpc('list_manager_people');
         const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
-            const row = r as {
-                user_id?: unknown;
-                full_name?: unknown;
-                home_id?: unknown;
-            };
+            const row = r as { user_id?: unknown; full_name?: unknown; home_id?: unknown };
 
             const user_id = typeof row.user_id === 'string' ? row.user_id : '';
-            const name =
-                typeof row.full_name === 'string' && row.full_name
-                    ? row.full_name
-                    : user_id.slice(0, 8);
+            const name = typeof row.full_name === 'string' && row.full_name ? row.full_name : user_id.slice(0, 8);
             const home_id =
-                typeof row.home_id === 'string' || row.home_id === null
-                    ? (row.home_id as string | null)
-                    : null;
+                typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
 
             return { id: user_id, name, home_id, is_bank: false };
         });
@@ -2619,49 +3185,56 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     }
 
     const canSubmit =
-        !!courseId &&
-        !!dueBy &&
-        (
-            (mode === 'HOMES' && selectedHomes.length > 0) ||
-            (mode === 'PEOPLE' && selectedPeople.length > 0)
-        );
+        !!courseId && !!dueBy && ((mode === 'HOMES' && selectedHomes.length > 0) || (mode === 'PEOPLE' && selectedPeople.length > 0));
 
     async function onSubmit(e: React.FormEvent) {
-        e.preventDefault(); setErr(null); setOk(null);
+        e.preventDefault();
+        setErr(null);
+        setOk(null);
 
-        if (!companyId) { setErr('No company in scope.'); return; }
-        if (!courseId) { setErr('Pick a course.'); return; }
-        if (!dueBy) { setErr('Pick a due date.'); return; }
+        if (!companyId) {
+            setErr('No company in scope.');
+            return;
+        }
+        if (!courseId) {
+            setErr('Pick a course.');
+            return;
+        }
+        if (!dueBy) {
+            setErr('Pick a due date.');
+            return;
+        }
 
-        // Figure recipients from current roster
         const target = new Set<string>();
         if (mode === 'HOMES') {
             const allowedHomeIds = new Set(selectedHomes);
-            people.forEach(p => { if (p.home_id && allowedHomeIds.has(p.home_id)) target.add(p.id); });
+            people.forEach((p) => {
+                if (p.home_id && allowedHomeIds.has(p.home_id)) target.add(p.id);
+            });
         } else {
-            selectedPeople.forEach(id => target.add(id));
+            selectedPeople.forEach((id) => target.add(id));
         }
 
-        // Managers cannot assign to themselves
         if (isManager && uid) target.delete(uid);
 
         const recipients: string[] = Array.from(target);
-        if (recipients.length === 0) { setErr('No recipients found for the chosen scope.'); return; }
+        if (recipients.length === 0) {
+            setErr('No recipients found for the chosen scope.');
+            return;
+        }
 
         setSaving(true);
         try {
-            // 🔎 PRE-FLIGHT: remove anyone who already has this course recorded
-            // (uses the canonical records table)  :contentReference[oaicite:1]{index=1}
             const { data: existing, error: existsErr } = await supabase
                 .from('training_records')
-                .select('user_id')                       // just need the IDs
+                .select('user_id')
                 .eq('course_id', courseId)
                 .in('user_id', recipients);
 
             if (existsErr) throw existsErr;
 
-            const already = new Set<string>((existing ?? []).map(r => r.user_id as string));
-            const filtered = recipients.filter(id => !already.has(id));
+            const already = new Set<string>((existing ?? []).map((r) => r.user_id as string));
+            const filtered = recipients.filter((id) => !already.has(id));
             const skipped = recipients.length - filtered.length;
 
             if (filtered.length === 0) {
@@ -2669,7 +3242,6 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 return;
             }
 
-            // proceed with ONLY the filtered recipients
             const { error } = await supabase.rpc('create_training_assignment', {
                 p_course_id: courseId,
                 p_due_by: dueBy,
@@ -2677,40 +3249,54 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
             });
             if (error) throw error;
 
-            // reset form
-            setSelectedHomes([]); setSelectedPeople([]); setCourseId(''); setDueBy('');
+            setSelectedHomes([]);
+            setSelectedPeople([]);
+            setCourseId('');
+            setDueBy('');
 
-            // friendly success message with skip info
             const okCount = filtered.length;
             setOk(
-                `Training set for ${okCount} recipient${okCount === 1 ? '' : 's'}`
-                + (skipped > 0 ? ` (skipped ${skipped} who already have this course).` : '.')
+                `Training set for ${okCount} recipient${okCount === 1 ? '' : 's'}` +
+                (skipped > 0 ? ` (skipped ${skipped} who already have this course).` : '.'),
             );
         } catch (e) {
-            const message =
-                e instanceof Error && typeof e.message === 'string'
-                    ? e.message
-                    : 'Failed to set training';
+            const message = e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to set training';
             setErr(message);
         } finally {
             setSaving(false);
         }
     }
 
-
-    if (loading) return <p>Loading…</p>;
+    if (loading) return <p style={{ color: 'var(--sub)' }}>Loading…</p>;
 
     const disableControls = saving || (!companyId && (isAdmin || isCompany || isManager));
 
     return (
-        <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-4">
-            <h2 className="text-base font-semibold">Set training</h2>
+        <section
+            className="rounded-xl p-4 space-y-4 ring-1"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+        >
+            <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                Set training
+            </h2>
 
             {isAdmin && (
                 <div>
-                    <label className="block text-sm mb-1">Company</label>
-                    <select className="w-full max-w-sm border rounded-lg px-3 py-2" value={companyId} onChange={e => setCompanyId(e.target.value)} disabled={saving}>
-                        {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                        Company
+                    </label>
+                    <select
+                        className="w-full max-w-sm rounded-lg px-3 py-2 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                        value={companyId}
+                        onChange={(e) => setCompanyId(e.target.value)}
+                        disabled={saving}
+                    >
+                        {companies.map((c) => (
+                            <option key={c.id} value={c.id}>
+                                {c.name}
+                            </option>
+                        ))}
                     </select>
                 </div>
             )}
@@ -2719,28 +3305,71 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 {/* Course + Due */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
-                        <label className="block text-sm mb-1">Course</label>
-                        <select className="w-full border rounded-lg px-3 py-2" value={courseId} onChange={e => setCourseId(e.target.value)} disabled={disableControls}>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                            Course
+                        </label>
+                        <select
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={courseId}
+                            onChange={(e) => setCourseId(e.target.value)}
+                            disabled={disableControls}
+                        >
                             <option value="">Select…</option>
-                            {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {courses.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.name}
+                                </option>
+                            ))}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm mb-1">Due by</label>
-                        <input type="date" className="w-full border rounded-lg px-3 py-2" value={dueBy} onChange={e => setDueBy(e.target.value)} disabled={disableControls} />
+                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                            Due by
+                        </label>
+                        <input
+                            type="date"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={dueBy}
+                            onChange={(e) => setDueBy(e.target.value)}
+                            disabled={disableControls}
+                        />
                     </div>
                 </div>
 
                 {/* Who */}
                 <div className="space-y-2">
-                    <label className="block text-sm mb-1">Who</label>
+                    <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                        Who
+                    </label>
                     <div className="flex flex-wrap gap-2">
-                        <label className="inline-flex items-center gap-2 text-sm border rounded-lg px-3 py-2">
-                            <input type="radio" name="mode" value="HOMES" checked={mode === 'HOMES'} onChange={() => setMode('HOMES')} disabled={disableControls} />
+                        <label
+                            className="inline-flex items-center gap-2 text-sm rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                        >
+                            <input
+                                type="radio"
+                                name="mode"
+                                value="HOMES"
+                                checked={mode === 'HOMES'}
+                                onChange={() => setMode('HOMES')}
+                                disabled={disableControls}
+                            />
                             <span>By home</span>
                         </label>
-                        <label className="inline-flex items-center gap-2 text-sm border rounded-lg px-3 py-2">
-                            <input type="radio" name="mode" value="PEOPLE" checked={mode === 'PEOPLE'} onChange={() => setMode('PEOPLE')} disabled={disableControls} />
+                        <label
+                            className="inline-flex items-center gap-2 text-sm rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                        >
+                            <input
+                                type="radio"
+                                name="mode"
+                                value="PEOPLE"
+                                checked={mode === 'PEOPLE'}
+                                onChange={() => setMode('PEOPLE')}
+                                disabled={disableControls}
+                            />
                             <span>Pick people</span>
                         </label>
                     </div>
@@ -2749,22 +3378,35 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 {/* Homes multi-select */}
                 {mode === 'HOMES' && (
                     <div>
-                        <label className="block text-sm mb-1">Homes</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                            Homes
+                        </label>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                            {homes.map(h => (
-                                <label key={h.id} className={`flex items-center gap-2 border rounded-lg px-3 py-2 text-sm ${selectedHomes.includes(h.id) ? 'bg-indigo-50 border-indigo-200' : ''}`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedHomes.includes(h.id)}
-                                        onChange={() => {
-                                            if (selectedHomes.includes(h.id)) setSelectedHomes(selectedHomes.filter(x => x !== h.id));
-                                            else setSelectedHomes([...selectedHomes, h.id]);
+                            {homes.map((h) => {
+                                const selected = selectedHomes.includes(h.id);
+                                return (
+                                    <label
+                                        key={h.id}
+                                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 transition"
+                                        style={{
+                                            background: selected ? 'var(--nav-item-bg-hover)' : 'var(--nav-item-bg)',
+                                            borderColor: selected ? 'var(--brand-link)' : 'var(--ring)',
+                                            color: 'var(--ink)',
                                         }}
-                                        disabled={disableControls}
-                                    />
-                                    <span>{h.name}</span>
-                                </label>
-                            ))}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            onChange={() => {
+                                                if (selected) setSelectedHomes(selectedHomes.filter((x) => x !== h.id));
+                                                else setSelectedHomes([...selectedHomes, h.id]);
+                                            }}
+                                            disabled={disableControls}
+                                        />
+                                        <span>{h.name}</span>
+                                    </label>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -2772,7 +3414,9 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 {/* People multi-select */}
                 {mode === 'PEOPLE' && (
                     <div>
-                        <label className="block text-sm mb-1">People</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                            People
+                        </label>
                         <PeoplePicker
                             people={people}
                             homesById={homesById}
@@ -2780,18 +3424,57 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                             onChange={setSelectedPeople}
                             disabled={disableControls}
                         />
-                        {isManager && <p className="text-xs text-gray-500 mt-1">Managers can only pick staff from the homes they manage.</p>}
+                        {isManager && (
+                            <p className="text-xs mt-1" style={{ color: 'var(--sub)' }}>
+                                Managers can only pick staff from the homes they manage.
+                            </p>
+                        )}
                     </div>
                 )}
 
                 <div className="pt-2">
-                    <button className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60" disabled={!canSubmit || saving}>
+                    <button
+                        className="rounded-lg px-3 py-2 text-sm ring-1 transition disabled:opacity-50"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                        disabled={!canSubmit || saving}
+                    >
                         {saving ? 'Setting…' : 'Set training'}
                     </button>
-                    {err && <span className="ml-3 text-sm text-rose-600">{err}</span>}
-                    {ok && <span className="ml-3 text-sm text-emerald-700">{ok}</span>}
+                    {err && (
+                        <span className="ml-3 text-sm" style={{ color: '#dc2626' }}>
+                            {err}
+                        </span>
+                    )}
+                    {ok && (
+                        <span className="ml-3 text-sm [data-orbit=0]:text-emerald-700 [data-orbit=1]:text-emerald-300">
+                            {ok}
+                        </span>
+                    )}
                 </div>
             </form>
+
+            {/* Orbit-only select fixes (scoped) */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="date"] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </section>
     );
 }
@@ -2813,9 +3496,24 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
     const [homes, setHomes] = useState<{ id: string; name: string }[]>([]);
     const homesById = useMemo(() => {
         const m = new Map<string, string>();
-        homes.forEach(h => m.set(h.id, h.name));
+        homes.forEach((h) => m.set(h.id, h.name));
         return m;
     }, [homes]);
+
+    // ---- type labels (keeps DB strings, shows nicer labels)
+    const TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+        { value: 'ELearning', label: 'E-learning' },
+        { value: 'In Person', label: 'In person' }, // also display for "InPerson" if it exists in data
+        { value: 'TES', label: 'TES' },
+        { value: 'Other', label: 'Other' },
+    ];
+    const labelForType = (v?: string | null) => {
+        if (!v) return '—';
+        if (v === 'InPerson') return 'In person';
+        const found = TYPE_OPTIONS.find((o) => o.value === v);
+        return found ? found.label : v;
+    };
+    const normalizeTypeForDB = (v: string) => (v === 'In person' ? 'In Person' : v); // be forgiving
 
     // form
     const [name, setName] = useState('');
@@ -2824,38 +3522,50 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
     const [dueSoon, setDueSoon] = useState<number>(60);
     const [link, setLink] = useState(''); // optional
 
-    // Audience mode: Everyone OR Specific people
-    // Audience mode: Not mandatory, Everyone, or Specific people
+    // Audience mode
     type AudienceMode = 'NONE' | 'EVERYONE' | 'PEOPLE';
     const [audMode, setAudMode] = useState<AudienceMode>('NONE');
-
     const [audPeople, setAudPeople] = useState<string[]>([]);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         (async () => {
-            setLoading(true); setErr(null);
+            setLoading(true);
+            setErr(null);
 
             if (isAdmin) {
                 const co = await supabase.from('companies').select('id,name').order('name');
-                if (!co.error) {
-                    setCompanies(Array.isArray(co.data) ? co.data : []);
-                }
+                if (!co.error) setCompanies(Array.isArray(co.data) ? co.data : []);
+                // don’t auto-load courses until a company is chosen
             } else {
                 const [{ data: u }] = await Promise.all([supabase.auth.getUser()]);
                 const me = u?.user?.id;
                 if (me) {
                     let cid = '';
-                    const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', me).limit(1).maybeSingle();
-                    if (cm.data?.company_id) {
-                        cid = cm.data.company_id;
-                    } else {
-                        const hm = await supabase.from('home_memberships').select('home_id').eq('user_id', me).limit(1).maybeSingle();
+                    const cm = await supabase
+                        .from('company_memberships')
+                        .select('company_id')
+                        .eq('user_id', me)
+                        .limit(1)
+                        .maybeSingle();
+                    if (cm.data?.company_id) cid = cm.data.company_id;
+                    else {
+                        const hm = await supabase
+                            .from('home_memberships')
+                            .select('home_id')
+                            .eq('user_id', me)
+                            .limit(1)
+                            .maybeSingle();
                         if (hm.data?.home_id) {
                             const h = await supabase.from('homes').select('company_id').eq('id', hm.data.home_id).single();
                             if (h.data?.company_id) cid = h.data.company_id;
                         } else {
-                            const bm = await supabase.from('bank_memberships').select('company_id').eq('user_id', me).limit(1).maybeSingle();
+                            const bm = await supabase
+                                .from('bank_memberships')
+                                .select('company_id')
+                                .eq('user_id', me)
+                                .limit(1)
+                                .maybeSingle();
                             if (bm.data?.company_id) cid = bm.data.company_id;
                         }
                     }
@@ -2867,13 +3577,10 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                 }
             }
 
-            // Load courses + roster if we know the company
+            // Only load when we know the company
             if (companyId) {
-                await Promise.all([loadCourses(), loadRoster(companyId)]);
-            } else {
-                await loadCourses();
+                await Promise.all([loadCourses(companyId), loadRoster(companyId)]);
             }
-
             setLoading(false);
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2882,9 +3589,7 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
     // load roster (homes + people) for the selected company
     async function loadRoster(cid: string) {
         const h = await supabase.from('homes').select('id,name').eq('company_id', cid);
-        if (!h.error) {
-            setHomes(Array.isArray(h.data) ? h.data : []);
-        }
+        if (!h.error) setHomes(Array.isArray(h.data) ? h.data : []);
 
         const roster = await supabase.rpc('list_company_people', { p_company_id: cid });
         const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
@@ -2894,18 +3599,11 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                 home_id?: string | null;
                 is_bank?: boolean | null;
             };
-
             const user_id = typeof row.user_id === 'string' ? row.user_id : '';
             const full_name =
-                typeof row.full_name === 'string' && row.full_name.trim()
-                    ? row.full_name
-                    : user_id.slice(0, 8);
-            const home_id =
-                typeof row.home_id === 'string' || row.home_id === null
-                    ? row.home_id
-                    : null;
+                typeof row.full_name === 'string' && row.full_name.trim() ? row.full_name : user_id.slice(0, 8);
+            const home_id = typeof row.home_id === 'string' || row.home_id === null ? row.home_id : null;
             const is_bank = Boolean(row.is_bank);
-
             return { id: user_id, name: full_name, home_id, is_bank };
         });
         setPeople(ps);
@@ -2913,39 +3611,48 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
 
     async function loadCourses(targetCompanyId?: string) {
         const cid = targetCompanyId ?? companyId;
-        const q = supabase.from('courses').select('*').order('name');
-        const res = cid ? await q.eq('company_id', cid) : await q;
+        if (!cid) return; // don’t load across all companies
+        const res = await supabase.from('courses').select('*').eq('company_id', cid).order('name');
         if (res.error) setErr(res.error.message);
-        else {
-            setCourses(Array.isArray(res.data) ? res.data : []);
-        }
+        else setCourses(Array.isArray(res.data) ? (res.data as Course[]) : []);
     }
 
-    // Create course + initial audience (Everyone or People)
-    // Create course + initial audience (Everyone or People)
     async function onCreate(e: React.FormEvent) {
         e.preventDefault();
         setErr(null);
 
         const cid = companyId;
-        if (!cid) { setErr('Could not determine your company. Please refresh or contact an admin.'); return; }
-        if (!name.trim()) { setErr('Name is required.'); return; }
+        if (!cid) {
+            setErr('Could not determine your company. Please select a company or refresh.');
+            return;
+        }
+        if (!name.trim()) {
+            setErr('Name is required.');
+            return;
+        }
+
+        // light numeric guard
+        const dueSoonSafe = Number.isFinite(dueSoon) ? Math.max(0, Math.floor(dueSoon)) : 0;
+        const refSafe = refYears === '' ? null : Math.max(0, Math.floor(Number(refYears)));
+
+        // optional URL tidy
+        const linkVal = link.trim();
+        const safeLink = linkVal === '' ? null : linkVal;
 
         setSaving(true);
         try {
             const legacyMandatory = audMode === 'EVERYONE';
 
-            // 1) Insert the new course (must include company_id)
             const insCourse = await supabase
                 .from('courses')
                 .insert({
                     company_id: cid,
                     name: name.trim(),
-                    training_type: type,
-                    refresher_years: refYears === '' ? null : Number(refYears),
-                    due_soon_days: dueSoon,
-                    mandatory: legacyMandatory, // true for EVERYONE; false for NONE/PEOPLE
-                    link: link.trim() === '' ? null : link.trim(),
+                    training_type: normalizeTypeForDB(type),
+                    refresher_years: refSafe,
+                    due_soon_days: dueSoonSafe,
+                    mandatory: legacyMandatory,
+                    link: safeLink,
                 })
                 .select('id, company_id')
                 .single();
@@ -2953,86 +3660,112 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
             if (insCourse.error) throw insCourse.error;
             const newCourseId = insCourse.data.id as string;
 
-            // 2) If audience is PEOPLE, insert explicit targets
             if (audMode === 'PEOPLE' && audPeople.length > 0) {
-                const rows = audPeople.map(uid => ({
+                const rows = audPeople.map((uid) => ({
                     course_id: newCourseId,
                     kind: 'USER' as const,
                     user_id: uid,
-                    company_id: cid, // required by table + RLS
+                    company_id: cid,
                 }));
                 const insTargets = await supabase.from('course_mandatory_targets').insert(rows);
                 if (insTargets.error) throw insTargets.error;
             }
 
-            // 3) Reset form + refresh lists
+            // reset + refresh
             setName('');
             setType('ELearning');
             setRefYears('');
             setDueSoon(60);
             setLink('');
-            setAudMode('NONE'); // back to neutral after create
+            setAudMode('NONE');
             setAudPeople([]);
-
             await Promise.all([loadCourses(cid), loadRoster(cid)]);
         } catch (e) {
-            const message =
-                e instanceof Error && typeof e.message === 'string'
-                    ? e.message
-                    : 'Failed to create';
+            const message = e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to create';
             setErr(message);
         } finally {
             setSaving(false);
         }
     }
 
-
     const disabled = loading || (!isAdmin && !companyId);
 
     return (
         <div className="space-y-4">
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-3 max-w-3xl">
+            <section
+                className="rounded-xl p-4 space-y-3 max-w-3xl ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+            >
                 <h2 className="text-base font-semibold">Add course</h2>
                 <form onSubmit={onCreate} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {isAdmin && (
                         <div className="sm:col-span-3">
                             <label className="block text-sm mb-1">Company</label>
                             <select
-                                className="w-full border rounded-lg px-3 py-2"
+                                className="w-full rounded-lg px-3 py-2 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                 value={companyId}
-                                onChange={async e => {
+                                onChange={async (e) => {
                                     const cid = e.target.value;
                                     setCompanyId(cid);
-                                    await Promise.all([loadCourses(cid), loadRoster(cid)]);
+                                    if (cid) await Promise.all([loadCourses(cid), loadRoster(cid)]);
+                                    else setCourses([]);
                                 }}
                             >
                                 <option value="">Select…</option>
-                                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                {companies.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name}
+                                    </option>
+                                ))}
                             </select>
                         </div>
                     )}
                     {!isAdmin && (
-                        <div className="sm:col-span-3 text-xs text-gray-600">
+                        <div className="sm:col-span-3 text-xs" style={{ color: 'var(--sub)' }}>
                             Company: {companyName || (companyId ? 'Detecting…' : 'Detecting…')}
                         </div>
                     )}
                     <div className="sm:col-span-2">
                         <label className="block text-sm mb-1">Course name</label>
-                        <input className="w-full border rounded-lg px-3 py-2" value={name} onChange={e => setName(e.target.value)} required disabled={disabled} />
+                        <input
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            required
+                            disabled={disabled}
+                        />
                     </div>
                     <div>
                         <label className="block text-sm mb-1">Type</label>
-                        <select className="w-full border rounded-lg px-3 py-2" value={type} onChange={e => setType(e.target.value)} disabled={disabled}>
-                            <option>ELearning</option><option>TES</option><option>In Person</option><option>Other</option>
+                        <select
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                            value={type}
+                            onChange={(e) => setType(e.target.value)}
+                            disabled={disabled}
+                        >
+                            {TYPE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                </option>
+                            ))}
                         </select>
                     </div>
                     <div>
                         <label className="block text-sm mb-1">Refresher (years)</label>
                         <input
-                            type="number" min={0} max={10}
-                            className="w-full border rounded-lg px-3 py-2"
+                            type="number"
+                            min={0}
+                            max={10}
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={refYears}
-                            onChange={e => setRefYears(e.target.value === '' ? '' : Number(e.target.value))}
+                            onChange={(e) => {
+                                const v = e.target.value;
+                                setRefYears(v === '' ? '' : Math.max(0, Math.min(10, Math.floor(Number(v) || 0))));
+                            }}
                             placeholder="blank = never"
                             disabled={disabled}
                         />
@@ -3040,10 +3773,13 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                     <div>
                         <label className="block text-sm mb-1">Due soon (days)</label>
                         <input
-                            type="number" min={0} max={3650}
-                            className="w-full border rounded-lg px-3 py-2"
+                            type="number"
+                            min={0}
+                            max={3650}
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={dueSoon}
-                            onChange={e => setDueSoon(Number(e.target.value))}
+                            onChange={(e) => setDueSoon(Math.max(0, Math.min(3650, Math.floor(Number(e.target.value) || 0))))}
                             disabled={disabled}
                         />
                     </div>
@@ -3053,45 +3789,34 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                         <div className="text-sm font-medium">Mandatory for</div>
 
                         <div className="flex flex-wrap gap-2">
-                            <label className="inline-flex items-center gap-2 text-sm border rounded-lg px-3 py-2">
-                                <input
-                                    type="radio"
-                                    name="audience"
-                                    value="NONE"
-                                    checked={audMode === 'NONE'}
-                                    onChange={() => setAudMode('NONE')}
-                                    disabled={disabled}
-                                />
-                                <span>Not mandatory</span>
-                            </label>
-                            <label className="inline-flex items-center gap-2 text-sm border rounded-lg px-3 py-2">
-                                <input
-                                    type="radio"
-                                    name="audience"
-                                    value="EVERYONE"
-                                    checked={audMode === 'EVERYONE'}
-                                    onChange={() => setAudMode('EVERYONE')}
-                                    disabled={disabled}
-                                />
-                                <span>Everyone</span>
-                            </label>
-                            <label className="inline-flex items-center gap-2 text-sm border rounded-lg px-3 py-2">
-                                <input
-                                    type="radio"
-                                    name="audience"
-                                    value="PEOPLE"
-                                    checked={audMode === 'PEOPLE'}
-                                    onChange={() => setAudMode('PEOPLE')}
-                                    disabled={disabled}
-                                />
-                                <span>Selection of people</span>
-                            </label>
+                            {[
+                                { v: 'NONE', label: 'Not mandatory' },
+                                { v: 'EVERYONE', label: 'Everyone' },
+                                { v: 'PEOPLE', label: 'Selection of people' },
+                            ].map((o) => (
+                                <label
+                                    key={o.v}
+                                    className="inline-flex items-center gap-2 text-sm rounded-lg px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="audience"
+                                        value={o.v}
+                                        checked={audMode === (o.v as AudienceMode)}
+                                        onChange={() => setAudMode(o.v as AudienceMode)}
+                                        disabled={disabled}
+                                    />
+                                    <span>{o.label}</span>
+                                </label>
+                            ))}
                         </div>
-
 
                         {audMode === 'PEOPLE' && (
                             <div className="pt-1">
-                                <div className="text-xs text-gray-600 mb-1">Pick people</div>
+                                <div className="text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                    Pick people
+                                </div>
                                 <PeoplePicker
                                     people={people}
                                     homesById={homesById}
@@ -3100,7 +3825,9 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                                     disabled={disabled}
                                     placeholder="Search and pick people…"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Tip: you can leave this blank, create the course, then edit it to assign later.</p>
+                                <p className="text-xs mt-1" style={{ color: 'var(--sub)' }}>
+                                    Tip: you can leave this blank, create the course, then edit it to assign later.
+                                </p>
                             </div>
                         )}
                     </div>
@@ -3110,16 +3837,21 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                         <label className="block text-sm mb-1">Link (optional)</label>
                         <input
                             type="url"
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={link}
-                            onChange={e => setLink(e.target.value)}
+                            onChange={(e) => setLink(e.target.value)}
                             placeholder="https://…"
                             disabled={disabled}
                         />
                     </div>
 
                     <div className="sm:col-span-3">
-                        <button disabled={saving || disabled} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">
+                        <button
+                            disabled={saving || disabled}
+                            className="rounded-lg px-3 py-2 text-sm ring-1 disabled:opacity-60"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                        >
                             {saving ? 'Saving…' : 'Add course'}
                         </button>
                     </div>
@@ -3129,10 +3861,10 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
 
             <section className="space-y-2">
                 <h2 className="text-base font-semibold">Courses</h2>
-                <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-0">
+                <div className="rounded-xl ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
                     <div className="max-h-80 overflow-auto">
                         <table className="min-w-full text-sm">
-                            <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                            <thead className="sticky top-0" style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}>
                                 <tr>
                                     <th className="text-left p-2">Name</th>
                                     <th className="text-left p-2">Type</th>
@@ -3144,24 +3876,46 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {courses.map(c => (
+                                {courses.map((c) => (
                                     <CourseRow
                                         key={c.id}
                                         c={c}
                                         onSaved={loadCourses}
                                         people={people}
                                         homesById={homesById}
+                                        labelForType={labelForType}
                                     />
-
                                 ))}
                                 {courses.length === 0 && (
-                                    <tr><td className="p-2 text-gray-500" colSpan={7}>No courses yet.</td></tr>
+                                    <tr>
+                                        <td className="p-2" style={{ color: 'var(--sub)' }} colSpan={7}>
+                                            No courses yet.
+                                        </td>
+                                    </tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </section>
+
+            {/* Orbit-only select/input polish */}
+            <style jsx global>{`
+        [data-orbit='1'] select,
+        [data-orbit='1'] input[type='date'],
+        [data-orbit='1'] input[type='text'],
+        [data-orbit='1'] input[type='number'],
+        [data-orbit='1'] input[type='url'] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit='1'] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+      `}</style>
         </div>
     );
 }
@@ -3173,24 +3927,36 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
 function MandatoryLabel({
     courseId,
     courseMandatory,
+    hasTargetsHint,
     refreshKey = 0,
 }: {
     courseId: string;
     courseMandatory: boolean;
-    refreshKey?: number; // NEW
+    hasTargetsHint?: boolean | null; // prefer preloaded hint (e.g., mandatory_dsl)
+    refreshKey?: number;
 }) {
-    const [hasTargets, setHasTargets] = useState<boolean>(false);
+    const [hasTargets, setHasTargets] = useState<boolean>(Boolean(hasTargetsHint));
 
     useEffect(() => {
         (async () => {
-            if (courseMandatory) { setHasTargets(false); return; } // already Yes
+            if (courseMandatory) {
+                setHasTargets(false);
+                return;
+            }
+            // if caller already knows, trust it
+            if (typeof hasTargetsHint === 'boolean') {
+                setHasTargets(hasTargetsHint);
+                return;
+            }
+            // fallback single COUNT query
             const t = await supabase
                 .from('course_mandatory_targets')
                 .select('course_id', { count: 'exact', head: true })
                 .eq('course_id', courseId);
-            setHasTargets((t.count || 0) > 0);
+            setHasTargets(((t.count as number) || 0) > 0);
         })();
-    }, [courseId, courseMandatory, refreshKey]); // ← include refreshKey
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [courseId, courseMandatory, hasTargetsHint, refreshKey]);
 
     if (courseMandatory) return <>Yes</>;
     return hasTargets ? <>Conditional</> : <>No</>;
@@ -3201,11 +3967,13 @@ function CourseRow({
     onSaved,
     people,
     homesById,
+    labelForType,
 }: {
     c: Course;
     onSaved: (companyId?: string) => Promise<void>;
     people: { id: string; name: string; home_id?: string | null; is_bank?: boolean }[];
     homesById: Map<string, string>;
+    labelForType: (v?: string | null) => string;
 }) {
     const [editing, setEditing] = useState(false);
     const [name, setName] = useState(c.name);
@@ -3215,33 +3983,23 @@ function CourseRow({
     const [link, setLink] = useState<string>(c.link ?? '');
     const [busy, setBusy] = useState(false);
 
-    // Audience mode for editing
     type AudienceMode = 'NONE' | 'EVERYONE' | 'PEOPLE';
     const [audMode, setAudMode] = useState<AudienceMode>(c.mandatory ? 'EVERYONE' : 'NONE');
     const [audPeople, setAudPeople] = useState<string[]>([]);
 
     const [confirmDelete, setConfirmDelete] = useState(false);
-
-    // NEW: used to force MandatoryLabel to re-check targets after a save
     const [refreshKey, setRefreshKey] = useState(0);
 
     async function deleteCourse() {
         setBusy(true);
         try {
-            // remove targets first (avoids FK issues)
             await supabase.from('course_mandatory_targets').delete().eq('course_id', c.id);
-
-            // delete the course
             const del = await supabase.from('courses').delete().eq('id', c.id);
             if (del.error) throw del.error;
-
             await onSaved(c.company_id);
-            setRefreshKey(k => k + 1); // ensure any remaining row state re-checks if visible
+            setRefreshKey((k) => k + 1);
         } catch (e) {
-            const message =
-                e instanceof Error && typeof e.message === 'string'
-                    ? e.message
-                    : 'Failed to delete course';
+            const message = e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to delete course';
             alert(message);
         } finally {
             setBusy(false);
@@ -3250,26 +4008,18 @@ function CourseRow({
         }
     }
 
-    // Load current targets when entering edit mode
+    // Load current targets on edit
     useEffect(() => {
         (async () => {
             if (!editing) return;
-
-            const t = await supabase
-                .from('course_mandatory_targets')
-                .select('kind,user_id')
-                .eq('course_id', c.id);
+            const t = await supabase.from('course_mandatory_targets').select('kind,user_id').eq('course_id', c.id);
             if (t.error) return;
-
             const rows = (t.data || []) as { kind: string; user_id: string | null }[];
-            const users = rows
-                .filter(r => r.kind === 'USER' && r.user_id)
-                .map(r => r.user_id!) as string[];
+            const users = rows.filter((r) => r.kind === 'USER' && r.user_id).map((r) => r.user_id!) as string[];
 
             if (c.mandatory) {
-                // Everyone overrides everything: show EVERYONE
                 setAudMode('EVERYONE');
-                setAudPeople([]); // we don't show people picker for EVERYONE
+                setAudPeople([]);
             } else if (users.length > 0) {
                 setAudMode('PEOPLE');
                 setAudPeople(users);
@@ -3284,15 +4034,17 @@ function CourseRow({
         setBusy(true);
         try {
             const legacyMandatory = audMode === 'EVERYONE';
+            const dueSoonSafe = Number.isFinite(dueSoon) ? Math.max(0, Math.floor(dueSoon)) : 0;
+            const refSafe = refYears === '' ? null : Math.max(0, Math.floor(Number(refYears)));
 
             const upd = await supabase
                 .from('courses')
                 .update({
                     name: name.trim(),
                     training_type: type,
-                    refresher_years: refYears === '' ? null : Number(refYears),
-                    due_soon_days: dueSoon,
-                    mandatory: legacyMandatory, // Everyone → legacy true; People/None → false
+                    refresher_years: refSafe,
+                    due_soon_days: dueSoonSafe,
+                    mandatory: legacyMandatory,
                     link: link.trim() === '' ? null : link.trim(),
                 })
                 .eq('id', c.id);
@@ -3304,24 +4056,21 @@ function CourseRow({
 
             if (audMode === 'PEOPLE' && audPeople.length > 0) {
                 const ins = await supabase.from('course_mandatory_targets').insert(
-                    audPeople.map(uid => ({
+                    audPeople.map((uid) => ({
                         course_id: c.id,
                         kind: 'USER' as const,
                         user_id: uid,
-                        company_id: c.company_id, // RLS needs this
-                    }))
+                        company_id: c.company_id,
+                    })),
                 );
                 if (ins.error) throw ins.error;
             }
 
             setEditing(false);
             await onSaved(c.company_id);
-            setRefreshKey(k => k + 1); // 🔑 force MandatoryLabel to re-check targets
+            setRefreshKey((k) => k + 1);
         } catch (e) {
-            const message =
-                e instanceof Error && typeof e.message === 'string'
-                    ? e.message
-                    : 'Failed to update course';
+            const message = e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to update course';
             alert(message);
         } finally {
             setBusy(false);
@@ -3329,13 +4078,14 @@ function CourseRow({
     }
 
     return (
-        <tr className="border-t align-top">
+        <tr className="border-t align-top" style={{ color: 'var(--ink)' }}>
             <td className="p-2">
                 {editing ? (
                     <input
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                         value={name}
-                        onChange={e => setName(e.target.value)}
+                        onChange={(e) => setName(e.target.value)}
                     />
                 ) : (
                     c.name
@@ -3345,17 +4095,19 @@ function CourseRow({
             <td className="p-2">
                 {editing ? (
                     <select
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                         value={type}
-                        onChange={e => setType(e.target.value)}
+                        onChange={(e) => setType(e.target.value)}
                     >
-                        <option>ELearning</option>
-                        <option>TES</option>
-                        <option>In Person</option>
-                        <option>Other</option>
+                        {['ELearning', 'In Person', 'TES', 'Other'].map((v) => (
+                            <option key={v} value={v}>
+                                {v === 'ELearning' ? 'E-learning' : v === 'In Person' ? 'In person' : v}
+                            </option>
+                        ))}
                     </select>
                 ) : (
-                    c.training_type
+                    labelForType(c.training_type)
                 )}
             </td>
 
@@ -3365,9 +4117,13 @@ function CourseRow({
                         type="number"
                         min={0}
                         max={10}
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                         value={refYears}
-                        onChange={e => setRefYears(e.target.value === '' ? '' : Number(e.target.value))}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            setRefYears(v === '' ? '' : Math.max(0, Math.min(10, Math.floor(Number(v) || 0))));
+                        }}
                         placeholder="blank = never"
                     />
                 ) : (
@@ -3380,9 +4136,10 @@ function CourseRow({
                     <input
                         type="number"
                         min={0}
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                         value={dueSoon}
-                        onChange={e => setDueSoon(Number(e.target.value))}
+                        onChange={(e) => setDueSoon(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
                     />
                 ) : (
                     c.due_soon_days
@@ -3390,11 +4147,11 @@ function CourseRow({
             </td>
 
             <td className="p-2">
-                {/* derive Conditional by checking targets */}
                 <MandatoryLabel
                     courseId={c.id}
                     courseMandatory={c.mandatory}
-                    refreshKey={refreshKey} // ← NEW
+                    hasTargetsHint={c.mandatory_dsl ?? undefined}
+                    refreshKey={refreshKey}
                 />
             </td>
 
@@ -3402,9 +4159,10 @@ function CourseRow({
                 {editing ? (
                     <input
                         type="url"
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                         value={link}
-                        onChange={e => setLink(e.target.value)}
+                        onChange={(e) => setLink(e.target.value)}
                         placeholder="https://…"
                     />
                 ) : c.link ? (
@@ -3417,98 +4175,89 @@ function CourseRow({
             </td>
 
             <td className="p-2">
-                {/* Actions when NOT editing and NOT confirming delete */}
-                {!editing && !confirmDelete ? (
+                {!editing && !confirmDelete && (
                     <div className="flex gap-2">
                         <button
                             onClick={() => {
                                 setEditing(true);
                                 setConfirmDelete(false);
                             }}
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            className="rounded px-2 py-1 text-xs ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                             disabled={busy}
                         >
                             Edit
                         </button>
                         <button
                             onClick={() => setConfirmDelete(true)}
-                            className="rounded border px-2 py-1 text-xs hover:bg-rose-50 border-rose-200 text-rose-700"
+                            className="rounded px-2 py-1 text-xs ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: '#fecaca', color: '#b91c1c' }}
                             disabled={busy}
                         >
                             Delete
                         </button>
                     </div>
-                ) : null}
+                )}
 
-                {/* Inline red confirm box */}
-                {!editing && confirmDelete ? (
-                    <div className="space-y-2 min-w-[260px] rounded-lg border p-2 bg-rose-50 border-rose-200">
-                        <div className="text-xs text-rose-800">
+                {!editing && confirmDelete && (
+                    <div className="space-y-2 min-w-[260px] rounded-lg p-2 ring-1" style={{ background: '#fff1f2', borderColor: '#fecaca' }}>
+                        <div className="text-xs" style={{ color: '#9f1239' }}>
                             Delete “{c.name}”? This cannot be undone.
                         </div>
                         <div className="flex gap-2">
                             <button
                                 disabled={busy}
                                 onClick={deleteCourse}
-                                className="rounded px-2 py-1 text-xs bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+                                className="rounded px-2 py-1 text-xs"
+                                style={{ background: '#e11d48', color: 'white' }}
                             >
                                 {busy ? 'Deleting…' : 'Delete'}
                             </button>
                             <button
                                 disabled={busy}
                                 onClick={() => setConfirmDelete(false)}
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                className="rounded px-2 py-1 text-xs ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                             >
                                 Cancel
                             </button>
                         </div>
                     </div>
-                ) : null}
+                )}
 
-                {/* EDIT UI */}
-                {editing ? (
+                {editing && (
                     <div className="space-y-2 min-w-[340px]">
                         {/* Mandatory audience */}
                         <div className="space-y-2">
                             <div className="flex flex-wrap gap-2">
-                                <label className="inline-flex items-center gap-2 text-xs border rounded-lg px-2 py-1.5">
-                                    <input
-                                        type="radio"
-                                        name={`aud-${c.id}`}
-                                        value="NONE"
-                                        checked={audMode === 'NONE'}
-                                        onChange={() => setAudMode('NONE')}
-                                        disabled={busy}
-                                    />
-                                    <span>Not mandatory</span>
-                                </label>
-                                <label className="inline-flex items-center gap-2 text-xs border rounded-lg px-2 py-1.5">
-                                    <input
-                                        type="radio"
-                                        name={`aud-${c.id}`}
-                                        value="EVERYONE"
-                                        checked={audMode === 'EVERYONE'}
-                                        onChange={() => setAudMode('EVERYONE')}
-                                        disabled={busy}
-                                    />
-                                    <span>Everyone</span>
-                                </label>
-                                <label className="inline-flex items-center gap-2 text-xs border rounded-lg px-2 py-1.5">
-                                    <input
-                                        type="radio"
-                                        name={`aud-${c.id}`}
-                                        value="PEOPLE"
-                                        checked={audMode === 'PEOPLE'}
-                                        onChange={() => setAudMode('PEOPLE')}
-                                        disabled={busy}
-                                    />
-                                    <span>Selection of people</span>
-                                </label>
+                                {[
+                                    { v: 'NONE', label: 'Not mandatory' },
+                                    { v: 'EVERYONE', label: 'Everyone' },
+                                    { v: 'PEOPLE', label: 'Selection of people' },
+                                ].map((o) => (
+                                    <label
+                                        key={o.v}
+                                        className="inline-flex items-center gap-2 text-xs rounded-lg px-2 py-1.5 ring-1"
+                                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name={`aud-${c.id}`}
+                                            value={o.v}
+                                            checked={audMode === (o.v as AudienceMode)}
+                                            onChange={() => setAudMode(o.v as AudienceMode)}
+                                            disabled={busy}
+                                        />
+                                        <span>{o.label}</span>
+                                    </label>
+                                ))}
                             </div>
 
                             {audMode === 'PEOPLE' && (
                                 <>
-                                    <div className="text-xs text-gray-600">People</div>
+                                    <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                                        People
+                                    </div>
                                     <PeoplePicker
                                         people={people}
                                         homesById={homesById}
@@ -3524,7 +4273,8 @@ function CourseRow({
                             <button
                                 disabled={busy}
                                 onClick={save}
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                className="rounded px-2 py-1 text-xs ring-1 disabled:opacity-60"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                             >
                                 {busy ? 'Saving…' : 'Save'}
                             </button>
@@ -3541,15 +4291,17 @@ function CourseRow({
                                     setAudMode(c.mandatory ? 'EVERYONE' : 'NONE');
                                     setAudPeople([]);
                                 }}
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                className="rounded px-2 py-1 text-xs ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                             >
                                 Cancel
                             </button>
                         </div>
                     </div>
-                ) : null}
+                )}
             </td>
         </tr>
     );
 }
+
 

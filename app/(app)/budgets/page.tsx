@@ -5,6 +5,10 @@ import { supabase } from '@/supabase/client';
 import { getEffectiveLevel, type AppLevel } from '@/supabase/roles';
 import Link from 'next/link';
 
+/** ========= Branding ========= */
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
+
 /** ========= Types ========= */
 type Company = { id: string; name: string };
 type Home = { id: string; name: string; company_id: string };
@@ -93,7 +97,6 @@ function fmtDmy(iso: string | null | undefined) {
     });
 }
 
-
 /** ========= Fast/robust upload helpers ========= */
 function withTimeout<T>(p: Promise<T>, ms = 20_000): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -153,13 +156,11 @@ async function prepareImageForUpload(
     type HasWidth = { width: number };
     type HasHeight = { height: number };
 
-    const w = 'width' in src
-        ? (src as HasWidth).width
-        : (src as HTMLImageElement).naturalWidth;
+    const w =
+        'width' in src ? (src as HasWidth).width : (src as HTMLImageElement).naturalWidth;
 
-    const h = 'height' in src
-        ? (src as HasHeight).height
-        : (src as HTMLImageElement).naturalHeight;
+    const h =
+        'height' in src ? (src as HasHeight).height : (src as HTMLImageElement).naturalHeight;
 
     const maxDim = 1280;
     const scale = Math.min(1, maxDim / Math.max(w, h));
@@ -239,7 +240,6 @@ export default function Page() {
 
     // 🔹 NEW: company week selector (defaults to this Monday)
     const [companyWeekStart, setCompanyWeekStart] = useState<string>(() => fmtISO(startOfWeekMonday(new Date())));
-
 
     // near other useState hooks
     const [adjustMode, setAdjustMode] = useState(false);
@@ -355,6 +355,7 @@ export default function Page() {
                     });
                 }
             } catch (e) {
+                // eslint-disable-next-line no-console
                 console.error(e);
                 if (mounted) setView({ status: 'signed_out' });
             }
@@ -376,6 +377,7 @@ export default function Page() {
             .maybeSingle();
 
         if (error) {
+            // eslint-disable-next-line no-console
             console.error('❌ load budgets_home_weeks failed', error);
             return null;
         }
@@ -396,6 +398,7 @@ export default function Page() {
             };
             const { data, error } = await supabase.from('budgets_home_weeks').insert(blank).select('*').single();
             if (error) {
+                // eslint-disable-next-line no-console
                 console.error('❌ insert budgets_home_weeks failed', error);
                 return null;
             }
@@ -426,7 +429,10 @@ export default function Page() {
                     .eq('home_id', view.selectedHomeId)
                     .eq('week_start', prevWeekStart);
 
-                if (prevErr) console.error('❌ load previous entries failed', prevErr);
+                if (prevErr) {
+                    // eslint-disable-next-line no-console
+                    console.error('❌ load previous entries failed', prevErr);
+                }
 
                 const prevTotals = computeTotals(
                     (prevEntries as Entry[]) || [],
@@ -451,7 +457,10 @@ export default function Page() {
                     .eq('home_id', cur.home_id)
                     .eq('week_start', cur.week_start);
 
-                if (updErr) console.error('❌ prefill update budgets_home_weeks failed', updErr);
+                if (updErr) {
+                    // eslint-disable-next-line no-console
+                    console.error('❌ prefill update budgets_home_weeks failed', updErr);
+                }
             }
 
             setHeader(cur);
@@ -466,6 +475,7 @@ export default function Page() {
                 .order('entry_no', { ascending: true });
 
             if (error) {
+                // eslint-disable-next-line no-console
                 console.error('❌ load budgets_home_entries failed', error);
                 setEntries([]);
             } else {
@@ -482,6 +492,7 @@ export default function Page() {
                 .maybeSingle();
 
             if (subErr) {
+                // eslint-disable-next-line no-console
                 console.warn('⚠️ load submission failed', subErr);
                 setSubmission(null);
             } else {
@@ -525,6 +536,7 @@ export default function Page() {
 
         const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, ttlSec);
         if (error) {
+            // eslint-disable-next-line no-console
             console.error('❌ createSignedUrl failed', error);
             return null;
         }
@@ -542,6 +554,7 @@ export default function Page() {
             try {
                 prepared = await prepareImageForUpload(file);
             } catch (err) {
+                // eslint-disable-next-line no-console
                 console.error('❌ image preparation failed', err);
                 return { ok: false, path: null as string | null };
             }
@@ -552,6 +565,7 @@ export default function Page() {
                 // 2) Ask Storage for a one-off signed PUT url (edge)
                 const { data: signed, error: signErr } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
                 if (signErr || !signed?.signedUrl) {
+                    // eslint-disable-next-line no-console
                     console.error('❌ createSignedUploadUrl failed', signErr);
                     return { ok: false, path: null as string | null };
                 }
@@ -578,10 +592,13 @@ export default function Page() {
 
                 return { ok: true, path };
             } catch (err) {
+                // eslint-disable-next-line no-console
                 console.error('❌ upload/update failed', err);
                 try {
                     await supabase.storage.from(BUCKET).remove([path]);
-                } catch { }
+                } catch {
+                    /* noop */
+                }
                 return { ok: false, path: null as string | null };
             }
         },
@@ -594,12 +611,14 @@ export default function Page() {
 
         const { error: delErr } = await supabase.storage.from(BUCKET).remove([toRemove]);
         if (delErr) {
+            // eslint-disable-next-line no-console
             console.warn('⚠️ storage remove issue (continuing):', delErr.message);
         }
 
         const { error: dbErr } = await supabase.from('budgets_home_entries').update({ receipt_path: null }).eq('id', e.id);
 
         if (dbErr) {
+            // eslint-disable-next-line no-console
             console.error('❌ clear receipt_path failed', dbErr);
             return;
         }
@@ -629,7 +648,10 @@ export default function Page() {
                 .eq('home_id', upd.home_id)
                 .eq('week_start', upd.week_start);
             setSavingHeader(false);
-            if (error) console.error('❌ update budgets_home_weeks failed', error);
+            if (error) {
+                // eslint-disable-next-line no-console
+                console.error('❌ update budgets_home_weeks failed', error);
+            }
         },
         [header, view.status]
     );
@@ -674,6 +696,7 @@ export default function Page() {
                 .single();
 
             if (error) {
+                // eslint-disable-next-line no-console
                 console.error('❌ insert budgets_home_entries failed', error);
                 return;
             }
@@ -682,7 +705,6 @@ export default function Page() {
 
             if (newFile) {
                 const res = await uploadReceipt(created, newFile);
-                // ✅ remove non-null assertion; guard path before using it
                 if (res.ok && res.path) {
                     created = { ...created, receipt_path: res.path };
                 }
@@ -699,7 +721,6 @@ export default function Page() {
             setNewFile(null);
         },
         [
-            // ✅ use derived, safely-typed deps instead of `view.selectedHomeId | uid | initials`
             view.status,
             selectedHomeIdDep,
             uidDep,
@@ -716,7 +737,6 @@ export default function Page() {
             uploadReceipt,
         ]
     );
-
 
     const updateEntry = useCallback(async (e: Entry, patch: Partial<Entry>) => {
         if (!e.id) return;
@@ -757,11 +777,11 @@ export default function Page() {
             .eq('id', e.id);
 
         if (error) {
+            // eslint-disable-next-line no-console
             console.error('❌ update budgets_home_entries failed', error);
             setEntries((prev) => prev.map((x) => (x.id === e.id ? e : x))); // revert
         }
     }, []);
-
 
     const deleteEntry = useCallback(
         async (e: Entry) => {
@@ -773,6 +793,7 @@ export default function Page() {
                     await supabase.storage.from(BUCKET).remove([e.receipt_path]);
                 } catch (er: unknown) {
                     const msg = er instanceof Error ? er.message : String(er);
+                    // eslint-disable-next-line no-console
                     console.warn('⚠️ receipt remove during deleteEntry:', msg);
                 }
             }
@@ -782,6 +803,7 @@ export default function Page() {
             const { error } = await supabase.from('budgets_home_entries').delete().eq('id', e.id);
 
             if (error) {
+                // eslint-disable-next-line no-console
                 console.error('❌ delete budgets_home_entries failed', error);
                 setEntries(prev); // revert
             }
@@ -789,10 +811,7 @@ export default function Page() {
         [entries]
     );
 
-
     /** ====== Submit current week (Managers only) ====== */
-    // Derive narrowed values once per render (safe for deps)
-
     const submitCurrentWeek = useCallback(async () => {
         if (view.status !== 'ready' || !selectedHomeIdDep || !uidDep) return;
 
@@ -808,6 +827,7 @@ export default function Page() {
                 .single();
 
             if (error) {
+                // eslint-disable-next-line no-console
                 console.error('❌ submit failed', error);
                 return;
             }
@@ -818,7 +838,6 @@ export default function Page() {
             setSubmitting(false);
         }
     }, [view.status, selectedHomeIdDep, uidDep, weekStart]);
-
 
     /** ====== Company tab: load submissions list and selected view ====== */
     const homesForSelectedCompany = useMemo(() => {
@@ -853,6 +872,7 @@ export default function Page() {
                     .order('submitted_at', { ascending: false });
 
                 if (error) {
+                    // eslint-disable-next-line no-console
                     console.error('❌ load company submissions failed', error);
                     setCompanySubmissions([]);
                     return;
@@ -874,7 +894,6 @@ export default function Page() {
             }
         })();
     }, [tab, selectedCompanyIdDep, homeIds, companyWeekStart]);
-
 
     useEffect(() => {
         (async () => {
@@ -921,12 +940,22 @@ export default function Page() {
 
     // Guards
     if (view.status === 'signed_out') return null;
-    if (view.status === 'loading') return <div className="p-4 md:p-6">Loading budgets...</div>;
+    if (view.status === 'loading') {
+        return (
+            <div className="p-4 md:p-6" style={{ color: 'var(--sub)' }}>
+                Loading budgets...
+            </div>
+        );
+    }
     if (bankOnly) {
         return (
             <div className="p-4 md:p-6">
-                <h1 className="text-xl md:text-2xl font-semibold mb-2">Budgets</h1>
-                <p className="text-sm text-gray-700">Bank staff do not have access to Budgets.</p>
+                <h1 className="text-xl md:text-2xl font-semibold mb-2" style={{ color: 'var(--ink)' }}>
+                    Budgets
+                </h1>
+                <p className="text-sm" style={{ color: 'var(--sub)' }}>
+                    Bank staff do not have access to Budgets.
+                </p>
             </div>
         );
     }
@@ -934,24 +963,39 @@ export default function Page() {
     const showCompanyTab = isAdmin || isCompany;
 
     return (
-        <div className="p-4 md:p-6 space-y-6 [color-scheme:light]">
-            {/* Tabs */}
-            <div className="flex gap-3 border-b">
+        <div className="p-4 md:p-6 space-y-6">
+            {/* Tabs (Orbit-aware) */}
+            <div className="flex gap-2">
                 <button
-                    className={`px-3 py-2 text-sm md:text-base ${tab === 'HOME' ? 'border-b-2 border-indigo-600 font-medium' : 'text-gray-700'}`}
+                    className="px-3 py-1.5 rounded-md ring-1 transition"
+                    style={
+                        tab === 'HOME'
+                            ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                            : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+                    }
                     onClick={() => setTab('HOME')}
                 >
                     Home
                 </button>
                 <button
-                    className={`px-3 py-2 text-sm md:text-base ${tab === 'YP' ? 'border-b-2 border-indigo-600 font-medium' : 'text-gray-700'}`}
+                    className="px-3 py-1.5 rounded-md ring-1 transition"
+                    style={
+                        tab === 'YP'
+                            ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                            : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+                    }
                     onClick={() => setTab('YP')}
                 >
                     Young People
                 </button>
                 {showCompanyTab && (
                     <button
-                        className={`px-3 py-2 text-sm md:text-base ${tab === 'COMPANY' ? 'border-b-2 border-indigo-600 font-medium' : 'text-gray-700'}`}
+                        className="px-3 py-1.5 rounded-md ring-1 transition"
+                        style={
+                            tab === 'COMPANY'
+                                ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                                : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+                        }
                         onClick={() => setTab('COMPANY')}
                     >
                         Company
@@ -965,13 +1009,18 @@ export default function Page() {
                     <div className="grid grid-cols-1 xs:grid-cols-2 md:flex md:flex-wrap md:items-end gap-3 md:gap-4">
                         {canChooseCompany && (
                             <div className="min-w-[200px]">
-                                <label className="block text-xs text-gray-700 mb-1">Company</label>
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                    Company
+                                </label>
                                 <select
-                                    className="border rounded-md px-2 py-2 text-sm w-full bg-white text-gray-900"
+                                    className="rounded-md px-2 py-2 text-sm w-full ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={view.selectedCompanyId ?? ''}
                                     onChange={(e) => {
                                         const id = e.target.value || null;
-                                        setView((v) => (v.status !== 'ready' ? v : { ...v, selectedCompanyId: id, selectedHomeId: null }));
+                                        setView((v) =>
+                                            v.status !== 'ready' ? v : { ...v, selectedCompanyId: id, selectedHomeId: null }
+                                        );
                                     }}
                                 >
                                     {view.companies.map((c) => (
@@ -985,9 +1034,12 @@ export default function Page() {
 
                         {canChooseHome && (
                             <div className="min-w-[200px]">
-                                <label className="block text-xs text-gray-700 mb-1">Home</label>
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                    Home
+                                </label>
                                 <select
-                                    className="border rounded-md px-2 py-2 text-sm w-full bg-white text-gray-900"
+                                    className="rounded-md px-2 py-2 text-sm w-full ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={view.selectedHomeId ?? ''}
                                     onChange={(e) => {
                                         const id = e.target.value || null;
@@ -1004,7 +1056,9 @@ export default function Page() {
                         )}
 
                         <div>
-                            <label className="block text-xs text-gray-700 mb-1">Week (Mon - Sun)</label>
+                            <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                Week (Mon - Sun)
+                            </label>
                             <div className="flex items-stretch gap-2">
                                 <button
                                     type="button"
@@ -1013,16 +1067,18 @@ export default function Page() {
                                         d.setUTCDate(d.getUTCDate() - 7);
                                         setWeekStart(fmtISO(d));
                                     }}
-                                    className="h-9 w-9 inline-flex items-center justify-center rounded-md border bg-white text-gray-900 active:scale-[0.98]"
+                                    className="h-9 w-9 inline-flex items-center justify-center rounded-md ring-1 active:scale-[0.98]"
                                     title="Previous week"
                                     aria-label="Previous week"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 >
                                     ←
                                 </button>
 
                                 <input
                                     type="date"
-                                    className="border rounded-md px-2 py-2 text-sm bg-white text-gray-900"
+                                    className="rounded-md px-2 py-2 text-sm ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={weekStart}
                                     onChange={(e) => {
                                         const d = new Date(e.target.value + 'T00:00:00Z');
@@ -1037,9 +1093,10 @@ export default function Page() {
                                         d.setUTCDate(d.getUTCDate() + 7);
                                         setWeekStart(fmtISO(d));
                                     }}
-                                    className="h-9 w-9 inline-flex items-center justify-center rounded-md border bg-white text-gray-900 active:scale-[0.98]"
+                                    className="h-9 w-9 inline-flex items-center justify-center rounded-md ring-1 active:scale-[0.98]"
                                     title="Next week"
                                     aria-label="Next week"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 >
                                     →
                                 </button>
@@ -1047,13 +1104,16 @@ export default function Page() {
                                 <button
                                     type="button"
                                     onClick={() => setWeekStart(fmtISO(startOfWeekMonday(new Date())))}
-                                    className="inline-flex items-center rounded-md border px-2 py-2 text-xs bg-white text-gray-900 active:scale-[0.98]"
+                                    className="inline-flex items-center rounded-md px-2 py-2 text-xs ring-1 active:scale-[0.98]"
                                     title="Jump to current week"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 >
                                     Today
                                 </button>
                             </div>
-                            <p className="text-[11px] text-gray-600 mt-1">Auto-adjusts to the Monday of the selected week.</p>
+                            <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
+                                Auto-adjusts to the Monday of the selected week.
+                            </p>
                         </div>
 
                         <div className="md:flex-1" />
@@ -1061,17 +1121,22 @@ export default function Page() {
                         {/* Manager-only submit button */}
                         {isManager && (
                             <button
-                                className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 text-white text-sm px-3 py-2 hover:bg-emerald-700 active:scale-[0.99] w-full md:w-auto md:self-end"
+                                className="inline-flex items-center justify-center gap-2 rounded-md text-sm px-3 py-2 w-full md:w-auto md:self-end"
                                 onClick={submitCurrentWeek}
                                 disabled={!view.selectedHomeId || submitting}
                                 title="Submit this week's budget for company review"
+                                style={{
+                                    background: BRAND_GRADIENT,
+                                    color: '#FFFFFF',
+                                    opacity: !view.selectedHomeId || submitting ? 0.6 : 1,
+                                }}
                             >
                                 {submission ? 'Submitted' : submitting ? 'Submitting…' : 'Submit week for review'}
                             </button>
                         )}
 
                         <button
-                            className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 text-white text-sm px-3 py-2 hover:bg-indigo-700 active:scale-[0.99] w-full md:w-auto md:self-end md:ml-2"
+                            className="inline-flex items-center justify-center gap-2 rounded-md text-sm px-3 py-2 w-full md:w-auto md:self-end md:ml-2"
                             onClick={() => {
                                 setNewKind('ENTRY');
                                 setNewDate(fmtISO(new Date()));
@@ -1083,6 +1148,11 @@ export default function Page() {
                                 setShowAdd(true);
                             }}
                             disabled={!view.selectedHomeId}
+                            style={{
+                                background: BRAND_GRADIENT,
+                                color: '#FFFFFF',
+                                opacity: !view.selectedHomeId ? 0.6 : 1,
+                            }}
                         >
                             Create Entry
                         </button>
@@ -1095,18 +1165,26 @@ export default function Page() {
                             role="switch"
                             aria-checked={adjustMode}
                             onClick={() => setAdjustMode(!adjustMode)}
-                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${adjustMode ? 'bg-green-500' : 'bg-gray-300'
-                                } focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500`}
+                            className="relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none"
                             title="Adjust amounts (first-time setup or corrections)"
+                            style={{ background: adjustMode ? '#22C55E' : 'var(--ring)' }}
                         >
                             <span
-                                className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform ${adjustMode ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
+                                className="inline-block h-6 w-6 transform rounded-full shadow transition-transform"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    transform: adjustMode ? 'translateX(1.5rem)' : 'translateX(0.25rem)',
+                                }}
                             />
                         </button>
-                        <span className="text-sm font-medium select-none text-gray-900">Adjust amounts</span>
+                        <span className="text-sm font-medium select-none" style={{ color: 'var(--ink)' }}>
+                            Adjust amounts
+                        </span>
                         {adjustMode && (
-                            <span className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                            <span
+                                className="text-xs px-2 py-1 rounded ring-1"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            >
                                 Only use for first-time setup or necessary corrections.
                             </span>
                         )}
@@ -1155,11 +1233,11 @@ export default function Page() {
                     </div>
 
                     {/* Entries - Desktop table */}
-                    <div className="hidden md:block mt-4 border rounded-lg overflow-hidden">
+                    <div className="hidden md:block mt-4 rounded-lg overflow-hidden ring-1" style={{ borderColor: 'var(--ring)', background: 'var(--card-grad)' }}>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm min-w-[1000px]">
-                                <thead className="bg-gray-50">
-                                    <tr className="text-left">
+                                <thead>
+                                    <tr className="text-left" style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)' }}>
                                         <Th>#</Th>
                                         <Th>Date</Th>
                                         <Th>Description</Th>
@@ -1173,27 +1251,28 @@ export default function Page() {
                                         </Th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white">
+                                <tbody>
                                     {loadingEntries ? (
                                         <tr>
-                                            <td colSpan={9} className="p-3 text-center text-gray-700">
+                                            <td colSpan={9} className="p-3 text-center" style={{ color: 'var(--sub)' }}>
                                                 Loading...
                                             </td>
                                         </tr>
                                     ) : entries.length === 0 ? (
                                         <tr>
-                                            <td colSpan={9} className="p-6 text-center text-gray-700">
+                                            <td colSpan={9} className="p-6 text-center" style={{ color: 'var(--sub)' }}>
                                                 No entries for this week.
                                             </td>
                                         </tr>
                                     ) : (
                                         entries.map((e) => (
-                                            <tr key={e.id ?? e.entry_no} className="border-t">
+                                            <tr key={e.id ?? e.entry_no} className="border-t" style={{ borderColor: 'var(--ring)', background: 'var(--nav-item-bg)' }}>
                                                 <Td>{e.entry_no}</Td>
                                                 <Td>
                                                     <input
                                                         type="date"
-                                                        className="border rounded-md px-2 py-2 text-sm bg-white text-gray-900"
+                                                        className="rounded-md px-2 py-2 text-sm ring-1"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         value={e.date}
                                                         onChange={(ev) => updateEntry(e, { date: ev.target.value })}
                                                     />
@@ -1202,12 +1281,16 @@ export default function Page() {
                                                     <div className="flex items-center gap-2">
                                                         <input
                                                             type="text"
-                                                            className="border rounded px-2 py-1 w-full bg-white text-gray-900"
+                                                            className="rounded px-2 py-1 w-full ring-1"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                             value={e.description}
                                                             onChange={(ev) => updateEntry(e, { description: ev.target.value })}
                                                         />
                                                         {e.is_withdrawal && (
-                                                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                                            <span
+                                                                className="text-[11px] px-1.5 py-0.5 rounded ring-1"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                                            >
                                                                 Withdrawal
                                                             </span>
                                                         )}
@@ -1215,12 +1298,16 @@ export default function Page() {
                                                 </Td>
                                                 <Td>
                                                     {e.is_withdrawal ? (
-                                                        <span className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                                        <span
+                                                            className="inline-flex items-center rounded px-2 py-1 text-xs font-medium ring-1"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                                        >
                                                             Card
                                                         </span>
                                                     ) : (
                                                         <select
-                                                            className="border rounded-md px-2 py-2 text-sm w-full bg-white text-gray-900"
+                                                            className="rounded-md px-2 py-2 text-sm w-full ring-1"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                             value={e.method}
                                                             onChange={(ev) => updateEntry(e, { method: ev.target.value as Entry['method'] })}
                                                         >
@@ -1248,7 +1335,11 @@ export default function Page() {
                                                     />
                                                 </Td>
                                                 <Td className="text-right">
-                                                    <button className="text-red-600 hover:underline" onClick={() => deleteEntry(e)}>
+                                                    <button
+                                                        className="hover:underline"
+                                                        onClick={() => deleteEntry(e)}
+                                                        style={{ color: '#DC2626' }}
+                                                    >
                                                         Delete
                                                     </button>
                                                 </Td>
@@ -1263,46 +1354,67 @@ export default function Page() {
                     {/* Entries - Mobile cards */}
                     <div className="md:hidden space-y-3 mt-4">
                         {loadingEntries ? (
-                            <div className="p-3 text-center text-gray-700 border rounded-lg bg-white">Loading...</div>
+                            <div className="p-3 text-center rounded-lg ring-1" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--sub)' }}>
+                                Loading...
+                            </div>
                         ) : entries.length === 0 ? (
-                            <div className="p-4 text-center text-gray-700 border rounded-lg bg-white">No entries for this week.</div>
+                            <div className="p-4 text-center rounded-lg ring-1" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--sub)' }}>
+                                No entries for this week.
+                            </div>
                         ) : (
                             entries.map((e) => (
-                                <div key={e.id ?? e.entry_no} className="border rounded-lg p-3 bg-white">
+                                <div key={e.id ?? e.entry_no} className="rounded-lg p-3 ring-1" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}>
                                     <div className="flex items-center justify-between">
-                                        <div className="text-xs text-gray-600">#{e.entry_no}</div>
+                                        <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            #{e.entry_no}
+                                        </div>
                                         {e.is_withdrawal && (
-                                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                            <span
+                                                className="text-[11px] px-1.5 py-0.5 rounded ring-1"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                            >
                                                 Withdrawal
                                             </span>
                                         )}
                                     </div>
 
                                     <div className="mt-2 grid grid-cols-2 gap-2">
-                                        <label className="text-xs text-gray-700">Date</label>
+                                        <label className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            Date
+                                        </label>
                                         <input
                                             type="date"
-                                            className="border rounded-md px-2 py-2 text-sm bg-white text-gray-900"
+                                            className="rounded-md px-2 py-2 text-sm ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                             value={e.date}
                                             onChange={(ev) => updateEntry(e, { date: ev.target.value })}
                                         />
 
-                                        <label className="text-xs text-gray-700 col-span-2">Description</label>
+                                        <label className="text-xs col-span-2" style={{ color: 'var(--sub)' }}>
+                                            Description
+                                        </label>
                                         <input
                                             type="text"
-                                            className="border rounded px-2 py-2 text-sm bg-white text-gray-900 col-span-2"
+                                            className="rounded px-2 py-2 text-sm col-span-2 ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                             value={e.description}
                                             onChange={(ev) => updateEntry(e, { description: ev.target.value })}
                                         />
 
-                                        <label className="text-xs text-gray-700">Method</label>
+                                        <label className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            Method
+                                        </label>
                                         {e.is_withdrawal ? (
-                                            <span className="inline-flex items-center justify-center rounded px-2 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                            <span
+                                                className="inline-flex items-center justify-center rounded px-2 py-1 text-xs font-medium ring-1"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                            >
                                                 Card
                                             </span>
                                         ) : (
                                             <select
-                                                className="border rounded-md px-2 py-2 text-sm w-full bg-white text-gray-900"
+                                                className="rounded-md px-2 py-2 text-sm w-full ring-1"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 value={e.method}
                                                 onChange={(ev) => updateEntry(e, { method: ev.target.value as Entry['method'] })}
                                             >
@@ -1311,20 +1423,30 @@ export default function Page() {
                                             </select>
                                         )}
 
-                                        <label className="text-xs text-gray-700">Amount</label>
+                                        <label className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            Amount
+                                        </label>
                                         <div>
                                             <MoneyInline value={e.amount} onChange={(v) => updateEntry(e, { amount: v })} />
                                         </div>
 
-                                        <label className="text-xs text-gray-700">YP Cash In</label>
+                                        <label className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            YP Cash In
+                                        </label>
                                         <div>
                                             <MoneyInline value={e.yp_cash_in} onChange={(v) => updateEntry(e, { yp_cash_in: v })} />
                                         </div>
 
-                                        <label className="text-xs text-gray-700">Initials</label>
-                                        <div className="text-sm text-gray-900">{e.created_by_initials || '--'}</div>
+                                        <label className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            Initials
+                                        </label>
+                                        <div className="text-sm" style={{ color: 'var(--ink)' }}>
+                                            {e.created_by_initials || '--'}
+                                        </div>
 
-                                        <label className="text-xs text-gray-700">Receipt</label>
+                                        <label className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            Receipt
+                                        </label>
                                         <div>
                                             <ReceiptCell
                                                 entry={e}
@@ -1340,7 +1462,7 @@ export default function Page() {
                                     </div>
 
                                     <div className="mt-3 flex justify-end">
-                                        <button className="text-red-600 text-sm" onClick={() => deleteEntry(e)}>
+                                        <button className="text-sm" onClick={() => deleteEntry(e)} style={{ color: '#DC2626' }}>
                                             Delete
                                         </button>
                                     </div>
@@ -1352,20 +1474,35 @@ export default function Page() {
                     {/* Add Entry modal */}
                     {showAdd && (
                         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-3">
-                            <div className="bg-white rounded-xl p-4 w-[560px] max-w-[92vw] shadow-lg">
-                                <h3 className="text-lg font-semibold mb-3">Create Entry</h3>
+                            <div
+                                className="rounded-xl p-4 w-[560px] max-w-[92vw] shadow-lg ring-1"
+                                style={{ background: 'var(--panel-bg)', borderColor: 'var(--ring)' }}
+                            >
+                                <h3 className="text-lg font-semibold mb-3" style={{ color: 'var(--ink)' }}>
+                                    Create Entry
+                                </h3>
 
                                 {/* Segmented control */}
-                                <div className="inline-flex rounded-lg border overflow-hidden mb-4">
+                                <div className="inline-flex rounded-lg overflow-hidden mb-4 ring-1" style={{ borderColor: 'var(--ring)' }}>
                                     <button
-                                        className={`px-3 py-1.5 text-sm ${newKind === 'ENTRY' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-900'}`}
+                                        className="px-3 py-1.5 text-sm"
                                         onClick={() => setNewKind('ENTRY')}
+                                        style={
+                                            newKind === 'ENTRY'
+                                                ? { background: BRAND_GRADIENT, color: '#FFFFFF' }
+                                                : { background: 'var(--nav-item-bg)', color: 'var(--ink)' }
+                                        }
                                     >
                                         Entry
                                     </button>
                                     <button
-                                        className={`px-3 py-1.5 text-sm ${newKind === 'WITHDRAWAL' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-900'}`}
+                                        className="px-3 py-1.5 text-sm"
                                         onClick={() => setNewKind('WITHDRAWAL')}
+                                        style={
+                                            newKind === 'WITHDRAWAL'
+                                                ? { background: BRAND_GRADIENT, color: '#FFFFFF' }
+                                                : { background: 'var(--nav-item-bg)', color: 'var(--ink)' }
+                                        }
                                     >
                                         Withdrawal
                                     </button>
@@ -1373,10 +1510,13 @@ export default function Page() {
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
-                                        <label className="block text-xs text-gray-700 mb-1">Date</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                            Date
+                                        </label>
                                         <input
                                             type="date"
-                                            className="border rounded-md px-2 py-2 text-sm bg-white text-gray-900"
+                                            className="rounded-md px-2 py-2 text-sm ring-1 w-full"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                             value={newDate}
                                             onChange={(e) => setNewDate(e.target.value)}
                                         />
@@ -1384,9 +1524,12 @@ export default function Page() {
 
                                     {newKind === 'ENTRY' && (
                                         <div>
-                                            <label className="block text-xs text-gray-700 mb-1">Method</label>
+                                            <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                                Method
+                                            </label>
                                             <select
-                                                className="border rounded-md px-2 py-2 text-sm w-full bg-white text-gray-900"
+                                                className="rounded-md px-2 py-2 text-sm w-full ring-1"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 value={newMethod}
                                                 onChange={(e) => setNewMethod(e.target.value as 'CARD' | 'CASH')}
                                             >
@@ -1397,7 +1540,7 @@ export default function Page() {
                                     )}
 
                                     <div className={newKind === 'WITHDRAWAL' ? 'sm:col-span-2' : ''}>
-                                        <label className="block text-xs text-gray-700 mb-1">
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
                                             {newKind === 'WITHDRAWAL' ? 'Withdrawal Amount' : 'Amount'}
                                         </label>
                                         <MoneyText value={newAmountTxt} onChange={setNewAmountTxt} placeholder="£0.00" />
@@ -1405,19 +1548,24 @@ export default function Page() {
 
                                     {newKind === 'ENTRY' && (
                                         <div>
-                                            <label className="block text-xs text-gray-700 mb-1">YP Cash In</label>
+                                            <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                                YP Cash In
+                                            </label>
                                             <MoneyText value={newYpCashInTxt} onChange={setNewYpCashInTxt} placeholder="£0.00" />
-                                            <p className="text-[11px] text-gray-600 mt-1">
+                                            <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
                                                 Use when spend should have come from the young persons cash.
                                             </p>
                                         </div>
                                     )}
 
                                     <div className="sm:col-span-2">
-                                        <label className="block text-xs text-gray-700 mb-1">Description</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                            Description
+                                        </label>
                                         <input
                                             type="text"
-                                            className="border rounded px-2 py-2 w-full bg-white text-gray-900"
+                                            className="rounded px-2 py-2 w-full ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                             value={newDesc}
                                             onChange={(e) => setNewDesc(e.target.value)}
                                             placeholder={newKind === 'WITHDRAWAL' ? 'Withdrawal (card) £...' : 'e.g., Groceries, activity, etc.'}
@@ -1426,26 +1574,42 @@ export default function Page() {
 
                                     {/* Optional photo */}
                                     <div className="sm:col-span-2">
-                                        <label className="block text-xs text-gray-700 mb-1">Attach photo (optional)</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>
+                                            Attach photo (optional)
+                                        </label>
                                         <input
                                             type="file"
                                             accept="image/*"
                                             capture="environment"
-                                            className="border rounded-md px-2 py-2 text-sm w-full bg-white text-gray-900"
+                                            className="rounded-md px-2 py-2 text-sm w-full ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                             onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
                                         />
-                                        {newFile && <p className="text-[11px] text-gray-600 mt-1">Selected: {newFile.name}</p>}
+                                        {newFile && (
+                                            <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
+                                                Selected: {newFile.name}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div className="mt-4 flex flex-col sm:flex-row justify-end gap-2">
-                                    <button className="px-3 py-2 text-sm rounded-md border bg-white text-gray-900" onClick={() => setShowAdd(false)}>
+                                    <button
+                                        className="px-3 py-2 text-sm rounded-md ring-1"
+                                        onClick={() => setShowAdd(false)}
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                    >
                                         Cancel
                                     </button>
                                     <button
-                                        className="px-3 py-2 text-sm rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+                                        className="px-3 py-2 text-sm rounded-md"
                                         onClick={onAddEntry}
                                         disabled={!view.selectedHomeId}
+                                        style={{
+                                            background: BRAND_GRADIENT,
+                                            color: '#FFFFFF',
+                                            opacity: !view.selectedHomeId ? 0.6 : 1,
+                                        }}
                                     >
                                         Add
                                     </button>
@@ -1470,13 +1634,36 @@ export default function Page() {
                     companyWeekStart={companyWeekStart}             // 🔹 NEW
                     setCompanyWeekStart={setCompanyWeekStart}       // 🔹 NEW
                 />
-
             ) : (
-                <div className="text-sm text-gray-700">
+                <div className="text-sm" style={{ color: 'var(--sub)' }}>
                     The Young People tab will track each young persons balances and transactions. Say the word when you are ready and I will
                     scaffold this to match your process (cash in/out, pocket money, clothing, activities).
                 </div>
             )}
+
+            {/* --- Orbit-only select/input fixes (scoped to this page) --- */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="number"],
+        [data-orbit="1"] input[type="date"] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
@@ -1508,9 +1695,9 @@ function computeTotals(entries: Entry[], cashCarriedForward: number, cardCarried
 /** ====== Money Inputs ====== */
 function SummaryMoneyReadonly({ label, value }: { label: string; value: number }) {
     return (
-        <div className="border rounded-lg p-3 bg-white">
-            <div className="text-xs text-gray-700">{label}</div>
-            <div className="mt-1 text-base font-medium text-gray-900">£{formatMoney(value)}</div>
+        <div className="rounded-lg p-3 ring-1" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}>
+            <div className="text-xs" style={{ color: 'var(--sub)' }}>{label}</div>
+            <div className="mt-1 text-base font-medium" style={{ color: 'var(--ink)' }}>£{formatMoney(value)}</div>
         </div>
     );
 }
@@ -1534,13 +1721,14 @@ function SummaryMoneyInput({
     }, [value]);
 
     return (
-        <div className="border rounded-lg p-3 bg-white">
-            <div className="text-xs text-gray-700">{label}</div>
+        <div className="rounded-lg p-3 ring-1" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}>
+            <div className="text-xs" style={{ color: 'var(--sub)' }}>{label}</div>
             <div className="mt-1 flex items-center">
-                <span className="mr-1 text-gray-900">£</span>
+                <span className="mr-1" style={{ color: 'var(--ink)' }}>£</span>
                 <input
                     type="text"
-                    className="border rounded px-2 py-2 w-full bg-white text-gray-900"
+                    className="rounded px-2 py-2 w-full text-sm ring-1"
+                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     value={txt}
                     onFocus={() => {
                         focusedRef.current = true;
@@ -1556,7 +1744,7 @@ function SummaryMoneyInput({
                         setTxt(raw);
                     }}
                 />
-                {saving && <span className="ml-2 text-[11px] text-gray-600">Saving...</span>}
+                {saving && <span className="ml-2 text-[11px]" style={{ color: 'var(--sub)' }}>Saving...</span>}
             </div>
         </div>
     );
@@ -1572,10 +1760,11 @@ function MoneyInline({ value, onChange }: { value: number; onChange: (v: number)
 
     return (
         <div className="flex items-center justify-end gap-1">
-            <span className="text-gray-900">£</span>
+            <span style={{ color: 'var(--ink)' }}>£</span>
             <input
                 type="text"
-                className="border rounded px-2 py-2 text-right w-28 bg-white text-gray-900"
+                className="rounded px-2 py-2 text-right w-28 text-sm ring-1"
+                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                 value={txt}
                 onFocus={() => {
                     focusedRef.current = true;
@@ -1601,10 +1790,11 @@ function MoneyText({ value, onChange, placeholder }: { value: string; onChange: 
     const show = value.replace(/^£/, '');
     return (
         <div className="flex items-center">
-            <span className="mr-1 text-gray-900">£</span>
+            <span className="mr-1" style={{ color: 'var(--ink)' }}>£</span>
             <input
                 type="text"
-                className="border rounded px-2 py-2 w-full bg-white text-gray-900"
+                className="rounded px-2 py-2 w-full text-sm ring-1"
+                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                 value={show}
                 placeholder={placeholder}
                 onChange={(e) => onChange(e.target.value.replace(/[^\d.,-]/g, ''))}
@@ -1615,10 +1805,18 @@ function MoneyText({ value, onChange, placeholder }: { value: string; onChange: 
 
 /** ====== Table helpers ====== */
 function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-    return <th className={`p-2 text-xs font-medium text-gray-700 ${className}`}>{children}</th>;
+    return (
+        <th className={`p-2 text-xs font-medium ${className}`} style={{ color: 'var(--sub)' }}>
+            {children}
+        </th>
+    );
 }
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-    return <td className={`p-2 align-top text-gray-900 ${className}`}>{children}</td>;
+    return (
+        <td className={`p-2 align-top ${className}`} style={{ color: 'var(--ink)' }}>
+            {children}
+        </td>
+    );
 }
 
 /** ====== ReceiptCell (camera/gallery + optimistic UI) ====== */
@@ -1710,26 +1908,29 @@ function ReceiptCell({
                 <>
                     <button
                         type="button"
-                        className="px-2 py-1 rounded border bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                        className="px-2 py-1 rounded ring-1 transition disabled:opacity-60"
                         disabled={busy !== 'idle'}
                         onClick={() => onPreview(localPath)}
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     >
                         View
                     </button>
                     <button
                         type="button"
-                        className="px-2 py-1 rounded border bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                        className="px-2 py-1 rounded ring-1 transition disabled:opacity-60"
                         onClick={triggerCamera}
                         disabled={busy !== 'idle'}
                         title="Retake from camera"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     >
                         Replace
                     </button>
                     <button
                         type="button"
-                        className="px-2 py-1 rounded border text-red-600 bg-white hover:bg-red-50 disabled:opacity-60"
+                        className="px-2 py-1 rounded ring-1 transition disabled:opacity-60"
                         onClick={doRemove}
                         disabled={busy !== 'idle'}
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: '#DC2626' }}
                     >
                         {busy === 'delete' ? 'Deleting…' : 'Delete'}
                     </button>
@@ -1738,29 +1939,31 @@ function ReceiptCell({
                 <>
                     <button
                         type="button"
-                        className="px-2 py-1 rounded border bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                        className="px-2 py-1 rounded ring-1 transition disabled:opacity-60"
                         onClick={triggerCamera}
                         disabled={busy !== 'idle'}
                         title="Open camera"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     >
                         {busy === 'upload' ? 'Uploading…' : 'Take photo'}
                     </button>
                     <button
                         type="button"
-                        className="px-2 py-1 rounded border bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                        className="px-2 py-1 rounded ring-1 transition disabled:opacity-60"
                         onClick={triggerGallery}
                         disabled={busy !== 'idle'}
                         title="Pick from library"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     >
                         {busy === 'upload' ? 'Uploading…' : 'Upload'}
                     </button>
                 </>
             )}
 
-            <span className="text-[11px] text-gray-600" aria-live="polite">
+            <span className="text-[11px]" aria-live="polite" style={{ color: 'var(--sub)' }}>
                 {busy === 'upload' && 'Uploading…'}
             </span>
-            {err && <span className="text-[11px] text-red-600">{err}</span>}
+            {err && <span className="text-[11px]" style={{ color: '#DC2626' }}>{err}</span>}
         </div>
     );
 }
@@ -1808,8 +2011,6 @@ function CompanyReviewTab({
     entries,
     loadingView,
     signUrl,
-    companyWeekStart,           // ✅ now typed
-    setCompanyWeekStart,        // ✅ now typed
 }: CompanyReviewTabProps) {
     const homeName = useCallback(
         (id: string) => homes.find((h) => h.id === id)?.name ?? id.slice(0, 8),
@@ -1831,55 +2032,75 @@ function CompanyReviewTab({
     return (
         <div className="space-y-4">
             {/* List */}
-            <div className="border rounded-lg bg-white">
-                <div className="p-3 border-b flex items-center justify-between">
-                    <div className="font-medium">Submitted budgets</div>
-                    <div className="text-xs text-gray-600">
-                        Viewing company: <span className="font-medium">{companies.find((c) => c.id === view.selectedCompanyId)?.name ?? '—'}</span>
+            <div className="rounded-lg ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
+                <div
+                    className="p-3 flex items-center justify-between"
+                    style={{ borderBottom: '1px solid var(--ring)', background: 'var(--nav-item-bg)' }}
+                >
+                    <div className="font-medium" style={{ color: 'var(--ink)' }}>Submitted budgets</div>
+                    <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                        Viewing company:{' '}
+                        <span className="font-medium" style={{ color: 'var(--ink)' }}>
+                            {companies.find((c) => c.id === view.selectedCompanyId)?.name ?? '—'}
+                        </span>
                     </div>
                 </div>
                 {loadingList ? (
-                    <div className="p-4 text-sm text-gray-700">Loading…</div>
+                    <div className="p-4 text-sm" style={{ color: 'var(--sub)' }}>Loading…</div>
                 ) : submissions.length === 0 ? (
-                    <div className="p-4 text-sm text-gray-700">No submissions in the last 12 weeks.</div>
+                    <div className="p-4 text-sm" style={{ color: 'var(--sub)' }}>No submissions in the last 12 weeks.</div>
                 ) : (
-                    <div className="max-h-[420px] overflow-y-auto divide-y">
-                        {submissions.map((s) => (
-                            <button
-                                key={`${s.home_id}-${s.week_start}`}
-                                className={`w-full text-left px-3 py-2 hover:bg-gray-50 ${selected && s.home_id === selected.home_id && s.week_start === selected.week_start ? 'bg-indigo-50' : ''}`}
-                                onClick={() => onSelect(s)}
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium">{homeName(s.home_id)}</span>
-                                        <span className="text-xs text-gray-600">Week: {fmtDmy(s.week_start)}</span>
+                    <div className="max-h[420px] overflow-y-auto divide-y" style={{ borderColor: 'var(--ring)' }}>
+                        {submissions.map((s) => {
+                            const isSel = !!(selected && s.home_id === selected.home_id && s.week_start === selected.week_start);
+                            return (
+                                <button
+                                    key={`${s.home_id}-${s.week_start}`}
+                                    className="w-full text-left px-3 py-2 transition"
+                                    onClick={() => onSelect(s)}
+                                    style={{
+                                        background: isSel ? 'var(--nav-item-bg-hover)' : 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                    }}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium" style={{ color: 'var(--ink)' }}>
+                                                {homeName(s.home_id)}
+                                            </span>
+                                            <span className="text-xs" style={{ color: 'var(--sub)' }}>
+                                                Week: {fmtDmy(s.week_start)}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                                            Submitted {new Date(s.submitted_at).toLocaleString()}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-gray-600">
-                                        Submitted {new Date(s.submitted_at).toLocaleString()}
-                                    </div>
-                                </div>
-                            </button>
-                        ))}
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>
 
             {/* Read-only view */}
-            <div className="border rounded-lg bg-white">
-                <div className="p-3 border-b flex items-center justify-between">
-                    <div className="font-medium">Budget details</div>
+            <div className="rounded-lg ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
+                <div
+                    className="p-3 flex items-center justify-between"
+                    style={{ borderBottom: '1px solid var(--ring)', background: 'var(--nav-item-bg)' }}
+                >
+                    <div className="font-medium" style={{ color: 'var(--ink)' }}>Budget details</div>
                     {selected ? (
-                        <div className="text-xs text-gray-600">
+                        <div className="text-xs" style={{ color: 'var(--sub)' }}>
                             {homeName(selected.home_id)} — Week {fmtDmy(selected.week_start)}
                         </div>
                     ) : null}
                 </div>
 
                 {loadingView ? (
-                    <div className="p-4 text-sm text-gray-700">Loading…</div>
+                    <div className="p-4 text-sm" style={{ color: 'var(--sub)' }}>Loading…</div>
                 ) : !selected ? (
-                    <div className="p-4 text-sm text-gray-700">Select a submission to review.</div>
+                    <div className="p-4 text-sm" style={{ color: 'var(--sub)' }}>Select a submission to review.</div>
                 ) : (
                     <div className="p-3 space-y-3">
                         {/* Summary */}
@@ -1894,10 +2115,10 @@ function CompanyReviewTab({
                         </div>
 
                         {/* Read-only entries */}
-                        <div className="overflow-x-auto border rounded-lg">
+                        <div className="overflow-x-auto rounded-lg ring-1" style={{ borderColor: 'var(--ring)' }}>
                             <table className="w-full text-sm min-w-[900px]">
-                                <thead className="bg-gray-50">
-                                    <tr className="text-left">
+                                <thead>
+                                    <tr className="text-left" style={{ background: 'var(--nav-item-bg)' }}>
                                         <Th>#</Th>
                                         <Th>Date</Th>
                                         <Th>Description</Th>
@@ -1908,14 +2129,20 @@ function CompanyReviewTab({
                                         <Th>Receipt</Th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white">
+                                <tbody>
                                     {entries.length === 0 ? (
                                         <tr>
-                                            <td colSpan={8} className="p-4 text-center text-gray-600">No entries.</td>
+                                            <td colSpan={8} className="p-4 text-center" style={{ color: 'var(--sub)' }}>
+                                                No entries.
+                                            </td>
                                         </tr>
                                     ) : (
                                         entries.map((e) => (
-                                            <tr key={e.id ?? e.entry_no} className="border-t">
+                                            <tr
+                                                key={e.id ?? e.entry_no}
+                                                className="border-t"
+                                                style={{ borderColor: 'var(--ring)', background: 'var(--nav-item-bg)' }}
+                                            >
                                                 <Td>{e.entry_no}</Td>
                                                 <Td>
                                                     {e.date
@@ -1929,9 +2156,9 @@ function CompanyReviewTab({
 
                                                 <Td>
                                                     <div className="flex items-center gap-2">
-                                                        <span>{e.description}</span>
+                                                        <span style={{ color: 'var(--ink)' }}>{e.description}</span>
                                                         {e.is_withdrawal && (
-                                                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                                            <span className="text-[11px] px-1.5 py-0.5 rounded ring-1" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}>
                                                                 Withdrawal
                                                             </span>
                                                         )}
@@ -1944,16 +2171,17 @@ function CompanyReviewTab({
                                                 <Td>
                                                     {e.receipt_path ? (
                                                         <button
-                                                            className="px-2 py-1 rounded border bg-white text-gray-900 hover:bg-gray-50"
+                                                            className="px-2 py-1 rounded ring-1 transition"
                                                             onClick={async () => {
                                                                 const url = await signUrl(e.receipt_path!);
                                                                 if (url) window.open(url, '_blank', 'noopener,noreferrer');
                                                             }}
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         >
                                                             View
                                                         </button>
                                                     ) : (
-                                                        <span className="text-xs text-gray-500">—</span>
+                                                        <span className="text-xs" style={{ color: 'var(--sub)' }}>—</span>
                                                     )}
                                                 </Td>
                                             </tr>
@@ -1968,3 +2196,4 @@ function CompanyReviewTab({
         </div>
     );
 }
+

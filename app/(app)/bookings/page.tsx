@@ -75,6 +75,11 @@ type MemberFromAPI = {
     };
 };
 
+/* ========= Theme ========= */
+
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
+
 /* ========= Page (Tabs) ========= */
 
 export default function BookingsPage() {
@@ -106,19 +111,19 @@ export default function BookingsPage() {
 
     if (loadingLevel) {
         return (
-            <div className="p-6">
-                <div className="h-6 w-40 rounded bg-gray-100 mb-4 animate-pulse" />
-                <div className="h-9 w-[520px] max-w-full rounded bg-gray-100 animate-pulse" />
+            <div className="p-6" style={{ color: 'var(--sub)' }}>
+                <div className="h-6 w-40 rounded mb-4 animate-pulse" style={{ background: 'var(--nav-item-bg)' }} />
+                <div className="h-9 w-[520px] max-w-full rounded animate-pulse" style={{ background: 'var(--nav-item-bg)' }} />
             </div>
         );
     }
 
     return (
-        <div className="p-6 space-y-6">
-            <h1 className="text-2xl font-semibold">Training bookings</h1>
+        <div className="p-6 space-y-6" style={{ color: 'var(--ink)' }}>
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Training bookings</h1>
 
             {/* Tabs */}
-            <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
+            <div className="flex gap-2">
                 <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>My bookings</TabBtn>
                 {canManage && <TabBtn active={tab === 'SESSIONS'} onClick={() => setTab('SESSIONS')}>Sessions</TabBtn>}
                 {canManage && <TabBtn active={tab === 'SETTINGS'} onClick={() => setTab('SETTINGS')}>Settings</TabBtn>}
@@ -129,6 +134,30 @@ export default function BookingsPage() {
                 <SessionsAdmin isAdmin={isAdmin} isCompany={isCompany} isManager={isManager} />
             )}
             {tab === 'SETTINGS' && canManage && <SettingsSection />}
+
+            {/* Orbit-native control fixes (in case selects/inputs appear in sub-components of this page) */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="number"],
+        [data-orbit="1"] input[type="date"] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
@@ -138,7 +167,12 @@ function TabBtn(
 ) {
     return (
         <button
-            className={`px-4 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`}
+            className="px-3 py-1.5 rounded-md ring-1 transition"
+            style={
+                active
+                    ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                    : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+            }
             {...props}
         >
             {children}
@@ -223,10 +257,12 @@ function isPendingStatus(s: AttendeeStatus) {
 function displayStatus(s: AttendeeStatus) {
     return s === 'CANCELLED' ? 'Removed' : s;
 }
+
+// Orbit-aware row tones: keep light highlights but add dark equivalents
 function rowTone(s: AttendeeStatus) {
-    if (s === 'CONFIRMED') return 'bg-emerald-50';
-    if (s === 'CANCELLED') return 'bg-rose-50';
-    if (s === 'INVITED' || s === 'BOOKED' || s === 'WAITLISTED') return 'bg-yellow-50';
+    if (s === 'CONFIRMED') return 'bg-emerald-50 [data-orbit="1"]:bg-emerald-500/10';
+    if (s === 'CANCELLED') return 'bg-rose-50 [data-orbit="1"]:bg-rose-500/10';
+    if (s === 'INVITED' || s === 'BOOKED' || s === 'WAITLISTED') return 'bg-yellow-50 [data-orbit="1"]:bg-yellow-400/10';
     return '';
 }
 
@@ -306,7 +342,6 @@ function MyBookings() {
         await reload();
     }
 
-
     // Confirm place (try p_session first, then p_session_id)
     async function confirmPlace(session_id: string) {
         const res1 = await supabase.rpc('confirm_my_training_booking', { p_session: session_id });
@@ -317,7 +352,6 @@ function MyBookings() {
         setPendingAction(p => ({ ...p, [session_id]: undefined }));
         await reload();
     }
-
 
     async function cancelAttendance(session_id: string) {
         // same RPC as decline; try both param names for compatibility
@@ -330,21 +364,26 @@ function MyBookings() {
         await reload();
     }
 
-
-    if (loading) return <p>Loading…</p>;
+    if (loading) return <p style={{ color: 'var(--sub)' }}>Loading…</p>;
 
     return (
         <div className="space-y-6">
             {/* Upcoming */}
-            <section className="rounded-xl border bg-white ring-1 ring-gray-50 shadow-sm p-4">
-                <h2 className="text-base font-semibold mb-2">Upcoming</h2>
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-base font-semibold mb-2" style={{ color: 'var(--ink)' }}>Upcoming</h2>
                 {upcoming.length === 0 ? (
-                    <p className="text-sm text-gray-600">No upcoming bookings.</p>
+                    <p className="text-sm" style={{ color: 'var(--sub)' }}>No upcoming bookings.</p>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
-                            <thead className="bg-gray-50 text-gray-600">
-                                <tr>
+                            <thead>
+                                <tr
+                                    className="text-xs"
+                                    style={{ color: 'var(--sub)', background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                                >
                                     <th className="text-left p-2">Course</th>
                                     <th className="text-left p-2">When</th>
                                     <th className="text-left p-2">Where</th>
@@ -356,14 +395,18 @@ function MyBookings() {
                                 {upcoming.map(a => {
                                     const s = a.training_sessions;
                                     return (
-                                        <tr key={a.session_id} className={`border-t ${rowTone(a.status)}`}>
-                                            <td className="p-2">{s?.courses?.name || '—'}</td>
-                                            <td className="p-2">
+                                        <tr key={a.session_id} className={`border-t ${rowTone(a.status)}`} style={{ borderColor: 'var(--ring)' }}>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{s?.courses?.name || '—'}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>
                                                 {fmtWhen(s?.starts_at, s?.ends_at)}
-                                                {s?.confirm_deadline ? <div className="text-xs text-gray-600">Confirm by {new Date(s.confirm_deadline).toLocaleDateString()}</div> : null}
+                                                {s?.confirm_deadline ? (
+                                                    <div className="text-xs" style={{ color: 'var(--sub)' }}>
+                                                        Confirm by {new Date(s.confirm_deadline).toLocaleDateString()}
+                                                    </div>
+                                                ) : null}
                                             </td>
-                                            <td className="p-2">{s?.location || '—'}</td>
-                                            <td className="p-2">{displayStatus(a.status)}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{s?.location || '—'}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{displayStatus(a.status)}</td>
                                             <td className="p-2 text-center">
                                                 <div className="inline-flex items-center gap-2">
                                                     {/* Pending (INVITED/BOOKED/WAITLISTED) → show Confirm + Decline */}
@@ -371,13 +414,15 @@ function MyBookings() {
                                                         <>
                                                             <button
                                                                 onClick={() => setPendingAction(p => ({ ...p, [a.session_id]: 'confirm' }))}
-                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                             >
                                                                 Confirm
                                                             </button>
                                                             <button
                                                                 onClick={() => setPendingAction(p => ({ ...p, [a.session_id]: 'decline' }))}
-                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                             >
                                                                 Decline
                                                             </button>
@@ -388,7 +433,8 @@ function MyBookings() {
                                                     {!pendingAction[a.session_id] && a.status === 'CONFIRMED' && (
                                                         <button
                                                             onClick={() => setPendingAction(p => ({ ...p, [a.session_id]: 'cancel' }))}
-                                                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         >
                                                             Cancel attendance
                                                         </button>
@@ -399,13 +445,15 @@ function MyBookings() {
                                                         <>
                                                             <button
                                                                 onClick={() => confirmPlace(a.session_id)}
-                                                                className="rounded px-2 py-1 text-xs text-white bg-emerald-600 hover:bg-emerald-700"
+                                                                className="rounded-md px-2 py-1 text-xs text-white transition"
+                                                                style={{ background: BRAND_GRADIENT }}
                                                             >
                                                                 Confirm
                                                             </button>
                                                             <button
                                                                 onClick={() => setPendingAction(p => ({ ...p, [a.session_id]: undefined }))}
-                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                             >
                                                                 Cancel
                                                             </button>
@@ -417,13 +465,15 @@ function MyBookings() {
                                                         <>
                                                             <button
                                                                 onClick={() => decline(a.session_id)}
-                                                                className="rounded px-2 py-1 text-xs text-white bg-rose-600 hover:bg-rose-700"
+                                                                className="rounded-md px-2 py-1 text-xs text-white transition"
+                                                                style={{ background: '#DC2626' }}
                                                             >
                                                                 Decline
                                                             </button>
                                                             <button
                                                                 onClick={() => setPendingAction(p => ({ ...p, [a.session_id]: undefined }))}
-                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                             >
                                                                 Cancel
                                                             </button>
@@ -435,13 +485,15 @@ function MyBookings() {
                                                         <>
                                                             <button
                                                                 onClick={() => cancelAttendance(a.session_id)}
-                                                                className="rounded px-2 py-1 text-xs text-white bg-rose-600 hover:bg-rose-700"
+                                                                className="rounded-md px-2 py-1 text-xs text-white transition"
+                                                                style={{ background: '#DC2626' }}
                                                             >
                                                                 Cancel attendance
                                                             </button>
                                                             <button
                                                                 onClick={() => setPendingAction(p => ({ ...p, [a.session_id]: undefined }))}
-                                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                             >
                                                                 Cancel
                                                             </button>
@@ -449,7 +501,6 @@ function MyBookings() {
                                                     )}
                                                 </div>
                                             </td>
-
                                         </tr>
                                     );
                                 })}
@@ -457,19 +508,25 @@ function MyBookings() {
                         </table>
                     </div>
                 )}
-                {err && <p className="mt-2 text-sm text-rose-600">{err}</p>}
+                {err && <p className="mt-2 text-sm" style={{ color: '#F87171' }}>{err}</p>}
             </section>
 
             {/* History */}
-            <section className="rounded-xl border bg-white ring-1 ring-gray-50 shadow-sm p-4">
-                <h2 className="text-base font-semibold mb-2">History</h2>
+            <section
+                className="rounded-lg p-4 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-base font-semibold mb-2" style={{ color: 'var(--ink)' }}>History</h2>
                 {history.length === 0 ? (
-                    <p className="text-sm text-gray-600">No past sessions.</p>
+                    <p className="text-sm" style={{ color: 'var(--sub)' }}>No past sessions.</p>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
-                            <thead className="bg-gray-50 text-gray-600">
-                                <tr>
+                            <thead>
+                                <tr
+                                    className="text-xs"
+                                    style={{ color: 'var(--sub)', background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                                >
                                     <th className="text-left p-2">Course</th>
                                     <th className="text-left p-2">When</th>
                                     <th className="text-left p-2">Where</th>
@@ -480,11 +537,11 @@ function MyBookings() {
                                 {history.map(a => {
                                     const s = a.training_sessions;
                                     return (
-                                        <tr key={a.session_id} className={`border-t ${rowTone(a.status)}`}>
-                                            <td className="p-2">{s?.courses?.name || '—'}</td>
-                                            <td className="p-2">{fmtWhen(s?.starts_at, s?.ends_at)}</td>
-                                            <td className="p-2">{s?.location || '—'}</td>
-                                            <td className="p-2">{displayStatus(a.status)}</td>
+                                        <tr key={a.session_id} className={`border-t ${rowTone(a.status)}`} style={{ borderColor: 'var(--ring)' }}>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{s?.courses?.name || '—'}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{fmtWhen(s?.starts_at, s?.ends_at)}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{s?.location || '—'}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{displayStatus(a.status)}</td>
                                         </tr>
                                     );
                                 })}
@@ -496,6 +553,7 @@ function MyBookings() {
         </div>
     );
 }
+
 
 /* ========================= SESSIONS — Create/manage + invite ========================= */
 
@@ -932,60 +990,99 @@ function SessionsAdmin({
         await loadSessions(companyId);
     }
 
-    if (loading) return <p>Loading…</p>;
+    if (loading) return <p style={{ color: 'var(--sub)' }}>Loading…</p>;
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4" style={{ color: 'var(--ink)' }}>
 
             {/* small inline success banner */}
             {flash && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">
-                    {flash}
+                <div
+                    className="rounded-md px-3 py-2 text-sm ring-1"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                >
+                    <span className="text-emerald-700 [data-orbit='1']:text-emerald-200">{flash}</span>
                 </div>
             )}
 
             {/* Filters + actions */}
-            <div className="rounded-xl border bg-white ring-1 ring-gray-50 shadow-sm p-3">
+            <div
+                className="rounded-lg p-3 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
                 <div className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end">
                     <div className="md:col-span-3">
-                        <label className="block text-xs text-gray-600 mb-1">Search</label>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Search</label>
                         <input
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={q}
                             onChange={e => setQ(e.target.value)}
                             placeholder="Course or location"
                         />
                     </div>
                     <div>
-                        <label className="block text-xs text-gray-600 mb-1">From (date)</label>
-                        <input type="date" className="w-full border rounded-lg px-3 py-2" value={from} onChange={e => setFrom(e.target.value)} />
+                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>From (date)</label>
+                        <input
+                            type="date"
+                            className="w-full rounded-md px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={from}
+                            onChange={e => setFrom(e.target.value)}
+                        />
                     </div>
                     <div>
-                        <label className="block text-xs text-gray-600 mb-1">To (date)</label>
-                        <input type="date" className="w-full border rounded-lg px-3 py-2" value={to} onChange={e => setTo(e.target.value)} />
+                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>To (date)</label>
+                        <input
+                            type="date"
+                            className="w-full rounded-md px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            value={to}
+                            onChange={e => setTo(e.target.value)}
+                        />
                     </div>
                     <div className="md:col-span-2">
-                        <label className="block text-xs text-gray-600 mb-1">Company</label>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Company</label>
                         <div className="flex gap-2">
-                            <input className="w-full border rounded-lg px-3 py-2" value={companyName || companyId} readOnly />
-                            <button onClick={() => loadSessions(companyId)} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">
+                            <input
+                                className="w-full rounded-md px-3 py-2 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                value={companyName || companyId}
+                                readOnly
+                            />
+                            <button
+                                onClick={() => loadSessions(companyId)}
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                            >
                                 Refresh
                             </button>
                         </div>
                     </div>
                     <div className="md:col-span-1 flex md:justify-end">
-                        <button onClick={openCreate} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 w-full md:w-auto">
+                        <button
+                            onClick={openCreate}
+                            className="rounded-md px-3 py-2 text-sm ring-1 transition w-full md:w-auto"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                        >
                             New session
                         </button>
                     </div>
                 </div>
-                {err && <p className="mt-2 text-sm text-rose-600">{err}</p>}
+                {err && <p className="mt-2 text-sm" style={{ color: '#F87171' }}>{err}</p>}
             </div>
+
             {/* Upcoming sessions table */}
-            <div className="overflow-x-auto rounded-xl border bg-white ring-1 ring-gray-50 shadow-sm">
+            <div
+                className="overflow-x-auto rounded-lg ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
                 <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-600">
-                        <tr>
+                    <thead>
+                        <tr
+                            className="text-xs"
+                            style={{ color: 'var(--sub)', background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                        >
                             <th className="text-left p-2">Course</th>
                             <th className="text-left p-2">When</th>
                             <th className="text-left p-2">Where</th>
@@ -1002,41 +1099,61 @@ function SessionsAdmin({
                             const c = counts[s.id] || { confirmed: 0, pending: 0, waitlist: 0 };
                             const deleting = pendingDelete === s.id;
                             return (
-                                <tr key={s.id} className="border-t">
-                                    <td className="p-2">{s.courses?.name || '—'}</td>
-                                    <td className="p-2">
+                                <tr key={s.id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{s.courses?.name || '—'}</td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
                                         {fmtWhen(s.starts_at, s.ends_at)}
                                         {s.confirm_deadline ? (
-                                            <div className="text-xs text-gray-600">
+                                            <div className="text-xs" style={{ color: 'var(--sub)' }}>
                                                 Confirm by {new Date(s.confirm_deadline).toLocaleDateString()}
                                             </div>
                                         ) : null}
                                     </td>
-                                    <td className="p-2">{s.location || '—'}</td>
-                                    <td className="p-2">{s.capacity}</td>
-                                    <td className="p-2">{c.confirmed}</td>
-                                    <td className="p-2">{c.pending}</td>
-                                    <td className="p-2">{c.waitlist}</td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{s.location || '—'}</td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{s.capacity}</td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{c.confirmed}</td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{c.pending}</td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{c.waitlist}</td>
                                     <td className="p-2 text-center">
                                         <div className="inline-flex items-center gap-2">
                                             {!deleting ? (
                                                 <>
-                                                    <button onClick={() => viewRosterCSV(s)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">
+                                                    <button
+                                                        onClick={() => viewRosterCSV(s)}
+                                                        className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                                    >
                                                         Export CSV
                                                     </button>
-                                                    <button onClick={() => openInvite(s)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">
+                                                    <button
+                                                        onClick={() => openInvite(s)}
+                                                        className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                                    >
                                                         Invite
                                                     </button>
-                                                    <button onClick={() => setPendingDelete(s.id)} className="rounded border border-rose-300 text-rose-700 px-2 py-1 text-xs hover:bg-rose-50">
+                                                    <button
+                                                        onClick={() => setPendingDelete(s.id)}
+                                                        className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                        style={{ background: 'var(--nav-item-bg)', borderColor: '#fecaca', color: '#b91c1c' }}
+                                                    >
                                                         Delete
                                                     </button>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <button onClick={() => deleteSessionFinal(s.id)} className="rounded px-2 py-1 text-xs text-white bg-rose-600 hover:bg-rose-700">
+                                                    <button
+                                                        onClick={() => deleteSessionFinal(s.id)}
+                                                        className="rounded-md px-2 py-1 text-xs text-white transition"
+                                                        style={{ background: '#DC2626' }}
+                                                    >
                                                         Delete
                                                     </button>
-                                                    <button onClick={() => setPendingDelete(null)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">
+                                                    <button
+                                                        onClick={() => setPendingDelete(null)}
+                                                        className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                                    >
                                                         Cancel
                                                     </button>
                                                 </>
@@ -1051,7 +1168,7 @@ function SessionsAdmin({
                         })}
                         {upcomingFiltered.length === 0 && (
                             <tr>
-                                <td colSpan={9} className="p-3 text-sm text-gray-600">
+                                <td colSpan={9} className="p-3 text-sm" style={{ color: 'var(--sub)' }}>
                                     No upcoming sessions.
                                 </td>
                             </tr>
@@ -1061,19 +1178,28 @@ function SessionsAdmin({
             </div>
 
             {/* Past sessions (scrollable box) */}
-            <div className="rounded-xl border bg-white ring-1 ring-gray-50 shadow-sm">
-                <div className="flex items-center justify-between px-3 py-2">
+            <div
+                className="rounded-lg ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <div
+                    className="flex items-center justify-between px-3 py-2"
+                    style={{ color: 'var(--ink)' }}
+                >
                     <h3 className="text-sm font-semibold">Past sessions</h3>
-                    <span className="text-xs text-gray-600">
+                    <span className="text-xs" style={{ color: 'var(--sub)' }}>
                         {pastFiltered.length} {pastFiltered.length === 1 ? 'session' : 'sessions'}
                     </span>
                 </div>
 
                 {/* cap the height; scroll inside */}
-                <div className="max-h-96 overflow-y-auto border-t">
+                <div className="max-h-96 overflow-y-auto border-t" style={{ borderColor: 'var(--ring)' }}>
                     <table className="min-w-full text-sm">
-                        <thead className="sticky top-0 bg-gray-50 text-gray-600">
-                            <tr>
+                        <thead className="sticky top-0">
+                            <tr
+                                className="text-xs"
+                                style={{ color: 'var(--sub)', background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                            >
                                 <th className="text-left p-2">Course</th>
                                 <th className="text-left p-2">When</th>
                                 <th className="text-left p-2">Where</th>
@@ -1088,14 +1214,14 @@ function SessionsAdmin({
                             {pastFiltered.map(s => {
                                 const c = counts[s.id] || { confirmed: 0, pending: 0, waitlist: 0 };
                                 return (
-                                    <tr key={s.id} className="border-t">
-                                        <td className="p-2">{s.courses?.name || '—'}</td>
-                                        <td className="p-2">{fmtWhen(s.starts_at, s.ends_at)}</td>
-                                        <td className="p-2">{s.location || '—'}</td>
-                                        <td className="p-2">{s.capacity}</td>
-                                        <td className="p-2">{c.confirmed}</td>
-                                        <td className="p-2">{c.pending}</td>
-                                        <td className="p-2">{c.waitlist}</td>
+                                    <tr key={s.id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{s.courses?.name || '—'}</td>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{fmtWhen(s.starts_at, s.ends_at)}</td>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{s.location || '—'}</td>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{s.capacity}</td>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{c.confirmed}</td>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{c.pending}</td>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{c.waitlist}</td>
                                         <td className="p-2">
                                             <RosterButton session={s} onChanged={() => { void loadSessions(companyId); }} />
                                         </td>
@@ -1104,7 +1230,7 @@ function SessionsAdmin({
                             })}
                             {pastFiltered.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="p-3 text-sm text-gray-600">
+                                    <td colSpan={8} className="p-3 text-sm" style={{ color: 'var(--sub)' }}>
                                         No past sessions match your filters.
                                     </td>
                                 </tr>
@@ -1117,11 +1243,12 @@ function SessionsAdmin({
             {/* Create modal */}
             {openNew && (
                 <Modal title="Create training session" onClose={() => setOpenNew(false)}>
-                    <form onSubmit={createSession} className="space-y-3">
+                    <form onSubmit={createSession} className="space-y-3" style={{ color: 'var(--ink)' }}>
                         <div>
-                            <label className="block text-sm mb-1">Course</label>
+                            <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Course</label>
                             <select
-                                className="w-full border rounded-lg px-3 py-2"
+                                className="w-full rounded-md px-3 py-2 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={form.course_id}
                                 onChange={e => setForm({ ...form, course_id: e.target.value })}
                                 required
@@ -1132,39 +1259,43 @@ function SessionsAdmin({
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div>
-                                <label className="block text-sm mb-1">Date</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Date</label>
                                 <input
                                     type="date"
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={form.date}
                                     onChange={e => setForm({ ...form, date: e.target.value })}
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm mb-1">Start time</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Start time</label>
                                 <input
                                     type="time"
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={form.start_time}
                                     onChange={e => setForm({ ...form, start_time: e.target.value })}
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm mb-1">End time (optional)</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>End time (optional)</label>
                                 <input
                                     type="time"
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={form.end_time}
                                     onChange={e => setForm({ ...form, end_time: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm mb-1">Confirm by (optional)</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Confirm by (optional)</label>
                                 <input
                                     type="date"
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={form.confirm_deadline}
                                     onChange={e => setForm({ ...form, confirm_deadline: e.target.value })}
                                 />
@@ -1172,11 +1303,12 @@ function SessionsAdmin({
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-sm mb-1">Capacity</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Capacity</label>
                                 <input
                                     type="number"
                                     min={1}
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={form.capacity}
                                     onChange={e =>
                                         setForm({
@@ -1189,19 +1321,21 @@ function SessionsAdmin({
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm mb-1">Location</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Location</label>
                                 <input
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={form.location}
                                     onChange={e => setForm({ ...form, location: e.target.value })}
                                 />
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm mb-1">Notes</label>
+                            <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Notes</label>
                             <textarea
-                                className="w-full border rounded-lg px-3 py-2"
+                                className="w-full rounded-md px-3 py-2 ring-1"
                                 rows={3}
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={form.notes}
                                 onChange={e => setForm({ ...form, notes: e.target.value })}
                             />
@@ -1209,14 +1343,16 @@ function SessionsAdmin({
                         <div className="flex gap-2">
                             <button
                                 disabled={saving}
-                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             >
                                 {saving ? 'Creating…' : 'Create session'}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setOpenNew(false)}
-                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             >
                                 Cancel
                             </button>
@@ -1231,7 +1367,7 @@ function SessionsAdmin({
                     title={`Invite to: ${inviteOpen.courses?.name || 'Session'}`}
                     onClose={() => setInviteOpen(null)}
                 >
-                    <div className="space-y-3">
+                    <div className="space-y-3" style={{ color: 'var(--ink)' }}>
                         <PeoplePicker
                             people={people}
                             homesById={homesById}
@@ -1243,27 +1379,57 @@ function SessionsAdmin({
                             <button
                                 onClick={() => void sendInvites()}
                                 disabled={inviteSelected.length === 0}
-                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             >
                                 Send invites ({inviteSelected.length})
                             </button>
                             <button
                                 onClick={() => setInviteOpen(null)}
-                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             >
                                 Close
                             </button>
                         </div>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs" style={{ color: 'var(--sub)' }}>
                             Invites create <code>INVITED</code> rows. Staff/managers confirm via “My bookings”.
                             Capacity is enforced on confirm; extras go to waitlist.
                         </p>
                     </div>
                 </Modal>
             )}
+
+            {/* Page-scoped Orbit control fixes, in case modals render outside the page root */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="number"],
+        [data-orbit="1"] input[type="date"],
+        [data-orbit="1"] input[type="time"],
+        [data-orbit="1"] input[type="text"],
+        [data-orbit="1"] textarea {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
+
 
 /* === Roster drawer (confirmed attendees only; names + emails; no popups) === */
 
@@ -1346,20 +1512,24 @@ function RosterButton({
                     setOpen(true);
                     await load();
                 }}
-                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
             >
                 View roster
             </button>
             {open && (
                 <Modal title={`Roster — ${session.courses?.name || ''}`} onClose={() => setOpen(false)}>
                     {loading ? (
-                        <p>Loading…</p>
+                        <p style={{ color: 'var(--sub)' }}>Loading…</p>
                     ) : (
-                        <div className="space-y-3">
-                            <div className="overflow-x-auto rounded border">
+                        <div className="space-y-3" style={{ color: 'var(--ink)' }}>
+                            <div className="overflow-x-auto rounded-md ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
                                 <table className="min-w-full text-sm">
-                                    <thead className="bg-gray-50 text-gray-600">
-                                        <tr>
+                                    <thead>
+                                        <tr
+                                            className="text-xs"
+                                            style={{ color: 'var(--sub)', background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                                        >
                                             <th className="text-left p-2">Name</th>
                                             <th className="text-left p-2">Email</th>
                                             <th className="text-left p-2">Status</th>
@@ -1370,16 +1540,17 @@ function RosterButton({
                                         {rows.map(a => {
                                             const isStaged = stagedRemove[a.user_id];
                                             return (
-                                                <tr key={`${a.session_id}-${a.user_id}`} className="border-t">
-                                                    <td className="p-2">{a.full_name || a.user_id.slice(0, 8)}</td>
-                                                    <td className="p-2">{a.email || '—'}</td>
-                                                    <td className="p-2">{a.status}</td>
+                                                <tr key={`${a.session_id}-${a.user_id}`} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{a.full_name || a.user_id.slice(0, 8)}</td>
+                                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{a.email || '—'}</td>
+                                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{a.status}</td>
                                                     <td className="p-2 text-center">
                                                         <div className="inline-flex items-center gap-2">
                                                             {!isStaged ? (
                                                                 <button
                                                                     onClick={() => setStagedRemove(p => ({ ...p, [a.user_id]: true }))}
-                                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                                 >
                                                                     Remove
                                                                 </button>
@@ -1387,13 +1558,15 @@ function RosterButton({
                                                                 <>
                                                                     <button
                                                                         onClick={() => void removeFinal(a.user_id)}
-                                                                        className="rounded px-2 py-1 text-xs text-white bg-rose-600 hover:bg-rose-700"
+                                                                        className="rounded-md px-2 py-1 text-xs text-white transition"
+                                                                        style={{ background: '#DC2626' }}
                                                                     >
                                                                         Remove
                                                                     </button>
                                                                     <button
                                                                         onClick={() => setStagedRemove(p => ({ ...p, [a.user_id]: false }))}
-                                                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                                        className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                                     >
                                                                         Cancel
                                                                     </button>
@@ -1406,7 +1579,7 @@ function RosterButton({
                                         })}
                                         {rows.length === 0 && (
                                             <tr>
-                                                <td colSpan={4} className="p-3 text-sm text-gray-600">
+                                                <td colSpan={4} className="p-3 text-sm" style={{ color: 'var(--sub)' }}>
                                                     No confirmed attendees yet.
                                                 </td>
                                             </tr>
@@ -1414,8 +1587,8 @@ function RosterButton({
                                     </tbody>
                                 </table>
                             </div>
-                            {err && <div className="text-sm text-rose-600">{err}</div>}
-                            <div className="text-xs text-gray-600">
+                            {err && <div className="text-sm" style={{ color: '#F87171' }}>{err}</div>}
+                            <div className="text-xs" style={{ color: 'var(--sub)' }}>
                                 Removing sets <code>CANCELLED</code>. Your waitlist promotion trigger (if any) will take care of upgrades.
                             </div>
                         </div>
@@ -1797,27 +1970,28 @@ function SettingsSection() {
         }
     }
 
-    if (loading) return <p>Loading…</p>;
+    if (loading) return <p style={{ color: 'var(--sub)' }}>Loading…</p>;
 
     const addChoices = availableCoursesForAdd();
     const suggestedFiltered = suggested; // no client-side filtering
 
     return (
-        <section className="space-y-4">
+        <section className="space-y-4" style={{ color: 'var(--ink)' }}>
             {/* ===== Monitored courses (existing) ===== */}
-            <div className="rounded-xl border bg-white ring-1 ring-gray-50 shadow-sm p-4">
-                <h2 className="text-base font-semibold mb-2">Monitored courses (cohorts)</h2>
+            <div className="rounded-lg p-4 ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
+                <h2 className="text-base font-semibold mb-2" style={{ color: 'var(--ink)' }}>Monitored courses (cohorts)</h2>
 
-                <div className="text-xs text-gray-600 mb-3">
-                    Company:&nbsp;<span className="font-medium">{companyName || companyId}</span>
+                <div className="text-xs mb-3" style={{ color: 'var(--sub)' }}>
+                    Company:&nbsp;<span className="font-medium" style={{ color: 'var(--ink)' }}>{companyName || companyId}</span>
                 </div>
 
                 {/* Add new monitored course */}
                 <div className="mb-3 flex flex-col sm:flex-row gap-2 sm:items-end">
                     <div className="sm:w-80">
-                        <label className="block text-xs text-gray-600 mb-1">Course</label>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Course</label>
                         <select
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={addCourseId}
                             onChange={e => setAddCourseId(e.target.value)}
                         >
@@ -1830,11 +2004,12 @@ function SettingsSection() {
                         </select>
                     </div>
                     <div className="sm:w-40">
-                        <label className="block text-xs text-gray-600 mb-1">Group size</label>
+                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Group size</label>
                         <input
                             type="number"
                             min={2}
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-md px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             value={addGroupSize}
                             onChange={e => setAddGroupSize(e.target.value === '' ? '' : Number(e.target.value))}
                             placeholder="e.g., 10"
@@ -1844,7 +2019,8 @@ function SettingsSection() {
                         <button
                             onClick={() => void addMonitoredCourse()}
                             disabled={adding || !addCourseId || addGroupSize === '' || Number(addGroupSize) < 2}
-                            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                            className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                         >
                             {adding ? 'Adding…' : 'Add monitored course'}
                         </button>
@@ -1854,8 +2030,11 @@ function SettingsSection() {
                 {/* List */}
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600">
-                            <tr>
+                        <thead>
+                            <tr
+                                className="text-xs"
+                                style={{ color: 'var(--sub)', background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                            >
                                 <th className="text-left p-2">Course</th>
                                 <th className="text-left p-2">Group size</th>
                                 <th className="p-2 text-center">Actions</th>
@@ -1864,7 +2043,7 @@ function SettingsSection() {
                         <tbody>
                             {Object.keys(cohort).length === 0 && (
                                 <tr>
-                                    <td colSpan={3} className="p-3 text-sm text-gray-600">
+                                    <td colSpan={3} className="p-3 text-sm" style={{ color: 'var(--sub)' }}>
                                         No monitored courses yet.
                                     </td>
                                 </tr>
@@ -1873,13 +2052,14 @@ function SettingsSection() {
                                 const c = courses.find(x => x.id === course_id);
                                 const deleting = pendingDelete === course_id;
                                 return (
-                                    <tr key={course_id} className="border-t">
-                                        <td className="p-2">{c?.name || course_id}</td>
+                                    <tr key={course_id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{c?.name || course_id}</td>
                                         <td className="p-2">
                                             <input
                                                 type="number"
                                                 min={2}
-                                                className="w-28 border rounded px-2 py-1"
+                                                className="w-28 rounded px-2 py-1 ring-1"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 value={group_size}
                                                 onChange={e =>
                                                     setCohort(prev => ({
@@ -1899,13 +2079,15 @@ function SettingsSection() {
                                                         <button
                                                             onClick={() => void saveRow(course_id)}
                                                             disabled={!!rowSaving[course_id]}
-                                                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                                                            className="rounded-md px-2 py-1 text-xs ring-1 transition disabled:opacity-60"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         >
                                                             {rowSaving[course_id] ? 'Saving…' : 'Update'}
                                                         </button>
                                                         <button
                                                             onClick={() => setPendingDelete(course_id)}
-                                                            className="rounded border border-rose-300 text-rose-700 px-2 py-1 text-xs hover:bg-rose-50"
+                                                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                            style={{ background: 'var(--nav-item-bg)', borderColor: '#fecaca', color: '#b91c1c' }}
                                                         >
                                                             Delete
                                                         </button>
@@ -1914,13 +2096,15 @@ function SettingsSection() {
                                                     <>
                                                         <button
                                                             onClick={() => void deleteRowFinal(course_id)}
-                                                            className="rounded px-2 py-1 text-xs text-white bg-rose-600 hover:bg-rose-700"
+                                                            className="rounded-md px-2 py-1 text-xs text-white transition"
+                                                            style={{ background: '#DC2626' }}
                                                         >
                                                             Delete
                                                         </button>
                                                         <button
                                                             onClick={() => setPendingDelete(null)}
-                                                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         >
                                                             Cancel
                                                         </button>
@@ -1929,12 +2113,12 @@ function SettingsSection() {
                                             </div>
                                             {/* Row messages */}
                                             {rowErr[course_id] && (
-                                                <div className="mt-1 text-xs text-rose-600">
+                                                <div className="mt-1 text-xs" style={{ color: '#F87171' }}>
                                                     {rowErr[course_id]}
                                                 </div>
                                             )}
                                             {rowOk[course_id] && (
-                                                <div className="mt-1 text-xs text-emerald-700">
+                                                <div className="mt-1 text-xs text-emerald-700 [data-orbit='1']:text-emerald-200">
                                                     {rowOk[course_id]}
                                                 </div>
                                             )}
@@ -1948,11 +2132,11 @@ function SettingsSection() {
 
                 {/* Page-level messages */}
                 <div className="mt-3 flex gap-2">
-                    {err && <span className="text-sm text-rose-600">{err}</span>}
-                    {ok && <span className="text-sm text-emerald-700">{ok}</span>}
+                    {err && <span className="text-sm" style={{ color: '#F87171' }}>{err}</span>}
+                    {ok && <span className="text-sm text-emerald-700 [data-orbit='1']:text-emerald-200">{ok}</span>}
                 </div>
 
-                <p className="mt-3 text-xs text-gray-600">
+                <p className="mt-3 text-xs" style={{ color: 'var(--sub)' }}>
                     Adding or updating a monitored course will immediately rebuild cohorts. When a user’s{' '}
                     <em>training completion date</em> changes, we recommend a small DB trigger that calls the rebuild RPC for the
                     relevant course so groups stay fresh automatically.
@@ -1960,17 +2144,20 @@ function SettingsSection() {
             </div>
 
             {/* ===== Suggested booking groups (NEW) ===== */}
-            <div className="rounded-xl border bg-white ring-1 ring-gray-50 shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
+            <div className="rounded-lg p-4 ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
+                <div className="flex items-center justify-between mb-3" style={{ color: 'var(--ink)' }}>
                     <h2 className="text-base font-semibold">Suggested booking groups</h2>
                 </div>
 
-                {sgErr && <div className="mb-2 text-sm text-rose-600">{sgErr}</div>}
+                {sgErr && <div className="mb-2 text-sm" style={{ color: '#F87171' }}>{sgErr}</div>}
 
-                <div className="overflow-x-auto rounded-xl border bg-white ring-1 ring-gray-50">
+                <div className="overflow-x-auto rounded-lg ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600">
-                            <tr>
+                        <thead>
+                            <tr
+                                className="text-xs"
+                                style={{ color: 'var(--sub)', background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}
+                            >
                                 <th className="text-left p-2">Course</th>
                                 <th className="text-left p-2">Group</th>
                                 <th className="text-left p-2">People</th>
@@ -1981,13 +2168,13 @@ function SettingsSection() {
                         <tbody>
                             {sgLoading ? (
                                 <tr>
-                                    <td colSpan={5} className="p-3 text-sm text-gray-600">
+                                    <td colSpan={5} className="p-3 text-sm" style={{ color: 'var(--sub)' }}>
                                         Loading…
                                     </td>
                                 </tr>
                             ) : suggestedFiltered.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="p-3 text-sm text-gray-600">
+                                    <td colSpan={5} className="p-3 text-sm" style={{ color: 'var(--sub)' }}>
                                         No suggested groups.
                                     </td>
                                 </tr>
@@ -2000,15 +2187,16 @@ function SettingsSection() {
                                         sg.latest_due ? new Date(sg.latest_due).toLocaleDateString() : '—',
                                     ].join(' → ');
                                     return (
-                                        <tr key={`${sg.course_id}-${sg.group_num}`} className="border-t">
-                                            <td className="p-2">{name}</td>
-                                            <td className="p-2">#{sg.group_num}</td>
-                                            <td className="p-2">{sg.count}</td>
-                                            <td className="p-2">{win}</td>
+                                        <tr key={`${sg.course_id}-${sg.group_num}`} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{name}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>#{sg.group_num}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{sg.count}</td>
+                                            <td className="p-2" style={{ color: 'var(--ink)' }}>{win}</td>
                                             <td className="p-2 text-center">
                                                 <button
                                                     onClick={() => openCreateFromSuggestion(sg)}
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 >
                                                     Create session
                                                 </button>
@@ -2021,7 +2209,7 @@ function SettingsSection() {
                     </table>
                 </div>
 
-                <p className="mt-3 text-xs text-gray-600">
+                <p className="mt-3 text-xs" style={{ color: 'var(--sub)' }}>
                     Groups are ordered by earliest due date. Use “Create session” to schedule and invite the whole group in one step.
                 </p>
             </div>
@@ -2032,34 +2220,37 @@ function SettingsSection() {
                     title={`Create session — ${courses.find(c => c.id === createOpen.course_id)?.name || 'Course'}`}
                     onClose={() => setCreateOpen(null)}
                 >
-                    <div className="space-y-3">
+                    <div className="space-y-3" style={{ color: 'var(--ink)' }}>
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div>
-                                <label className="block text-sm mb-1">Date</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Date</label>
                                 <input
                                     type="date"
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={createForm.date}
                                     onChange={e => setCreateForm({ ...createForm, date: e.target.value })}
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm mb-1">Time</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Time</label>
                                 <input
                                     type="time"
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={createForm.time}
                                     onChange={e => setCreateForm({ ...createForm, time: e.target.value })}
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm mb-1">Capacity (optional)</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Capacity (optional)</label>
                                 <input
                                     type="number"
                                     min={1}
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={createForm.capacity}
                                     onChange={e =>
                                         setCreateForm({
@@ -2071,11 +2262,12 @@ function SettingsSection() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm mb-1">Confirm days (optional)</label>
+                                <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Confirm days (optional)</label>
                                 <input
                                     type="number"
                                     min={0}
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-md px-3 py-2 ring-1"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     value={createForm.confirmDays}
                                     onChange={e =>
                                         setCreateForm({
@@ -2088,9 +2280,10 @@ function SettingsSection() {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm mb-1">Location</label>
+                            <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>Location</label>
                             <input
-                                className="w-full border rounded-lg px-3 py-2"
+                                className="w-full rounded-md px-3 py-2 ring-1"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 value={createForm.location}
                                 onChange={e => setCreateForm({ ...createForm, location: e.target.value })}
                                 placeholder="e.g., Training Room"
@@ -2100,27 +2293,57 @@ function SettingsSection() {
                             <button
                                 onClick={() => void createSessionFromSuggestion()}
                                 disabled={createSaving}
-                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             >
                                 {createSaving ? 'Creating…' : 'Create session & invite'}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setCreateOpen(null)}
-                                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             >
                                 Cancel
                             </button>
                         </div>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs" style={{ color: 'var(--sub)' }}>
                             Confirm-by date is computed from defaults/overrides unless you set “Confirm days”.
                         </p>
                     </div>
                 </Modal>
             )}
+
+            {/* Orbit select/input popover fixes for controls rendered within this section */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="number"],
+        [data-orbit="1"] input[type="date"],
+        [data-orbit="1"] input[type="time"],
+        [data-orbit="1"] input[type="text"],
+        [data-orbit="1"] textarea {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </section>
     );
 }
+
 
 /* ========================= Small UI pieces ========================= */
 
@@ -2135,23 +2358,35 @@ function Modal({
 }) {
     return (
         <div className="fixed inset-0 z-[200]">
-            <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+            {/* overlay */}
+            <div
+                className="absolute inset-0"
+                onClick={onClose}
+                // dark, subtle overlay that works in both themes
+                style={{ background: 'rgba(0,0,0,0.35)' }}
+            />
             <div className="absolute inset-0 grid place-items-center p-4">
-                <div className="w-full max-w-2xl rounded-2xl border bg-white shadow-lg ring-1 ring-gray-50 p-4">
+                <div
+                    className="w-full max-w-2xl rounded-2xl p-4 ring-1 shadow-lg"
+                    style={{ background: 'var(--panel-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                >
                     <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-base font-semibold">{title}</h3>
+                        <h3 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                            {title}
+                        </h3>
                         <button
                             onClick={onClose}
-                            className="rounded-lg p-1 hover:bg-gray-50"
+                            className="rounded-lg p-1 ring-1 transition"
                             aria-label="Close"
                             type="button"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         >
                             <svg className="h-4 w-4" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth={2}>
                                 <path d="M6 6l12 12M18 6L6 18" />
                             </svg>
                         </button>
                     </div>
-                    {children}
+                    <div style={{ color: 'var(--ink)' }}>{children}</div>
                 </div>
             </div>
         </div>
@@ -2196,7 +2431,7 @@ function PeoplePicker({
     }
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-2" style={{ color: 'var(--ink)' }}>
             {/* chips */}
             <div className="flex flex-wrap gap-2">
                 {selected.map(id => {
@@ -2204,28 +2439,35 @@ function PeoplePicker({
                     const label = p ? p.name : id.slice(0, 8);
                     const ctx = p?.home_id ? homesById.get(p.home_id) : p?.is_bank ? 'Bank staff' : '—';
                     return (
-                        <span key={id} className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs">
-                            <span className="font-medium">{label}</span>
-                            <span className="text-gray-500">({ctx || '—'})</span>
+                        <span
+                            key={id}
+                            className="inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                        >
+                            <span className="font-medium" style={{ color: 'var(--ink)' }}>
+                                {label}
+                            </span>
+                            <span style={{ color: 'var(--sub)' }}>({ctx || '—'})</span>
                             <button
                                 type="button"
-                                className="rounded border px-1"
+                                className="rounded-md px-1 text-sm ring-1 transition"
                                 onClick={() => remove(id)}
                                 disabled={disabled}
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             >
                                 ×
                             </button>
                         </span>
                     );
                 })}
-                {selected.length === 0 && <span className="text-xs text-gray-500">No one selected yet.</span>}
+                {selected.length === 0 && <span className="text-xs" style={{ color: 'var(--sub)' }}>No one selected yet.</span>}
             </div>
 
             {/* input + dropdown */}
             <div className="relative max-w-lg">
                 <input
                     disabled={disabled}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full rounded-lg px-3 py-2 ring-1"
                     placeholder={placeholder}
                     value={query}
                     onChange={e => {
@@ -2253,20 +2495,27 @@ function PeoplePicker({
                             setOpen(false);
                         }
                     }}
+                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                 />
                 {open && list.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full rounded-xl border bg-white shadow-lg ring-1 ring-gray-200 max-h-64 overflow-auto">
+                    <div
+                        className="absolute z-50 mt-1 w-full max-h-64 overflow-auto rounded-xl ring-1 shadow-lg"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                    >
                         {list.map((p, i) => (
                             <button
                                 key={p.id}
                                 type="button"
                                 onMouseDown={e => e.preventDefault()}
                                 onClick={() => add(p.id)}
-                                className={`w-full text-left px-3 py-2 text-sm ${i === highlight ? 'bg-indigo-50' : 'hover:bg-gray-50'
-                                    }`}
+                                className="w-full text-left px-3 py-2 text-sm transition"
+                                style={{
+                                    background: i === highlight ? 'var(--nav-item-bg-hover)' : 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                }}
                             >
-                                <div className="font-medium text-gray-900">{p.name}</div>
-                                <div className="text-xs text-gray-500">
+                                <div className="font-medium" style={{ color: 'var(--ink)' }}>{p.name}</div>
+                                <div className="text-xs" style={{ color: 'var(--sub)' }}>
                                     {p.home_id ? homesById.get(p.home_id) : p.is_bank ? 'Bank staff' : '—'}
                                 </div>
                             </button>
@@ -2274,8 +2523,19 @@ function PeoplePicker({
                     </div>
                 )}
             </div>
+
+            {/* Orbit-only input popover safety (in case this renders outside sections that already include it) */}
+            <style jsx global>{`
+        [data-orbit="1"] input[type="text"] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+      `}</style>
         </div>
     );
 }
+
 
 

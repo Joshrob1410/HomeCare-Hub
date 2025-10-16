@@ -4,6 +4,9 @@ import React, { useEffect, useMemo, useState, type ReactNode, type ButtonHTMLAtt
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel } from '@/supabase/roles';
 
+/* ========= Brand ========= */
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
 
 /* ========= Types ========= */
 type Level = '1_ADMIN' | '2_COMPANY' | '3_MANAGER' | '4_STAFF';
@@ -79,14 +82,6 @@ const BORDER = [
     '#CE93D8', '#C5E1A5', '#FFF59D', '#80CBC4', '#FFAB91', '#9FA8DA'
 ] as const;
 
-function colorFor(id?: string | null): { bg: string; border: string } {
-    const safe = (id && id.length) ? id : 'fallback';
-    let h = 0;
-    for (let i = 0; i < safe.length; i++) h = ((h << 5) - h) + safe.charCodeAt(i);
-    const idx = Math.abs(h) % PALETTE.length;
-    return { bg: PALETTE[idx], border: BORDER[idx] };
-}
-
 // Show a user's full name if we have it, otherwise fall back to short id
 function displayName(list: Profile[], id: string): string {
     const full = list.find(p => p.user_id === id)?.full_name?.trim();
@@ -127,7 +122,7 @@ function CalendarGrid({
     const days = new Date(year, month + 1, 0).getDate();
     const startDow = new Date(year, month, 1).getDay(); // 0 Sun..6 Sat
 
-    // Build cells with explicit loops to keep types precise under strict mode.
+    // Build cells
     const cells: (number | null)[] = [];
     for (let i = 0; i < startDow; i++) cells.push(null); // leading blanks
     for (let d = 1; d <= days; d++) cells.push(d);       // 1..days
@@ -136,16 +131,23 @@ function CalendarGrid({
     const title = base.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-3" style={{ color: 'var(--ink)' }}>
             <div className="text-lg font-semibold">{title}</div>
-            <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-3">
+            <div
+                className="rounded-xl p-3 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
                 <div className="grid grid-cols-7 gap-2">
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(h =>
-                        <div key={h} className="text-xs font-medium text-gray-600">{h}</div>
+                        <div key={h} className="text-xs font-medium" style={{ color: 'var(--sub)' }}>{h}</div>
                     )}
                     {cells.map((d, i) => (
-                        <div key={i} className="min-h-28 rounded-lg border bg-white p-2 flex flex-col">
-                            <div className="text-[11px] text-gray-500 font-medium">{d ?? ''}</div>
+                        <div
+                            key={i}
+                            className="min-h-28 rounded-lg p-2 flex flex-col ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                        >
+                            <div className="text-[11px] font-medium" style={{ color: 'var(--sub)' }}>{d ?? ''}</div>
                             <div className="mt-1 space-y-1 flex-1">{d ? cellRenderer(d) : null}</div>
                         </div>
                     ))}
@@ -154,6 +156,74 @@ function CalendarGrid({
         </div>
     );
 }
+
+// Detect dark mode (Orbit or system)
+function useIsDark(): boolean {
+    const [dark, setDark] = React.useState(false);
+
+    React.useEffect(() => {
+        const prefers = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+        const compute = () => {
+            // Re-check Orbit on every call; don't close over a stale value
+            const orbitOn = !!document.querySelector('[data-orbit="1"]');
+            setDark(orbitOn || !!prefers?.matches);
+        };
+
+        // Initial + next frame (in case Orbit flag is applied after hydration)
+        compute();
+        const raf = requestAnimationFrame(compute);
+
+        // Listen to OS theme changes
+        prefers?.addEventListener?.('change', compute);
+
+        // Watch for [data-orbit] attribute toggles anywhere in the document
+        const mo = new MutationObserver(compute);
+        mo.observe(document.documentElement, {
+            attributes: true,
+            subtree: true,
+            // If you know the attribute is always called "data-orbit", keep this;
+            // otherwise omit attributeFilter to catch all attribute changes.
+            // (Omitting filter is noisier but safe.)
+            // attributeFilter: ['data-orbit'],
+        });
+
+        return () => {
+            cancelAnimationFrame(raf);
+            prefers?.removeEventListener?.('change', compute);
+            mo.disconnect();
+        };
+    }, []);
+
+    return dark;
+}
+
+
+// Theme-aware chip colours: stable hue per id, different lightness per theme
+function colorFor(
+    id?: string | null,
+    dark = false
+): { bg: string; border: string; fg: string } {
+    const safe = (id && id.length) ? id : 'fallback';
+    let h = 0;
+    for (let i = 0; i < safe.length; i++) h = ((h << 5) - h) + safe.charCodeAt(i);
+    const hue = Math.abs(h) % 360;
+
+    if (dark) {
+        // Dark background chip with light text
+        const bg = `hsl(${hue}, 65%, 22%)`;
+        const border = `hsl(${hue}, 65%, 35%)`;
+        const fg = '#F8FAFC'; // light ink for dark chips
+        return { bg, border, fg };
+    } else {
+        // Light background chip with dark text
+        const bg = `hsl(${hue}, 90%, 90%)`;
+        const border = `hsl(${hue}, 70%, 60%)`;
+        const fg = '#0B1221'; // dark ink for light chips
+        return { bg, border, fg };
+    }
+}
+
 
 /* ========= Toolbar ========= */
 function Toolbar({
@@ -171,12 +241,16 @@ function Toolbar({
     rightExtra?: ReactNode;
 }) {
     return (
-        <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-3 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+        <div
+            className="rounded-xl p-3 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end ring-1"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+        >
             {companies && setCompanyId && (
                 <div>
-                    <label className="block text-xs text-gray-600 mb-1">Company</label>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Company</label>
                     <select
-                        className="w-full border rounded-lg px-3 py-2"
+                        className="w-full rounded-lg px-3 py-2 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         value={companyId || ''}
                         onChange={e => setCompanyId(e.target.value)}
                     >
@@ -186,9 +260,10 @@ function Toolbar({
                 </div>
             )}
             <div>
-                <label className="block text-xs text-gray-600 mb-1">Home</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Home</label>
                 <select
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full rounded-lg px-3 py-2 ring-1"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                     value={homeId}
                     onChange={e => setHomeId(e.target.value)}
                 >
@@ -197,10 +272,11 @@ function Toolbar({
                 </select>
             </div>
             <div>
-                <label className="block text-xs text-gray-600 mb-1">Month</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Month</label>
                 <input
                     type="month"
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full rounded-lg px-3 py-2 ring-1"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                     value={ym(month)}
                     onChange={e => setMonth(`${e.target.value}-01`)}
                 />
@@ -236,10 +312,11 @@ export default function RotasPage() {
     }, [showManage, showSettings, tab]);
 
     return (
-        <div className="p-6 space-y-6">
-            <h1 className="text-2xl font-semibold">Rotas</h1>
+        <div className="p-6 space-y-6" style={{ color: 'var(--ink)' }}>
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Rotas</h1>
 
-            <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
+            {/* Tabs */}
+            <div className="flex gap-2">
                 <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>My Rotas</TabBtn>
                 {showManage && <TabBtn active={tab === 'MANAGE'} onClick={() => setTab('MANAGE')}>Manage Rotas</TabBtn>}
                 {showSettings && <TabBtn active={tab === 'SETTINGS'} onClick={() => setTab('SETTINGS')}>Rota Settings</TabBtn>}
@@ -248,6 +325,36 @@ export default function RotasPage() {
             {tab === 'MY' && <MyRotas isAdmin={isAdmin} isCompany={isCompany} isManager={isManager} isStaff={isStaff} />}
             {tab === 'MANAGE' && showManage && <ManageRotas isAdmin={isAdmin} isCompany={isCompany} isManager={isManager} />}
             {tab === 'SETTINGS' && showSettings && <RotaSettings isAdmin={isAdmin} />}
+
+            {/* --- Orbit-only native control fixes (scoped to this page) --- */}
+            <style jsx global>{`
+        /* Make native popovers dark in Orbit and ensure closed state isn't washed out */
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="number"],
+        [data-orbit="1"] input[type="date"],
+        [data-orbit="1"] input[type="time"],
+        [data-orbit="1"] textarea {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        /* Option text inside the opened dropdown menu */
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221; /* solid fallback so options don't look transparent */
+        }
+        /* Firefox also respects this for the popup list */
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        /* Remove the greyed-out look some UAs apply */
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
@@ -255,7 +362,19 @@ export default function RotasPage() {
 function TabBtn(
     { active, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
 ) {
-    return <button className={`px-4 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`} {...props}>{children}</button>;
+    return (
+        <button
+            className="px-4 py-2 text-sm rounded-md ring-1 transition"
+            style={
+                active
+                    ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                    : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+            }
+            {...props}
+        >
+            {children}
+        </button>
+    );
 }
 
 /* =========================
@@ -281,6 +400,8 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
     type EntryWithStart = Entry & { start_time?: string | null }; // adds start_time safely
 
     const [uid, setUid] = useState<string>('');
+
+    const isDark = useIsDark();
 
     // Company/Home selectors (used for normal users)
     const [companies, setCompanies] = useState<Company[]>([]);
@@ -484,12 +605,13 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
     const calendarHiddenStandard = (isAdmin && !companyId) || !homeId || !month;
 
     const rightExtra = (
-        <div className="flex items-center gap-2 justify-end">
+        <div className="flex items-center gap-2 justify-end" style={{ color: 'var(--ink)' }}>
             {!isBankView && (
                 <>
-                    <label className="text-xs text-gray-600">View</label>
+                    <label className="text-xs" style={{ color: 'var(--sub)' }}>View</label>
                     <select
-                        className="border rounded-lg px-2 py-1 text-sm"
+                        className="rounded-lg px-2 py-1 text-sm ring-1"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                         value={viewMode}
                         onChange={e => setViewMode(e.target.value as 'ALL' | 'MINE')}
                     >
@@ -502,7 +624,7 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
     );
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4" style={{ color: 'var(--ink)' }}>
             <Toolbar
                 companies={isAdmin ? companies : undefined}
                 companyId={isAdmin ? companyId : undefined}
@@ -523,11 +645,11 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
             {/* Standard home-scoped view */}
             {!isBankView ? (
                 calendarHiddenStandard ? (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm" style={{ color: 'var(--sub)' }}>
                         Select {isAdmin ? 'a company and ' : ''}a home and month to view rotas.
                     </p>
                 ) : !rota ? (
-                    <p className="text-sm text-gray-600">No LIVE rota for this month.</p>
+                    <p className="text-sm" style={{ color: 'var(--sub)' }}>No LIVE rota for this month.</p>
                 ) : (
                     <CalendarGrid
                         monthISO={month}
@@ -538,9 +660,9 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
                             return (
                                 <div className="space-y-1">
                                     {visible.length === 0 ? (
-                                        <div className="text-xs text-gray-400">—</div>
+                                        <div className="text-xs" style={{ color: 'var(--sub)' }}>—</div>
                                     ) : visible.map(e => {
-                                        const { bg, border } = colorFor(e.user_id);
+                                        const { bg, border, fg } = colorFor(e.user_id, isDark);
                                         const code = e.shift_type_id ? codeById.get(e.shift_type_id) : undefined;
                                         const inits = initialsFor(people, e.user_id);
                                         const titleText = (() => {
@@ -554,7 +676,7 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
                                             <div
                                                 key={e.id}
                                                 className="rounded-lg px-2 py-1"
-                                                style={{ background: bg, border: `1px solid ${border}` }}
+                                                style={{ background: bg, border: `1px solid ${border}`, color: fg }}
                                                 title={titleText}
                                             >
                                                 <div className="text-[12px] leading-tight truncate">
@@ -563,7 +685,7 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
                                                     <> · {e.hours}h</>
                                                 </div>
                                                 {e.notes && (
-                                                    <div className="mt-0.5 text-[11px] text-gray-600 break-words">
+                                                    <div className="mt-0.5 text-[11px] break-words" style={{ color: 'var(--sub)' }}>
                                                         {e.notes}
                                                     </div>
                                                 )}
@@ -585,9 +707,9 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
                         return (
                             <div className="space-y-1">
                                 {todays.length === 0 ? (
-                                    <div className="text-xs text-gray-400">—</div>
+                                    <div className="text-xs" style={{ color: 'var(--sub)' }}>—</div>
                                 ) : todays.map(e => {
-                                    const { bg, border } = colorFor(e.user_id);
+                                    const { bg, border, fg } = colorFor(e.user_id, isDark);
                                     const code = e.shift_type_id ? codeById.get(e.shift_type_id) : undefined;
                                     const inits = initialsFor(people, e.user_id);
                                     const h = e._home_id ? homeById.get(e._home_id) : undefined;
@@ -602,7 +724,7 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
                                         <div
                                             key={e.id}
                                             className="rounded-lg px-2 py-1"
-                                            style={{ background: bg, border: `1px solid ${border}` }}
+                                            style={{ background: bg, border: `1px solid ${border}`, color: fg }}
                                             title={titleText}
                                         >
                                             <div className="text-[12px] leading-tight truncate">
@@ -611,12 +733,12 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
                                                 <> · {e.hours}h</>
                                             </div>
                                             {h && (
-                                                <div className="text-[11px] text-gray-700">
+                                                <div className="text-[11px]" style={{ color: 'var(--sub)' }}>
                                                     @ {h.name}
                                                 </div>
                                             )}
                                             {e.notes && (
-                                                <div className="mt-0.5 text-[11px] text-gray-600 break-words">
+                                                <div className="mt-0.5 text-[11px] break-words" style={{ color: 'var(--sub)' }}>
                                                     {e.notes}
                                                 </div>
                                             )}
@@ -632,63 +754,7 @@ function MyRotas({ isAdmin, isCompany, isManager, isStaff }: {
     );
 }
 
-// Local YYYY-MM-DD (no UTC conversion)
-function ymdLocal(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
-// Week start = Sunday
-function weekStart(d: Date): Date {
-    const x = new Date(d);
-    // 0=Sun..6=Sat, so subtract day-of-week to get back to Sunday
-    x.setDate(d.getDate() - d.getDay());
-    x.setHours(0, 0, 0, 0);
-    return x;
-}
-
-function buildWeeklyKpis(
-    monthISO: string,
-    rows: { day_of_month: number; hours: number; isAnnualLeave?: boolean }[]
-): { weekly: KpiRow[]; monthTotal: number } {
-    // Exclude Annual Leave
-    const filtered = rows.filter(r => !r.isAnnualLeave && (r.hours || 0) > 0);
-    if (!filtered.length) return { weekly: [], monthTotal: 0 };
-
-    // Map each entry to an actual local date within the month
-    const base = new Date(`${monthISO}T00:00:00`);
-    const y = base.getFullYear(), m = base.getMonth();
-    const dated = filtered.map(r => ({ date: new Date(y, m, r.day_of_month), hours: r.hours }));
-
-    // Group by local Sunday week start
-    const weekHours = new Map<string, number>(); // key = yyy-mm-dd (local)
-    for (const { date, hours } of dated) {
-        const ws = weekStart(date);           // local Date at the Sunday
-        const key = ymdLocal(ws);             // avoid UTC toISOString()
-        weekHours.set(key, (weekHours.get(key) || 0) + hours);
-    }
-
-    // Build rows as Sunday → Saturday (no clipping)
-    const weekly: KpiRow[] = Array.from(weekHours.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([wsYmd, hrs]) => {
-            const wsDate = new Date(wsYmd + 'T00:00:00'); // reconstruct local date
-            const weDate = new Date(wsDate);
-            weDate.setDate(wsDate.getDate() + 6);         // Saturday
-            return {
-                week_start: ymdLocal(wsDate),
-                week_end: ymdLocal(weDate),
-                hours: Number((hrs || 0).toFixed(2)),
-            };
-        });
-
-    // Month total = sum of the (in-month) entry hours we used
-    const monthTotal = Number(filtered.reduce((sum, r) => sum + (r.hours || 0), 0).toFixed(2));
-
-    return { weekly, monthTotal };
-}
+/* ========= Utilities for KPIs ========= */
 
 /* =========================
    MANAGE ROTAS (create/edit)
@@ -711,6 +777,8 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
     };
 
     type EntryWithStart = Entry & { start_time?: string | null };
+
+    const isDark = useIsDark();
 
     const [companies, setCompanies] = useState<Company[]>([]);
     const [companyId, setCompanyId] = useState<string>('');
@@ -1055,17 +1123,30 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
     const calendarHidden = !homeId || !month || (isAdmin && !companyId);
 
     const rightExtra = (
-        <div className="flex items-center gap-2 justify-end">
-            <label className="text-xs text-gray-600 inline-flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-end" style={{ color: 'var(--ink)' }}>
+            <label className="text-xs inline-flex items-center gap-2" style={{ color: 'var(--sub)' }}>
                 <input type="checkbox" checked={includeBank} onChange={e => setIncludeBank(e.target.checked)} />
                 Include bank staff
             </label>
             <button disabled={!rota || rota.status === 'LIVE'} onClick={makeLive}
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">Make Live</button>
+                className="rounded-lg px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+            >
+                Make Live
+            </button>
             <button disabled={!rota || rota.status === 'DRAFT'} onClick={setDraft}
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60">Set Draft</button>
+                className="rounded-lg px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+            >
+                Set Draft
+            </button>
             {rota && (
-                <span className={`text-xs px-2 py-1 rounded ring-1 ${rota.status === 'LIVE' ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-amber-50 text-amber-700 ring-amber-100'}`}>
+                <span
+                    className={`text-xs px-2 py-1 rounded ring-1 ${rota.status === 'LIVE'
+                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-100 [data-orbit="1"]:bg-emerald-500/10 [data-orbit="1"]:text-emerald-200 [data-orbit="1"]:ring-emerald-400/25'
+                            : 'bg-amber-50 text-amber-700 ring-amber-100 [data-orbit="1"]:bg-amber-500/10 [data-orbit="1"]:text-amber-200 [data-orbit="1"]:ring-amber-400/25'
+                        }`}
+                >
                     Status: {rota.status}
                 </span>
             )}
@@ -1082,17 +1163,17 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
     function KpiPanel({ weekly, total }: { weekly: KpiRow[]; total: number }) {
         if (!weekly.length && total === 0) {
             return (
-                <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4">
-                    <div className="text-sm text-gray-600">No hours found for this selection.</div>
+                <section className="rounded-xl p-4 ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
+                    <div className="text-sm" style={{ color: 'var(--sub)' }}>No hours found for this selection.</div>
                 </section>
             );
         }
         return (
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4">
-                <h3 className="text-base font-semibold mb-3">KPI — Hours (excl. Annual Leave)</h3>
+            <section className="rounded-xl p-4 ring-1" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
+                <h3 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>KPI — Hours (excl. Annual Leave)</h3>
                 <div className="overflow-auto">
-                    <table className="min-w-[480px] text-sm">
-                        <thead className="bg-gray-50 text-gray-600">
+                    <table className="min-w-[480px] text-sm" style={{ color: 'var(--ink)' }}>
+                        <thead style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}>
                             <tr>
                                 <th className="text-left p-2">Week</th>
                                 <th className="text-right p-2">Hours</th>
@@ -1100,12 +1181,12 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                         </thead>
                         <tbody>
                             {weekly.map(w => (
-                                <tr key={w.week_start} className="border-t">
+                                <tr key={w.week_start} style={{ borderTop: '1px solid var(--ring)' }}>
                                     <td className="p-2">{toUKDate(w.week_start)} → {toUKDate(w.week_end)}</td>
                                     <td className="p-2 text-right font-medium">{w.hours.toFixed(2)}</td>
                                 </tr>
                             ))}
-                            <tr className="border-t bg-gray-50">
+                            <tr style={{ borderTop: '1px solid var(--ring)', background: 'var(--nav-item-bg)' }}>
                                 <td className="p-2 font-semibold">Month total</td>
                                 <td className="p-2 text-right font-semibold">{total.toFixed(2)}</td>
                             </tr>
@@ -1117,7 +1198,7 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
     }
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-3" style={{ color: 'var(--ink)' }}>
             <Toolbar
                 companies={isAdmin ? companies : undefined}
                 companyId={isAdmin ? companyId : undefined}
@@ -1137,7 +1218,7 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                 }}
                 month={month}
                 setMonth={setMonth}
-                requireCompanyForAdmin={requireCompany}
+                requireCompanyForAdmin={isAdmin}
                 rightExtra={rightExtra}
             />
 
@@ -1156,7 +1237,7 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                 <div className="space-y-1">
                                     {todays.map(e => {
                                         const userId = e.user_id ?? 'unknown';
-                                        const { bg, border } = colorFor(userId);
+                                        const { bg, border, fg } = colorFor(userId, isDark);
                                         const code = e.shift_type_id ? codeById.get(e.shift_type_id) : undefined;
                                         const inits = initialsFor(profiles, userId);
                                         const titleText = (() => {
@@ -1171,7 +1252,7 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                             <div
                                                 key={e.id}
                                                 className="rounded-lg px-2 py-1"
-                                                style={{ background: bg, border: `1px solid ${border}` }}
+                                                style={{ background: bg, border: `1px solid ${border}`, color: fg }}
                                                 title={titleText}
                                             >
                                                 <div className="text-[12px] leading-tight truncate">
@@ -1180,14 +1261,24 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                                     <> · {e.hours}h</>
                                                 </div>
                                                 {e.notes && (
-                                                    <div className="mt-0.5 text-[11px] text-gray-600 break-words">
+                                                    <div className="mt-0.5 text-[11px] break-words" style={{ color: 'var(--sub)' }}>
                                                         {e.notes}
                                                     </div>
                                                 )}
                                                 {rota?.status !== 'LIVE' && (
                                                     <div className="mt-1 flex gap-1">
-                                                        <button onClick={() => openEditor(d, e)} className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50">Edit</button>
-                                                        <button onClick={() => deleteEntry(e.id)} className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50">Delete</button>
+                                                        <button onClick={() => openEditor(d, e)}
+                                                            className="rounded px-2 py-[2px] text-[11px] ring-1 transition"
+                                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button onClick={() => deleteEntry(e.id)}
+                                                            className="rounded px-2 py-[2px] text-[11px] ring-1 transition"
+                                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                                                        >
+                                                            Delete
+                                                        </button>
                                                     </div>
                                                 )}
                                             </div>
@@ -1196,7 +1287,8 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                     {rota?.status !== 'LIVE' && (
                                         <button
                                             onClick={() => openEditor(d)}
-                                            className="mt-1 rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50"
+                                            className="mt-1 rounded px-2 py-[2px] text-[11px] ring-1 transition"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                         >
                                             Add
                                         </button>
@@ -1213,15 +1305,17 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                             onClick={() => setEditingDay(null)}
                         >
                             <div
-                                className="w-full max-w-md rounded-xl border bg-white p-4 shadow-xl"
+                                className="w-full max-w-md rounded-xl p-4 ring-1 shadow-xl"
+                                style={{ background: 'var(--panel-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                 onClick={e => e.stopPropagation()}
                             >
-                                <h3 className="text-base font-semibold mb-3">Day {editingDay}</h3>
+                                <h3 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>Day {editingDay}</h3>
                                 <div className="space-y-3">
                                     <div>
-                                        <label className="block text-xs text-gray-600 mb-1">Person</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Person</label>
                                         <select
-                                            className="w-full border rounded-lg px-3 py-2"
+                                            className="w-full rounded-lg px-3 py-2 ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                             value={editUserId}
                                             onChange={e => setEditUserId(e.target.value)}
                                         >
@@ -1246,15 +1340,16 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs text-gray-600 mb-1">Start time</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Start time</label>
                                         <input
                                             type="time"
-                                            className="w-full border rounded-lg px-3 py-2"
+                                            className="w-full rounded-lg px-3 py-2 ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                             value={editStart}
                                             onChange={e => setEditStart(e.target.value)}
                                         />
                                         {editStart && (
-                                            <p className="mt-1 text-xs text-gray-600">
+                                            <p className="mt-1 text-xs" style={{ color: 'var(--sub)' }}>
                                                 Ends at {
                                                     (() => {
                                                         const { end, nextDay } = endTimeFromLocal(editStart, editHours || 0);
@@ -1266,9 +1361,10 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs text-gray-600 mb-1">Shift type</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Shift type</label>
                                         <select
-                                            className="w-full border rounded-lg px-3 py-2"
+                                            className="w-full rounded-lg px-3 py-2 ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                             value={editShiftId}
                                             onChange={e => onPickShift(e.target.value)}
                                         >
@@ -1280,37 +1376,39 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                             ))}
                                         </select>
                                         {shiftTypes.length === 0 && (
-                                            <p className="mt-1 text-xs text-amber-700">
+                                            <p className="mt-1 text-xs" style={{ color: 'var(--sub)' }}>
                                                 No active shift types found. Check Rota Settings or re-activate codes.
                                             </p>
                                         )}
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs text-gray-600 mb-1">Hours</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Hours</label>
                                         <input
                                             type="number"
                                             min={0}
                                             step="0.25"
-                                            className="w-full border rounded-lg px-3 py-2"
+                                            className="w-full rounded-lg px-3 py-2 ring-1"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                             value={editHours}
                                             onChange={e => setEditHours(Number(e.target.value))}
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs text-gray-600 mb-1">Notes (optional)</label>
+                                        <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Notes (optional)</label>
                                         <textarea
-                                            className="w-full border rounded-lg px-3 py-2 text-sm"
+                                            className="w-full rounded-lg px-3 py-2 text-sm ring-1"
                                             rows={2}
                                             placeholder="e.g. Covering late at short notice"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                             value={editNotes}
                                             onChange={e => setEditNotes(e.target.value)}
                                         />
                                     </div>
                                 </div>
                                 <div className="mt-4 flex justify-between items-center">
-                                    <label className="text-xs text-gray-600 inline-flex items-center gap-2">
+                                    <label className="text-xs inline-flex items-center gap-2" style={{ color: 'var(--sub)' }}>
                                         <input
                                             type="checkbox"
                                             checked={includeBank}
@@ -1321,13 +1419,15 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => setEditingDay(null)}
-                                            className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
+                                            className="rounded px-3 py-2 text-sm ring-1 transition"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             onClick={saveEditor}
-                                            className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
+                                            className="rounded px-3 py-2 text-sm ring-1 transition"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                                         >
                                             Save
                                         </button>
@@ -1340,12 +1440,71 @@ function ManageRotas({ isAdmin, isCompany, isManager }: {
             )}
 
             {isAllHomes && (
-                <p className="text-xs text-gray-600">
+                <p className="text-xs" style={{ color: 'var(--sub)' }}>
                     Viewing KPI totals across <strong>all homes</strong> this month. Select a specific home to edit rota entries.
                 </p>
             )}
         </div>
     );
+}
+
+
+// Local YYYY-MM-DD (no UTC conversion)
+function ymdLocal(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+// Week start = Sunday
+function weekStart(d: Date): Date {
+    const x = new Date(d);
+    // 0=Sun..6=Sat, so subtract day-of-week to get back to Sunday
+    x.setDate(d.getDate() - d.getDay());
+    x.setHours(0, 0, 0, 0);
+    return x;
+}
+
+function buildWeeklyKpis(
+    monthISO: string,
+    rows: { day_of_month: number; hours: number; isAnnualLeave?: boolean }[]
+): { weekly: KpiRow[]; monthTotal: number } {
+    // Exclude Annual Leave
+    const filtered = rows.filter(r => !r.isAnnualLeave && (r.hours || 0) > 0);
+    if (!filtered.length) return { weekly: [], monthTotal: 0 };
+
+    // Map each entry to an actual local date within the month
+    const base = new Date(`${monthISO}T00:00:00`);
+    const y = base.getFullYear(), m = base.getMonth();
+    const dated = filtered.map(r => ({ date: new Date(y, m, r.day_of_month), hours: r.hours }));
+
+    // Group by local Sunday week start
+    const weekHours = new Map<string, number>(); // key = yyy-mm-dd (local)
+    for (const { date, hours } of dated) {
+        const ws = weekStart(date);           // local Date at the Sunday
+        const key = ymdLocal(ws);             // avoid UTC toISOString()
+        weekHours.set(key, (weekHours.get(key) || 0) + hours);
+    }
+
+    // Build rows as Sunday → Saturday (no clipping)
+    const weekly: KpiRow[] = Array.from(weekHours.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([wsYmd, hrs]) => {
+            const wsDate = new Date(wsYmd + 'T00:00:00'); // reconstruct local date
+            const weDate = new Date(wsDate);
+            weDate.setDate(wsDate.getDate() + 6);         // Saturday
+            return {
+                week_start: ymdLocal(wsDate),
+                week_end: ymdLocal(weDate),
+                hours: Number((hrs || 0).toFixed(2)),
+            };
+        });
+
+    // Month total = sum of the (in-month) entry hours we used
+    const monthTotal = Number(filtered.reduce((sum, r) => sum + (r.hours || 0), 0).toFixed(2));
+
+    return { weekly, monthTotal };
 }
 
 /* ========= Rota Settings ========= */
@@ -1387,7 +1546,6 @@ function RotaSettings({ isAdmin }: { isAdmin: boolean }) {
             setErr(undefined);
             if (!companyId) { setList([]); return; }
             const st = await supabase.from('shift_types').select('*').eq('company_id', companyId).order('code');
-
             setList((st.data ?? []) as ShiftType[]);
         })();
     }, [companyId]);
@@ -1425,15 +1583,18 @@ function RotaSettings({ isAdmin }: { isAdmin: boolean }) {
     }
 
     return (
-        <div className="space-y-4 max-w-3xl">
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-3">
-                <h2 className="text-base font-semibold">Shift types</h2>
+        <div className="space-y-4 max-w-3xl" style={{ color: 'var(--ink)' }}>
+            <section className="rounded-xl p-4 space-y-3 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>Shift types</h2>
 
                 {isAdmin && (
                     <div>
-                        <label className="block text-sm mb-1">Company</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--sub)' }}>Company</label>
                         <select
-                            className="w-full max-w-sm border rounded-lg px-3 py-2"
+                            className="w-full max-w-sm rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={companyId}
                             onChange={e => setCompanyId(e.target.value)}
                         >
@@ -1445,39 +1606,43 @@ function RotaSettings({ isAdmin }: { isAdmin: boolean }) {
 
                 <form onSubmit={addType} className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                     <div>
-                        <label className="block text-sm mb-1">Code</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--sub)' }}>Code</label>
                         <input
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={code}
                             onChange={e => setCode(e.target.value)}
                             required
                         />
                     </div>
                     <div className="sm:col-span-2">
-                        <label className="block text-sm mb-1">Label</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--sub)' }}>Label</label>
                         <input
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={label}
                             onChange={e => setLabel(e.target.value)}
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-sm mb-1">Default hours</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--sub)' }}>Default hours</label>
                         <input
                             type="number"
                             min={0}
                             step="0.25"
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={defHours}
                             onChange={e => setDefHours(Number(e.target.value))}
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-sm mb-1">Category</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--sub)' }}>Category</label>
                         <select
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                             value={kind}
                             onChange={e => setKind(e.target.value)}
                         >
@@ -1486,20 +1651,25 @@ function RotaSettings({ isAdmin }: { isAdmin: boolean }) {
                     </div>
                     <div className="sm:col-span-5">
                         <button
-                            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                            className="rounded-md px-3 py-2 text-sm text-white transition disabled:opacity-50"
+                            style={{ background: BRAND_GRADIENT }}
                             disabled={!companyId}
                         >
                             Add
                         </button>
-                        {err && <span className="ml-3 text-sm text-rose-600">{err}</span>}
+                        {err && <span className="ml-3 text-sm" style={{ color: '#DC2626' }}>{err}</span>}
                     </div>
                 </form>
             </section>
 
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-0">
+            <section className="rounded-xl p-0 ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
                 <div className="max-h-[28rem] overflow-auto">
-                    <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                    <table className="min-w-full text-sm" style={{ color: 'var(--ink)' }}>
+                        <thead className="sticky top-0"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">Code</th>
                                 <th className="text-left p-2">Label</th>
@@ -1521,7 +1691,7 @@ function RotaSettings({ isAdmin }: { isAdmin: boolean }) {
                             ))}
                             {(!list || list.length === 0) && (
                                 <tr>
-                                    <td className="p-2 text-sm text-gray-500" colSpan={6}>
+                                    <td className="p-2 text-sm" style={{ color: 'var(--sub)' }} colSpan={6}>
                                         No shift types yet.
                                     </td>
                                 </tr>
@@ -1565,11 +1735,12 @@ function EditableShiftRow({
     }
 
     return (
-        <tr className="border-t align-top">
-            <td className="p-2 font-mono">
+        <tr className="align-top" style={{ borderTop: '1px solid var(--ring)' }}>
+            <td className="p-2 font-mono" style={{ color: 'var(--ink)' }}>
                 {editing ? (
                     <input
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         value={code}
                         onChange={e => setCode(e.target.value)}
                     />
@@ -1577,10 +1748,11 @@ function EditableShiftRow({
                     item.code
                 )}
             </td>
-            <td className="p-2">
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
                 {editing ? (
                     <input
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         value={label}
                         onChange={e => setLabel(e.target.value)}
                     />
@@ -1588,13 +1760,14 @@ function EditableShiftRow({
                     item.label
                 )}
             </td>
-            <td className="p-2">
+            <td className="p-2" style={{ color: 'var(--ink)' }}>
                 {editing ? (
                     <input
                         type="number"
                         min={0}
                         step="0.25"
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         value={hours}
                         onChange={e => setHours(Number(e.target.value))}
                     />
@@ -1605,20 +1778,21 @@ function EditableShiftRow({
             <td className="p-2">
                 {editing ? (
                     <select
-                        className="border rounded px-2 py-1 text-sm w-full"
+                        className="rounded px-2 py-1 text-sm w-full ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         value={kind}
                         onChange={e => setKind(e.target.value)}
                     >
                         {SHIFT_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
                     </select>
                 ) : (
-                    <span className="text-gray-700">
+                    <span style={{ color: 'var(--sub)' }}>
                         {SHIFT_KINDS.find(k => k.value === (item.kind || ''))?.label || '(none)'}
                     </span>
                 )}
             </td>
             <td className="p-2">
-                <label className="inline-flex items-center gap-2 text-sm">
+                <label className="inline-flex items-center gap-2 text-sm" style={{ color: 'var(--ink)' }}>
                     <input
                         type="checkbox"
                         checked={item.is_active}
@@ -1632,13 +1806,15 @@ function EditableShiftRow({
                     <div className="flex gap-2">
                         <button
                             onClick={() => setEditing(true)}
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         >
                             Edit
                         </button>
                         <button
                             onClick={onDelete}
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         >
                             Delete
                         </button>
@@ -1648,7 +1824,8 @@ function EditableShiftRow({
                         <button
                             disabled={busy}
                             onClick={save}
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition disabled:opacity-60"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         >
                             {busy ? 'Saving…' : 'Save'}
                         </button>
@@ -1661,7 +1838,8 @@ function EditableShiftRow({
                                 setHours(item.default_hours);
                                 setKind(item.kind || '');
                             }}
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                         >
                             Cancel
                         </button>

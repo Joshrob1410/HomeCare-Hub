@@ -3,6 +3,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { getServerSupabase } from '@/supabase/server';
+import Image from 'next/image';
+
 
 /**
  * Server component - no hooks.
@@ -125,12 +127,19 @@ export default async function Sidebar() {
             }}
           >
             <div className="flex items-center gap-3">
-              <span
-                className="h-9 w-9 rounded-xl grid place-items-center font-bold text-white ring-2 ring-white/80 shadow-sm"
-                style={{ backgroundImage: 'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)' }}
-              >
-                HO
-              </span>
+                          <div
+                              className="h-9 w-9 rounded-xl overflow-hidden ring-2 ring-white/80 shadow-sm"
+                          >
+                              <Image
+                                  src="/logo.png"        // ← if your file is logo.png, change to "/logo.png"
+                                  alt="Company logo"
+                                  width={36}
+                                  height={36}
+                                  className="h-full w-full object-contain"
+                                  priority
+                              />
+                          </div>
+
               <div>
                 <div className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                   Quick links

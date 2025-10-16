@@ -1,8 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { supabase } from '@/supabase/client';
 import { getEffectiveLevel } from '@/supabase/roles';
+
+/* Visual: brand accent matches Payslips */
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
 
 /* ===================================
    Types (matches the classic schema)
@@ -86,28 +90,35 @@ function initialsFor(list: Profile[], id: string) {
 }
 
 function TabBtn(
-    { active, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
+    { active, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
 ) {
     return (
         <button
-            className={`px-4 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`}
+            className="px-3 py-1.5 rounded-md ring-1 transition"
+            style={
+                active
+                    ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                    : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+            }
             {...props}
         >
             {children}
         </button>
     );
 }
+
 function Stat({ label, value }: { label: string; value: string | number }) {
     return (
-        <div className="rounded-lg border p-3 text-center">
-            <div className="text-xs text-gray-600 mb-1">{label}</div>
-            <div className="text-xl font-semibold tabular-nums">{value}</div>
+        <div className="rounded-lg ring-1 p-3 text-center" style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}>
+            <div className="text-xs mb-1" style={{ color: 'var(--sub)' }}>{label}</div>
+            <div className="text-xl font-semibold tabular-nums" style={{ color: 'var(--ink)' }}>{value}</div>
         </div>
     );
 }
+
 function CalendarGrid({
     monthISO, hidden, cellRenderer,
-}: { monthISO: string; hidden?: boolean; cellRenderer: (day: number) => React.ReactNode }) {
+}: { monthISO: string; hidden?: boolean; cellRenderer: (day: number) => ReactNode }) {
     if (hidden) return null;
     const base = new Date(`${monthISO}T00:00:00`);
     const y = base.getFullYear(), m = base.getMonth();
@@ -115,7 +126,7 @@ function CalendarGrid({
     const startDow = new Date(y, m, 1).getDay();
     const cells: (number | null)[] = [
         ...Array.from({ length: startDow }, () => null),
-        ...Array.from({ length: days }, (_, i) => i + 1 as number),
+        ...Array.from({ length: days }, (_, i) => (i + 1) as number),
     ];
     while (cells.length % 7) cells.push(null);
 
@@ -123,15 +134,19 @@ function CalendarGrid({
 
     return (
         <div className="space-y-3">
-            <div className="text-lg font-semibold">{title}</div>
-            <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-3">
+            <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>{title}</div>
+            <div className="rounded-xl ring-1 p-3" style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}>
                 <div className="grid grid-cols-7 gap-2">
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(h =>
-                        <div key={h} className="text-xs font-medium text-gray-600">{h}</div>
+                        <div key={h} className="text-xs font-medium" style={{ color: 'var(--sub)' }}>{h}</div>
                     )}
                     {cells.map((d, i) => (
-                        <div key={i} className="min-h-28 rounded-lg border bg-white p-2 flex flex-col">
-                            <div className="text-[11px] text-gray-500 font-medium">{d ?? ''}</div>
+                        <div
+                            key={i}
+                            className="min-h-28 rounded-lg ring-1 p-2 flex flex-col"
+                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                        >
+                            <div className="text-[11px] font-medium" style={{ color: 'var(--sub)' }}>{d ?? ''}</div>
                             <div className="mt-1 space-y-1 flex-1">{d ? cellRenderer(d) : null}</div>
                         </div>
                     ))}
@@ -140,6 +155,7 @@ function CalendarGrid({
         </div>
     );
 }
+
 function Toolbar({
     companies, companyId, setCompanyId,
     homes, homeId, setHomeId,
@@ -150,18 +166,22 @@ function Toolbar({
     companyId?: string; setCompanyId?: (v: string) => void;
     homes?: Home[]; homeId?: string; setHomeId?: (v: string) => void;
     month: string; setMonth: (v: string) => void;
-    rightExtra?: React.ReactNode;
+    rightExtra?: ReactNode;
 }) {
     // Detect an “All homes” sentinel (id === '')
     const hasAllHomesOption = !!homes?.some(h => h.id === '');
 
     return (
-        <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-3 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+        <div
+            className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end rounded-xl ring-1 p-3"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+        >
             {companies && setCompanyId && (
                 <div>
-                    <label className="block text-xs text-gray-600 mb-1">Company</label>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Company</label>
                     <select
-                        className="w-full border rounded-lg px-3 py-2"
+                        className="w-full rounded-lg px-3 py-2 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                         value={companyId || ''}
                         onChange={e => setCompanyId(e.target.value)}
                     >
@@ -173,9 +193,10 @@ function Toolbar({
 
             {homes && setHomeId && (
                 <div>
-                    <label className="block text-xs text-gray-600 mb-1">Home</label>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Home</label>
                     <select
-                        className="w-full border rounded-lg px-3 py-2"
+                        className="w-full rounded-lg px-3 py-2 ring-1"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                         value={homeId || ''}
                         onChange={e => setHomeId(e.target.value)}
                     >
@@ -191,10 +212,11 @@ function Toolbar({
             )}
 
             <div>
-                <label className="block text-xs text-gray-600 mb-1">Month</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Month</label>
                 <input
                     type="month"
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full rounded-lg px-3 py-2 ring-1"
+                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     value={ym(month)}
                     onChange={e => setMonth(e.target.value + '-01')}
                 />
@@ -225,18 +247,52 @@ export default function TimesheetsPage() {
     }, [tab, isAdmin, isCompany, isManager]);
 
     return (
-        <div className="p-6 space-y-6">
-            <h1 className="text-2xl font-semibold">Timesheets</h1>
+        <div className="p-6 space-y-6" style={{ color: 'var(--ink)' }}>
+            <h1 className="text-2xl font-semibold" style={{ color: 'var(--ink)' }}>Timesheets</h1>
 
-            <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
+            {/* Tabs match Payslips style */}
+            <div className="flex gap-2">
                 <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>My Timesheet</TabBtn>
-                {(isManager || isAdmin) && <TabBtn active={tab === 'MANAGER'} onClick={() => setTab('MANAGER')}>Manager Review</TabBtn>}
-                {(isCompany || isAdmin) && <TabBtn active={tab === 'COMPANY'} onClick={() => setTab('COMPANY')}>Company Timesheets</TabBtn>}
+                {(isManager || isAdmin) && (
+                    <TabBtn active={tab === 'MANAGER'} onClick={() => setTab('MANAGER')}>
+                        Manager Review
+                    </TabBtn>
+                )}
+                {(isCompany || isAdmin) && (
+                    <TabBtn active={tab === 'COMPANY'} onClick={() => setTab('COMPANY')}>
+                        Company Timesheets
+                    </TabBtn>
+                )}
             </div>
 
             {tab === 'MY' && <MyTimesheet />}
             {tab === 'MANAGER' && (isManager || isAdmin) && <ManagerReview />}
             {tab === 'COMPANY' && (isCompany || isAdmin) && <CompanyView isAdmin={isAdmin} />}
+
+            {/* --- Orbit-only select/input popup fixes (same as Payslips) --- */}
+            <style jsx global>{`
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type="number"],
+        [data-orbit="1"] input[type="date"],
+        [data-orbit="1"] input[type="month"] {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221;
+        }
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
@@ -375,7 +431,6 @@ function MyTimesheet() {
             }
 
             // Try memberships only if rota didn’t give us anything (RLS may still allow your own rows)
-            // Try memberships only if rota didn’t give us anything (RLS may still allow your own rows)
             let staffHomes = discoveredHomes;
 
             if (!staffHomes.length) {
@@ -385,7 +440,6 @@ function MyTimesheet() {
                     .eq('user_id', me)
                     .eq('role', 'STAFF');
 
-                // --- Type guard for Supabase join rows ---
                 // --- Type guard for Supabase join rows ---
                 function hasHomes(row: unknown): row is { homes: Home } {
                     if (!row || typeof row !== 'object' || !('homes' in row)) return false;
@@ -1285,6 +1339,18 @@ function MyTimesheet() {
         }
     }
 
+    // Status pill classes (light + Orbit overrides)
+    const statusClass = (status?: Timesheet['status']) => {
+        if (status === 'DRAFT' || status === 'RETURNED') {
+            return 'bg-amber-50 text-amber-700 ring-amber-100 [data-orbit="1"]:bg-amber-500/10 [data-orbit="1"]:text-amber-200 [data-orbit="1"]:ring-amber-400/25';
+        }
+        if (status === 'SUBMITTED') {
+            return 'bg-indigo-50 text-indigo-700 ring-indigo-100 [data-orbit="1"]:bg-indigo-500/10 [data-orbit="1"]:text-indigo-200 [data-orbit="1"]:ring-indigo-400/25';
+        }
+        // MANAGER_SUBMITTED or others
+        return 'bg-emerald-50 text-emerald-700 ring-emerald-100 [data-orbit="1"]:bg-emerald-500/10 [data-orbit="1"]:text-emerald-200 [data-orbit="1"]:ring-emerald-400/25';
+    };
+
     const rightExtra = (
         <div className="flex items-center gap-2 justify-end">
             {isBankMode ? (
@@ -1292,14 +1358,16 @@ function MyTimesheet() {
                     <button
                         onClick={autoFillBankFromLive}
                         disabled={isFillingBank}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                        className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     >
                         {isFillingBank ? <>⏳ Autofilling…</> : 'Auto-fill from LIVE rota'}
                     </button>
                     <button
                         onClick={submitBank}
                         disabled={isSubmittingBank || bankAllLocked || aggEntries.length === 0}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                        className="rounded-md px-3 py-2 text-sm text-white transition disabled:opacity-60"
+                        style={{ background: BRAND_GRADIENT }}
                     >
                         {isSubmittingBank ? <>⏳ Submitting…</> : 'Submit my timesheet'}
                     </button>
@@ -1307,26 +1375,23 @@ function MyTimesheet() {
             ) : (
                 <>
                     <span
-                        className={`text-xs px-2 py-1 rounded ring-1 ${ts?.status === 'DRAFT' || ts?.status === 'RETURNED'
-                                ? 'bg-amber-50 text-amber-700 ring-amber-100'
-                                : ts?.status === 'SUBMITTED'
-                                    ? 'bg-indigo-50 text-indigo-700 ring-indigo-100'
-                                    : 'bg-emerald-50 text-emerald-700 ring-emerald-100'
-                            }`}
+                        className={`text-xs px-2 py-1 rounded ring-1 ${statusClass(ts?.status)}`}
                     >
                         Status: {ts?.status || '—'}
                     </span>
                     <button
                         onClick={autoFillHouseFromLive}
                         disabled={isFillingHouse}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                        className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     >
                         {isFillingHouse ? <>⏳ Autofilling…</> : 'Auto-fill from LIVE rota'}
                     </button>
                     <button
                         disabled={isSubmittingHouse || !(ts && (ts.status === 'DRAFT' || ts.status === 'RETURNED')) || !entries.length}
                         onClick={submitHouse}
-                        className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                        className="rounded-md px-3 py-2 text-sm text-white transition disabled:opacity-60"
+                        style={{ background: BRAND_GRADIENT }}
                     >
                         {isSubmittingHouse ? <>⏳ Submitting…</> : 'Submit timesheet'}
                     </button>
@@ -1338,10 +1403,13 @@ function MyTimesheet() {
     return (
         <div className="space-y-4">
             {/* Guidance */}
-            <div className="rounded-lg border bg-white p-3 text-sm text-gray-700">
+            <div
+                className="rounded-lg p-3 text-sm ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+            >
                 {isBankMode
                     ? 'This aggregated timesheet is auto-filled from any live rotas you were scheduled on. Check and adjust the hours and pick the home for added shifts if needed, then submit — each home manager will receive their portion.'
-                    : 'This timesheet is auto-filled from the live rota. Please check and edit any shifts or hours to reflect reality. Once submitted, you can&apos;t edit unless a manager sends it back.'
+                    : 'This timesheet is auto-filled from the live rota. Please check and edit any shifts or hours to reflect reality. Once submitted, you can’t edit unless a manager sends it back.'
                 }
             </div>
 
@@ -1375,10 +1443,14 @@ function MyTimesheet() {
 
             {/* Edits lock notice */}
             {isAutofilling && (
-                <div className="rounded-md border p-2 text-xs bg-amber-50 text-amber-800">
+                <div
+                    className="rounded-md p-2 text-xs ring-1"
+                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                >
                     Autofill is running… edits are temporarily disabled.
                 </div>
             )}
+
             {/* Calendars */}
             {isBankMode ? (
                 <CalendarGrid
@@ -1388,31 +1460,42 @@ function MyTimesheet() {
                         return (
                             <div className="space-y-1">
                                 {todays.length === 0 ? (
-                                    <div className="text-xs text-gray-400">—</div>
+                                    <div className="text-xs" style={{ color: 'var(--sub)' }}>—</div>
                                 ) : todays.map(e => {
                                     const code = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.code || '') : '';
                                     const kind = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.kind || null) : null;
                                     return (
-                                        <div key={e.id} className="rounded-lg border bg-gray-50 p-2 text-[12px]">
+                                        <div
+                                            key={e.id}
+                                            className="rounded-lg ring-1 p-2 text-[12px]"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                                        >
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold">{myInits}</span>
-                                                {code && <span className="font-mono font-semibold">{code}</span>}
-                                                <span>{e.hours}h</span>
-                                                <span className="text-gray-700">· {e.home_name}</span>
-                                                {kind && <span className="text-gray-600">· {KIND_LABEL[kind] || kind}</span>}
+                                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ring-1
+                          bg-indigo-50 text-indigo-700 ring-indigo-100
+                          [data-orbit='1']:bg-indigo-500/15 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25"
+                                                >
+                                                    {myInits}
+                                                </span>
+                                                {code && <span className="font-mono font-semibold" style={{ color: 'var(--ink)' }}>{code}</span>}
+                                                <span style={{ color: 'var(--ink)' }}>{e.hours}h</span>
+                                                <span style={{ color: 'var(--sub)' }}>· {e.home_name}</span>
+                                                {kind && <span style={{ color: 'var(--sub)' }}>· {KIND_LABEL[kind] || kind}</span>}
                                             </div>
                                             <div className="mt-1 flex gap-1">
                                                 <button
                                                     onClick={() => openEditor(d, e)}
                                                     disabled={isAutofilling || bankHomeLocked(e.home_id)}
-                                                    className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    className="rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
                                                     onClick={() => delEntryBank(e.id)}
                                                     disabled={isAutofilling || isDeletingAny || deletingIds.has(e.id) || bankHomeLocked(e.home_id)}
-                                                    className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    className="rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 >
                                                     {(isAutofilling || isDeletingAny || deletingIds.has(e.id)) ? '⏳ Deleting…' : 'Delete'}
                                                 </button>
@@ -1423,7 +1506,8 @@ function MyTimesheet() {
                                 <button
                                     onClick={() => openEditor(d)}
                                     disabled={isAutofilling || bankAllLocked}
-                                    className="mt-1 rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="mt-1 rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 >
                                     Add
                                 </button>
@@ -1440,31 +1524,42 @@ function MyTimesheet() {
                         return (
                             <div className="space-y-1">
                                 {todays.length === 0 ? (
-                                    <div className="text-xs text-gray-400">—</div>
+                                    <div className="text-xs" style={{ color: 'var(--sub)' }}>—</div>
                                 ) : todays.map(e => {
                                     const code = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.code || '') : '';
                                     const kind = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.kind || null) : null;
                                     return (
-                                        <div key={e.id} className="rounded-lg border bg-gray-50 p-2 text-[12px]">
+                                        <div
+                                            key={e.id}
+                                            className="rounded-lg ring-1 p-2 text-[12px]"
+                                            style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                                        >
                                             <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold">{myInits}</span>
-                                                {code && <span className="font-mono font-semibold">{code}</span>}
-                                                <span>{e.hours}h</span>
-                                                {kind && <span className="text-gray-600">· {KIND_LABEL[kind] || kind}</span>}
+                                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ring-1
+                          bg-indigo-50 text-indigo-700 ring-indigo-100
+                          [data-orbit='1']:bg-indigo-500/15 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25"
+                                                >
+                                                    {myInits}
+                                                </span>
+                                                {code && <span className="font-mono font-semibold" style={{ color: 'var(--ink)' }}>{code}</span>}
+                                                <span style={{ color: 'var(--ink)' }}>{e.hours}h</span>
+                                                {kind && <span style={{ color: 'var(--sub)' }}>· {KIND_LABEL[kind] || kind}</span>}
                                             </div>
                                             {(ts?.status === 'DRAFT' || ts?.status === 'RETURNED') && (
                                                 <div className="mt-1 flex gap-1">
                                                     <button
                                                         onClick={() => openEditor(d, e)}
                                                         disabled={isAutofilling}
-                                                        className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        className="rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                     >
                                                         Edit
                                                     </button>
                                                     <button
                                                         onClick={() => delEntryHouse(e.id)}
                                                         disabled={isAutofilling || isDeletingAny || deletingIds.has(e.id)}
-                                                        className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        className="rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                     >
                                                         {(isAutofilling || isDeletingAny || deletingIds.has(e.id)) ? '⏳ Deleting…' : 'Delete'}
                                                     </button>
@@ -1477,7 +1572,8 @@ function MyTimesheet() {
                                     <button
                                         onClick={() => openEditor(d)}
                                         disabled={isAutofilling}
-                                        className="mt-1 rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        className="mt-1 rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     >
                                         Add
                                     </button>
@@ -1491,41 +1587,70 @@ function MyTimesheet() {
             {/* Modal editor */}
             {editingDay && (
                 <div className="fixed inset-0 bg-black/30 grid place-items-center z-50" onClick={() => setEditingDay(null)}>
-                    <div className="w-full max-w-md rounded-xl border bg-white p-4 shadow-xl" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-base font-semibold mb-3">Day {editingDay}</h3>
+                    <div
+                        className="w-full max-w-md rounded-xl ring-1 p-4 shadow-xl"
+                        onClick={e => e.stopPropagation()}
+                        style={{ background: 'var(--panel-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                    >
+                        <h3 className="text-base font-semibold mb-3" style={{ color: 'var(--ink)' }}>Day {editingDay}</h3>
                         <div className="space-y-3">
                             {/* Bank users can pick home */}
                             {isBankMode && (
                                 <div>
-                                    <label className="block text-xs text-gray-600 mb-1">Home</label>
-                                    <select id="bank-home-pick" className="w-full border rounded-lg px-3 py-2" defaultValue={editOriginalHomeId || ''}>
+                                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Home</label>
+                                    <select
+                                        id="bank-home-pick"
+                                        className="w-full rounded-lg px-3 py-2 ring-1"
+                                        defaultValue={editOriginalHomeId || ''}
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                    >
                                         <option value="">Select home…</option>
                                         {allHomes.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
                                     </select>
-                                    <p className="text-[11px] text-gray-500 mt-1">Pick where you worked this shift.</p>
+                                    <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>Pick where you worked this shift.</p>
                                 </div>
                             )}
                             <div>
-                                <label className="block text-xs text-gray-600 mb-1">Shift type</label>
-                                <select className="w-full border rounded-lg px-3 py-2" value={editShiftId} onChange={e => onPickShift(e.target.value)}>
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Shift type</label>
+                                <select
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    value={editShiftId}
+                                    onChange={e => onPickShift(e.target.value)}
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                >
                                     <option value="">(none)</option>
                                     {shiftTypes.map(s => <option key={s.id} value={s.id}>{s.code} — {s.label}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-600 mb-1">Hours</label>
-                                <input type="number" min={0} step="0.25" className="w-full border rounded-lg px-3 py-2" value={editHours} onChange={e => setEditHours(Number(e.target.value))} />
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Hours</label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    step="0.25"
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    value={editHours}
+                                    onChange={e => setEditHours(Number(e.target.value))}
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-600 mb-1">Notes (optional)</label>
-                                <textarea className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} value={editNotes} onChange={e => setEditNotes(e.target.value)} />
+                                <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Notes (optional)</label>
+                                <textarea
+                                    className="w-full rounded-lg px-3 py-2 text-sm ring-1"
+                                    rows={2}
+                                    value={editNotes}
+                                    onChange={e => setEditNotes(e.target.value)}
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                />
                             </div>
                         </div>
                         <div className="mt-4 flex justify-end gap-2">
                             <button
                                 onClick={() => { if (!isSaving) setEditingDay(null); }}
                                 disabled={isSaving}
-                                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             >
                                 Cancel
                             </button>
@@ -1540,7 +1665,8 @@ function MyTimesheet() {
                                         void saveEditorBank(picked);
                                     }}
                                     disabled={isSaving}
-                                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 >
                                     {isSaving ? '⏳ Saving…' : 'Save'}
                                 </button>
@@ -1548,7 +1674,8 @@ function MyTimesheet() {
                                 <button
                                     onClick={() => { if (!isSaving) void saveEditorHouse(); }}
                                     disabled={isSaving}
-                                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 >
                                     {isSaving ? '⏳ Saving…' : 'Save'}
                                 </button>
@@ -1560,6 +1687,7 @@ function MyTimesheet() {
         </div>
     );
 }
+
 
 /* ===================================
    Manager Review (with missing list)
@@ -1607,7 +1735,6 @@ function ManagerReview() {
                     .eq('user_id', me)
                     .eq('role', 'MANAGER');
 
-                // Type guard for rows that include a valid `homes` object
                 function hasHomes(
                     row: unknown
                 ): row is { homes: { id: string; name: string; company_id: string } } {
@@ -1702,7 +1829,6 @@ function ManagerReview() {
 
         const listA: Timesheet[] = Array.isArray(staff.data) ? (staff.data as unknown as Timesheet[]) : [];
 
-        // Safely extract the joined timesheet rows
         const listB: Timesheet[] = Array.isArray(bank.data)
             ? (bank.data as unknown[])
                 .map((row) => {
@@ -1899,7 +2025,11 @@ function ManagerReview() {
 
     const rightExtra = (
         <div className="flex items-center gap-3 justify-end">
-            <button onClick={submitAll} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">
+            <button
+                onClick={submitAll}
+                className="rounded-md px-3 py-2 text-sm text-white transition"
+                style={{ background: BRAND_GRADIENT }}
+            >
                 Submit all to company
             </button>
         </div>
@@ -1987,6 +2117,15 @@ function ManagerReview() {
     }
     useEffect(() => { void loadMissing(); }, [homeId, month]);
 
+    // Status pills for rota match in table
+    const okPill =
+        'inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded ring-1 bg-emerald-50 text-emerald-700 ring-emerald-100 ' +
+        '[data-orbit="1"]:bg-emerald-500/10 [data-orbit="1"]:text-emerald-200 [data-orbit="1"]:ring-emerald-400/25';
+
+    const warnPill =
+        'inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded ring-1 bg-rose-50 text-rose-700 ring-rose-100 ' +
+        '[data-orbit="1"]:bg-rose-500/10 [data-orbit="1"]:text-rose-200 [data-orbit="1"]:ring-rose-400/25';
+
     return (
         <div className="space-y-4">
             <Toolbar
@@ -2003,25 +2142,31 @@ function ManagerReview() {
 
             {/* Progress + Missing banner */}
             {(progress || loadingMissing) && (
-                <div className="rounded-md border p-3 text-sm mb-2">
+                <div
+                    className="rounded-md p-3 text-sm ring-1 mb-2"
+                    style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                >
                     {progress ? (
                         <>
                             <div><strong>Submissions (this home):</strong> {progress.submitted_count} / {progress.total_required}</div>
                             {confirmAll && progress.submitted_count < progress.total_required && (
-                                <div className="mt-1 text-amber-700">
+                                <div className="mt-1 [data-orbit='1']:text-amber-200" style={{ color: 'var(--sub)' }}>
                                     Not everyone has submitted. Click “Submit all to company” again to confirm.
                                 </div>
                             )}
 
                             {/* Missing list */}
                             <div className="mt-2">
-                                <div className="font-medium mb-1">Missing submissions</div>
+                                <div className="font-medium mb-1" style={{ color: 'var(--ink)' }}>Missing submissions</div>
                                 {loadingMissing ? (
-                                    <div className="text-gray-600">⏳ Checking…</div>
+                                    <div style={{ color: 'var(--sub)' }}>⏳ Checking…</div>
                                 ) : (
                                     <>
                                         {missingUsers.length === 0 ? (
-                                            <div className="text-emerald-700">All scheduled staff have submitted for this home.</div>
+                                            <div className="rounded px-2 py-1 ring-1"
+                                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}>
+                                                All scheduled staff have submitted for this home.
+                                            </div>
                                         ) : (
                                             <ul className="space-y-1">
                                                 {missingUsers.map(uid => {
@@ -2030,10 +2175,14 @@ function ManagerReview() {
                                                     const inits = initialsFor(Array.from(missingProfiles.values()), uid);
                                                     return (
                                                         <li key={uid} className="flex items-center gap-2">
-                                                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-50 text-amber-700 text-xs font-semibold">
+                                                            <span
+                                                                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ring-1
+                                           bg-amber-50 text-amber-700 ring-amber-100
+                                           [data-orbit='1']:bg-amber-500/15 [data-orbit='1']:text-amber-200 [data-orbit='1']:ring-amber-400/25"
+                                                            >
                                                                 {inits}
                                                             </span>
-                                                            <span>{display}</span>
+                                                            <span style={{ color: 'var(--ink)' }}>{display}</span>
                                                         </li>
                                                     );
                                                 })}
@@ -2044,25 +2193,24 @@ function ManagerReview() {
                             </div>
                         </>
                     ) : (
-                        <div className="text-gray-600">⏳ Loading progress…</div>
+                        <div style={{ color: 'var(--sub)' }}>⏳ Loading progress…</div>
                     )}
                 </div>
             )}
 
-            <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-600">
+            <div
+                className="rounded-xl overflow-x-auto ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <table className="min-w-full text-sm" style={{ color: 'var(--ink)' }}>
+                    <thead style={{ background: 'var(--nav-item-bg)' }}>
                         <tr>
-                            <th className="text-left p-2">Person</th>
-                            <th className="text-left p-2">Status</th>
-                            <th className="text-left p-2">Hours</th>
-                            <th className="text-left p-2">Sleep</th>
-                            <th className="text-left p-2">Annual leave</th>
-                            <th className="text-left p-2">Sickness</th>
-                            <th className="text-left p-2">Waking night</th>
-                            <th className="text-left p-2">Other leave</th>
-                            <th className="text-left p-2">Rota match</th>
-                            <th className="p-2">Actions</th>
+                            {[
+                                'Person', 'Status', 'Hours', 'Sleep', 'Annual leave',
+                                'Sickness', 'Waking night', 'Other leave', 'Rota match', 'Actions',
+                            ].map((h) => (
+                                <th key={h} className="text-left p-2" style={{ color: 'var(--sub)' }}>{h}</th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
@@ -2074,16 +2222,21 @@ function ManagerReview() {
                             const mismatchCount = mismatchesFor(ts);
 
                             return (
-                                <tr key={ts.id} className="border-t">
+                                <tr key={ts.id} style={{ borderTop: '1px solid var(--ring)' }}>
                                     <td className="p-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold" title={displayName}>
+                                            <span
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ring-1
+                                   bg-indigo-50 text-indigo-700 ring-indigo-100
+                                   [data-orbit='1']:bg-indigo-500/15 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25"
+                                                title={displayName}
+                                            >
                                                 {inits}
                                             </span>
-                                            <span className="truncate max-w-[180px]">{displayName}</span>
+                                            <span className="truncate max-w-[180px]" style={{ color: 'var(--ink)' }}>{displayName}</span>
                                         </div>
                                     </td>
-                                    <td className="p-2">{ts.status}</td>
+                                    <td className="p-2" style={{ color: 'var(--sub)' }}>{ts.status}</td>
                                     <td className="p-2">{s.hours.toFixed(2)}</td>
                                     <td className="p-2">{s.sleep}</td>
                                     <td className="p-2">{s.al}</td>
@@ -2092,19 +2245,31 @@ function ManagerReview() {
                                     <td className="p-2">{s.other}</td>
                                     <td className="p-2">
                                         {mismatchCount > 0 ? (
-                                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded ring-1 bg-rose-50 text-rose-700 ring-rose-100" title="Timesheet differs from the live rota">
+                                            <span className={warnPill} title="Timesheet differs from the live rota">
                                                 ⚠️ {mismatchCount} day{mismatchCount === 1 ? '' : 's'}
                                             </span>
                                         ) : (
-                                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded ring-1 bg-emerald-50 text-emerald-700 ring-emerald-100">
+                                            <span className={okPill}>
                                                 ✓ Matches rota
                                             </span>
                                         )}
                                     </td>
                                     <td className="p-2">
                                         <div className="flex gap-2">
-                                            <button onClick={() => setEditTS(ts)} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">View/Edit</button>
-                                            <button onClick={() => { void sendBack(ts); }} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Send back</button>
+                                            <button
+                                                onClick={() => setEditTS(ts)}
+                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                            >
+                                                View/Edit
+                                            </button>
+                                            <button
+                                                onClick={() => { void sendBack(ts); }}
+                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                            >
+                                                Send back
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -2112,7 +2277,7 @@ function ManagerReview() {
                         })}
                         {loadingSubmitted && (
                             <tr>
-                                <td className="p-2 text-sm text-gray-600" colSpan={10}>
+                                <td className="p-2 text-sm" style={{ color: 'var(--sub)' }} colSpan={10}>
                                     ⏳ Loading submitted timesheets…
                                 </td>
                             </tr>
@@ -2120,7 +2285,7 @@ function ManagerReview() {
 
                         {(!loadingSubmitted && !timesheets.length) && (
                             <tr>
-                                <td className="p-2 text-sm text-gray-500" colSpan={10}>
+                                <td className="p-2 text-sm" style={{ color: 'var(--sub)' }} colSpan={10}>
                                     No submitted timesheets yet.
                                 </td>
                             </tr>
@@ -2175,7 +2340,6 @@ function ManagerTimesheetEditor({
 
     // REPLACE the existing reloadAll() with this version
     async function reloadAll() {
-        // --- Type guards (no 'any') ---
         const isObj = (v: unknown): v is Record<string, unknown> =>
             typeof v === 'object' && v !== null;
 
@@ -2329,7 +2493,6 @@ function ManagerTimesheetEditor({
         }
     }
 
-
     useEffect(() => { void reloadAll(); }, [ts.id, ts.home_id, ts.user_id, ts.month_date]);
 
     const displayName = person?.full_name || ts.user_id.slice(0, 8);
@@ -2358,7 +2521,6 @@ function ManagerTimesheetEditor({
         if (!editingDay) return;
 
         if (editEntryId) {
-            // manager-safe RPC to update an existing entry
             const { error } = await supabase.rpc('manager_update_tentry_v2', {
                 p_entry_id: editEntryId,
                 p_shift_type_id: editShiftId || null,
@@ -2366,7 +2528,6 @@ function ManagerTimesheetEditor({
             });
             if (error) { alert(error.message); return; }
 
-            // surgical state update
             setEntries(prev => {
                 const idx = prev.findIndex(e => e.id === editEntryId);
                 if (idx === -1) return prev;
@@ -2375,7 +2536,6 @@ function ManagerTimesheetEditor({
                 return next;
             });
         } else {
-            // insert a new row for this day/home
             const ins = await supabase.from('timesheet_entries').insert({
                 timesheet_id: ts.id,
                 home_id: ts.home_id,
@@ -2389,7 +2549,7 @@ function ManagerTimesheetEditor({
         }
 
         setEditingDay(null);
-        onChanged(); // keep parent progress/missing in sync
+        onChanged();
     }
 
     async function delEntry(id: string) {
@@ -2397,7 +2557,6 @@ function ManagerTimesheetEditor({
 
         setDeleting(id, true);
 
-        // optimistic remove
         const prev = entries;
         setEntries(prev.filter(e => e.id !== id));
 
@@ -2407,34 +2566,59 @@ function ManagerTimesheetEditor({
             .eq('id', id);
 
         if (error) {
-            // rollback on failure
             alert(error.message);
             setEntries(prev);
         } else {
-            onChanged(); // keep parent progress/missing in sync
+            onChanged();
         }
 
         setDeleting(id, false);
     }
 
+    // Helper: mismatch class for day cards
+    const mismatchClass =
+        'bg-rose-50 ring-rose-200 [data-orbit="1"]:bg-rose-500/10 [data-orbit="1"]:ring-rose-400/25';
+
     return (
         <div className="fixed inset-0 bg-black/30 grid place-items-center z-50" onClick={onClose}>
-            <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl border bg-white p-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div
+                className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl ring-1 p-4 shadow-xl"
+                onClick={e => e.stopPropagation()}
+                style={{ background: 'var(--panel-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+            >
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2 min-w-0">
-                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold" title={displayName}>
+                        <span
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ring-1
+                         bg-indigo-50 text-indigo-700 ring-indigo-100
+                         [data-orbit='1']:bg-indigo-500/15 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25"
+                            title={displayName}
+                        >
                             {inits}
                         </span>
-                        <h3 className="text-base font-semibold truncate">{displayName}</h3>
-                        <span className="ml-2 text-xs px-2 py-1 rounded ring-1 bg-indigo-50 text-indigo-700 ring-indigo-100">
+                        <h3 className="text-base font-semibold truncate" style={{ color: 'var(--ink)' }}>{displayName}</h3>
+                        <span
+                            className="ml-2 text-xs px-2 py-1 rounded ring-1
+                         bg-indigo-50 text-indigo-700 ring-indigo-100
+                         [data-orbit='1']:bg-indigo-500/10 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25"
+                        >
                             Status: {ts.status}
                         </span>
                     </div>
-                    <button onClick={onClose} className="rounded border px-3 py-1.5 text-sm hover:bg-gray-50">Close</button>
+                    <button
+                        onClick={onClose}
+                        className="rounded-md px-3 py-1.5 text-sm ring-1 transition"
+                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                    >
+                        Close
+                    </button>
                 </div>
 
                 {isLoading ? (
-                    <div className="rounded-md border p-3 text-sm text-gray-700">
+                    <div
+                        className="rounded-md p-3 text-sm ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                    >
                         ⏳ Loading data…
                     </div>
                 ) : (
@@ -2445,12 +2629,11 @@ function ManagerTimesheetEditor({
                             return (
                                 <div className="space-y-1">
                                     {todays.length === 0 ? (
-                                        <div className="text-xs text-gray-400">—</div>
+                                        <div className="text-xs" style={{ color: 'var(--sub)' }}>—</div>
                                     ) : todays.map(e => {
                                         const code = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.code || '') : '';
                                         const kind = e.shift_type_id ? (shiftMap.get(e.shift_type_id)?.kind || null) : null;
 
-                                        // mismatch flag
                                         const live = liveByDay.get(d);
                                         const mismatch = (() => {
                                             if (!live && (e.shift_type_id || e.hours)) return true;
@@ -2465,31 +2648,38 @@ function ManagerTimesheetEditor({
                                         return (
                                             <div
                                                 key={e.id}
-                                                className={`rounded-lg border p-2 text-[12px] ${mismatch ? 'bg-rose-50 border-rose-200' : 'bg-gray-50'}`}
+                                                className={`rounded-lg p-2 text-[12px] ring-1 ${mismatch ? mismatchClass : ''}`}
+                                                style={mismatch ? undefined : { background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
                                                 title={mismatch ? 'Does not match live rota' : undefined}
                                             >
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold">
+                                                    <span
+                                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ring-1
+                                       bg-indigo-50 text-indigo-700 ring-indigo-100
+                                       [data-orbit='1']:bg-indigo-500/15 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25"
+                                                    >
                                                         {inits}
                                                     </span>
-                                                    {code && <span className="font-mono font-semibold">{code}</span>}
-                                                    <span>{e.hours}h</span>
-                                                    {kind && <span className="text-gray-600">· {KIND_LABEL[kind] || kind}</span>}
-                                                    {mismatch && <span className="text-rose-700 text-xs">• mismatch</span>}
+                                                    {code && <span className="font-mono font-semibold" style={{ color: 'var(--ink)' }}>{code}</span>}
+                                                    <span style={{ color: 'var(--ink)' }}>{e.hours}h</span>
+                                                    {kind && <span style={{ color: 'var(--sub)' }}>· {KIND_LABEL[kind] || kind}</span>}
+                                                    {mismatch && <span className="text-xs [data-orbit='1']:text-rose-200" style={{ color: '#b91c1c' }}>• mismatch</span>}
                                                 </div>
                                                 {editable && (
                                                     <div className="mt-1 flex flex-wrap gap-1">
                                                         <button
                                                             onClick={() => openEditor(d, e)}
                                                             disabled={isLoading}
-                                                            className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                            className="rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         >
                                                             Edit
                                                         </button>
                                                         <button
                                                             onClick={() => { void delEntry(e.id); }}
                                                             disabled={isLoading || deletingIds.has(e.id)}
-                                                            className="rounded border px-2 py-[2px] text-[11px] hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                            className="rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                         >
                                                             {deletingIds.has(e.id) ? '⏳ Deleting…' : 'Delete'}
                                                         </button>
@@ -2502,7 +2692,8 @@ function ManagerTimesheetEditor({
                                         <button
                                             onClick={() => openEditor(d)}
                                             disabled={isLoading}
-                                            className="mt-1 rounded border px-2 py-[2px] text-[11px] hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            className="mt-1 rounded-md px-2 py-[2px] text-[11px] ring-1 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                         >
                                             Add
                                         </button>
@@ -2516,31 +2707,53 @@ function ManagerTimesheetEditor({
                 {/* EDITOR OVERLAY (modal) */}
                 {editingDay && (
                     <div className="fixed inset-0 bg-black/30 grid place-items-center z-50" onClick={(e) => { e.stopPropagation(); setEditingDay(null); }}>
-                        <div className="w-full max-w-md rounded-xl border bg-white p-4 shadow-xl" onClick={e => e.stopPropagation()}>
-                            <h4 className="text-sm font-semibold mb-3">Edit day {editingDay}</h4>
+                        <div
+                            className="w-full max-w-md rounded-xl ring-1 p-4 shadow-xl"
+                            onClick={e => e.stopPropagation()}
+                            style={{ background: 'var(--panel-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                        >
+                            <h4 className="text-sm font-semibold mb-3" style={{ color: 'var(--ink)' }}>Edit day {editingDay}</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="sm:col-span-2">
-                                    <label className="block text-xs text-gray-600 mb-1">Shift type</label>
-                                    <select className="w-full border rounded-lg px-3 py-2" value={editShiftId} onChange={e => onPickShift(e.target.value)}>
+                                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Shift type</label>
+                                    <select
+                                        className="w-full rounded-lg px-3 py-2 ring-1"
+                                        value={editShiftId}
+                                        onChange={e => onPickShift(e.target.value)}
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                    >
                                         <option value="">(none)</option>
                                         {shiftTypes.map(s => <option key={s.id} value={s.id}>{s.code} — {s.label}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-gray-600 mb-1">Hours</label>
+                                    <label className="block text-xs mb-1" style={{ color: 'var(--sub)' }}>Hours</label>
                                     <input
                                         type="number"
                                         min={0}
                                         step="0.25"
-                                        className="w-full border rounded-lg px-3 py-2"
+                                        className="w-full rounded-lg px-3 py-2 ring-1"
                                         value={editHours}
                                         onChange={e => setEditHours(Number(e.target.value))}
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     />
                                 </div>
                             </div>
                             <div className="mt-3 flex justify-end gap-2">
-                                <button onClick={() => setEditingDay(null)} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">Cancel</button>
-                                <button onClick={() => { void saveEditor(); }} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">Save</button>
+                                <button
+                                    onClick={() => setEditingDay(null)}
+                                    className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => { void saveEditor(); }}
+                                    className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                >
+                                    Save
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -2549,6 +2762,7 @@ function ManagerTimesheetEditor({
         </div>
     );
 }
+
 
 /* ===================================
    Company Timesheets (with progress)
@@ -2615,32 +2829,38 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
             // 1) Homes in this company (RLS-safe via RPC)
             const homesRes = await supabase.rpc('homes_list_company_all', { p_company_id: companyId });
             const homeList: Home[] = Array.isArray(homesRes.data)
-                ? homesRes.data.map(h => ({ id: h.id, name: h.name, company_id: h.company_id }))
+                ? homesRes.data.map((h: Home) => ({ id: h.id, name: h.name, company_id: h.company_id }))
                 : [];
             setHomes(homeList);
 
             // 2) Manager-submitted timesheets for month (optionally filtered by home)
             const visibleHomeIds = homeId ? [homeId] : homeList.map(x => x.id);
+
+            // define the shape of the joined row
+            type TSRowWithHome = Timesheet & { homes: { name: string | null } | null };
+
+            // Manager-submitted timesheets for month (optionally filtered by home)
             const ts = await supabase
                 .from('timesheets')
                 .select('*, homes!inner(name)')
                 .eq('month_date', month)
                 .in('home_id', visibleHomeIds.length ? visibleHomeIds : ['00000000-0000-0000-0000-000000000000'])
-                .eq('status', 'MANAGER_SUBMITTED');
+                .eq('status', 'MANAGER_SUBMITTED')
+                .returns<TSRowWithHome[]>(); // ✅ no `any`
 
-            const rows: TimesheetWithHomeName[] = Array.isArray(ts.data)
-                ? ts.data.map(x => ({
-                    id: x.id,
-                    home_id: x.home_id,
-                    user_id: x.user_id,
-                    month_date: x.month_date,
-                    status: x.status,
-                    submitted_at: x.submitted_at ?? null,
-                    manager_submitted_at: x.manager_submitted_at ?? null,
-                    home_name: x.homes?.name ?? '(home)',
-                }))
-                : [];
+            const rows: TimesheetWithHomeName[] = (ts.data ?? []).map((x) => ({
+                id: x.id,
+                home_id: x.home_id,
+                user_id: x.user_id,
+                month_date: x.month_date,
+                status: x.status,
+                submitted_at: x.submitted_at ?? null,
+                manager_submitted_at: x.manager_submitted_at ?? null,
+                home_name: x.homes?.name ?? '(home)',
+            }));
+
             setTimesheets(rows);
+
 
             // 3) Entries per timesheet
             const ids = rows.map(t => t.id);
@@ -2844,6 +3064,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
 
     async function adminDelete(ts: Timesheet) {
         if (!isAdmin) return;
+        // eslint-disable-next-line no-alert
         if (!confirm('Delete this timesheet (and its entries)?')) return;
         const del = await supabase.from('timesheets').delete().eq('id', ts.id);
         if (del.error) { alert(del.error.message); return; }
@@ -2893,6 +3114,21 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
         return agg;
     }, [timesheets, entriesByTS, shiftMap, companyMemberUsers, membershipsLoaded]);
 
+    // Pills/chips reused below
+    const amberChip =
+        'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ring-1 ' +
+        'bg-amber-50 text-amber-700 ring-amber-100 ' +
+        "[data-orbit='1']:bg-amber-500/15 [data-orbit='1']:text-amber-200 [data-orbit='1']:ring-amber-400/25";
+
+    const roseTag =
+        'text-xs px-2 py-0.5 rounded ring-1 bg-rose-50 text-rose-700 ring-rose-100 ' +
+        "[data-orbit='1']:bg-rose-500/10 [data-orbit='1']:text-rose-200 [data-orbit='1']:ring-rose-400/25";
+
+    const indigoInits =
+        'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ring-1 ' +
+        'bg-indigo-50 text-indigo-700 ring-indigo-100 ' +
+        "[data-orbit='1']:bg-indigo-500/15 [data-orbit='1']:text-indigo-200 [data-orbit='1']:ring-indigo-400/25";
+
     return (
         <div className="space-y-4">
             <Toolbar
@@ -2908,21 +3144,24 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
 
             {/* Company-wide progress banner */}
             {progress && (
-                <div className="rounded-md border p-3 text-sm">
+                <div
+                    className="rounded-md p-3 text-sm ring-1"
+                    style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                >
                     {progress.total_required === 0 ? (
-                        <div className="text-gray-600">No LIVE rota entries for this company in the selected month.</div>
+                        <div style={{ color: 'var(--sub)' }}>No LIVE rota entries for this company in the selected month.</div>
                     ) : (
                         <>
                             <div className="flex flex-wrap gap-x-6 gap-y-1">
                                 <div><strong>Staff scheduled this period:</strong> {progress.total_required}</div>
                                 <div><strong>Submitted to managers:</strong> {progress.submitted_count} / {progress.total_required}</div>
                                 <div><strong>Manager forwarded:</strong> {progress.manager_count} / {progress.total_required}</div>
-                                {loadingProgress && <div>⏳ updating…</div>}
+                                {loadingProgress && <div style={{ color: 'var(--sub)' }}>⏳ updating…</div>}
                             </div>
 
                             {missing.length > 0 && (
                                 <div className="mt-2">
-                                    <div className="font-medium mb-1">Missing submissions</div>
+                                    <div className="font-medium mb-1" style={{ color: 'var(--ink)' }}>Missing submissions</div>
                                     <ul className="space-y-1">
                                         {missing.slice(0, 12).map(m => {
                                             const profList = Array.from(profilesMap.values());
@@ -2930,16 +3169,11 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                                             const display = nameFor(m.user_id);
                                             return (
                                                 <li key={m.user_id} className="flex items-center gap-2 flex-wrap">
-                                                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-50 text-amber-700 text-xs font-semibold">
-                                                        {inits}
-                                                    </span>
-                                                    <span className="mr-1">{display}</span>
-                                                    <span className="text-gray-500">· Missing:</span>
+                                                    <span className={amberChip}>{inits}</span>
+                                                    <span style={{ color: 'var(--ink)' }} className="mr-1">{display}</span>
+                                                    <span style={{ color: 'var(--sub)' }}>· Missing:</span>
                                                     {m.missing_home_ids.map(hid => (
-                                                        <span
-                                                            key={hid}
-                                                            className="text-xs px-2 py-0.5 rounded ring-1 bg-rose-50 text-rose-700 ring-rose-100"
-                                                        >
+                                                        <span key={hid} className={roseTag}>
                                                             {homes.find(h => h.id === hid)?.name || 'Home'}
                                                         </span>
                                                     ))}
@@ -2947,7 +3181,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                                             );
                                         })}
                                         {missing.length > 12 && (
-                                            <li className="text-xs text-gray-600">
+                                            <li className="text-xs" style={{ color: 'var(--sub)' }}>
                                                 …and {missing.length - 12} more.
                                             </li>
                                         )}
@@ -2960,20 +3194,19 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
             )}
 
             {/* Company table */}
-            <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-600">
+            <div
+                className="rounded-xl overflow-x-auto ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <table className="min-w-full text-sm" style={{ color: 'var(--ink)' }}>
+                    <thead style={{ background: 'var(--nav-item-bg)' }}>
                         <tr>
-                            <th className="text-left p-2">Home</th>
-                            <th className="text-left p-2">User</th>
-                            <th className="text-left p-2">Status</th>
-                            <th className="text-left p-2">Hours</th>
-                            <th className="text-left p-2">Sleep</th>
-                            <th className="text-left p-2">Annual leave</th>
-                            <th className="text-left p-2">Sickness</th>
-                            <th className="text-left p-2">Waking night</th>
-                            <th className="text-left p-2">Other leave</th>
-                            {isAdmin && <th className="p-2">Admin</th>}
+                            {[
+                                'Home', 'User', 'Status', 'Hours', 'Sleep', 'Annual leave',
+                                'Sickness', 'Waking night', 'Other leave', ...(isAdmin ? ['Admin'] : []),
+                            ].map((h) => (
+                                <th key={h} className="text-left p-2" style={{ color: 'var(--sub)' }}>{h}</th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
@@ -2982,17 +3215,17 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                             timesheets.filter(t => companyMemberUsers.has(t.user_id)).map(t => {
                                 const s = calcSummary(t);
                                 return (
-                                    <tr key={t.id} className="border-t">
-                                        <td className="p-2">{t.home_name}</td>
+                                    <tr key={t.id} style={{ borderTop: '1px solid var(--ring)' }}>
+                                        <td className="p-2" style={{ color: 'var(--ink)' }}>{t.home_name}</td>
                                         <td className="p-2">
                                             <div className="flex items-center gap-2">
-                                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                                                <span className={indigoInits}>
                                                     {initialsFor(profiles, t.user_id)}
                                                 </span>
-                                                <span>{nameFor(t.user_id)}</span>
+                                                <span style={{ color: 'var(--ink)' }}>{nameFor(t.user_id)}</span>
                                             </div>
                                         </td>
-                                        <td className="p-2">{t.status}</td>
+                                        <td className="p-2" style={{ color: 'var(--sub)' }}>{t.status}</td>
                                         <td className="p-2">{s.hours.toFixed(2)}</td>
                                         <td className="p-2">{s.sleep}</td>
                                         <td className="p-2">{s.al}</td>
@@ -3001,7 +3234,13 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
                                         <td className="p-2">{s.other}</td>
                                         {isAdmin && (
                                             <td className="p-2">
-                                                <button onClick={() => { void adminDelete(t); }} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Delete</button>
+                                                <button
+                                                    onClick={() => { void adminDelete(t); }}
+                                                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                                >
+                                                    Delete
+                                                </button>
                                             </td>
                                         )}
                                     </tr>
@@ -3010,17 +3249,17 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
 
                         {/* Bank users: exactly one aggregated row per user across homes (labelled “Bank staff”) */}
                         {[...bankAggByUser.values()].map(agg => (
-                            <tr key={`BANK_${agg.user_id}`} className="border-t">
-                                <td className="p-2">Bank staff</td>
+                            <tr key={`BANK_${agg.user_id}`} style={{ borderTop: '1px solid var(--ring)' }}>
+                                <td className="p-2" style={{ color: 'var(--ink)' }}>Bank staff</td>
                                 <td className="p-2">
                                     <div className="flex items-center gap-2">
-                                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                                        <span className={indigoInits}>
                                             {initialsFor(profiles, agg.user_id)}
                                         </span>
-                                        <span>{nameFor(agg.user_id)}</span>
+                                        <span style={{ color: 'var(--ink)' }}>{nameFor(agg.user_id)}</span>
                                     </div>
                                 </td>
-                                <td className="p-2">MANAGER_SUBMITTED</td>
+                                <td className="p-2" style={{ color: 'var(--sub)' }}>MANAGER_SUBMITTED</td>
                                 <td className="p-2">{agg.hours.toFixed(2)}</td>
                                 <td className="p-2">{agg.sleep}</td>
                                 <td className="p-2">{agg.al}</td>
@@ -3033,7 +3272,7 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
 
                         {(!timesheets.length) && (
                             <tr>
-                                <td className="p-2 text-sm text-gray-500" colSpan={isAdmin ? 10 : 9}>
+                                <td className="p-2 text-sm" style={{ color: 'var(--sub)' }} colSpan={isAdmin ? 10 : 9}>
                                     No manager-submitted timesheets for this selection.
                                 </td>
                             </tr>
@@ -3044,5 +3283,6 @@ function CompanyView({ isAdmin }: { isAdmin: boolean }) {
         </div>
     );
 }
+
 
 

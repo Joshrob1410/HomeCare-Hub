@@ -5,6 +5,12 @@ import { supabase } from '@/supabase/client';
 import { getEffectiveLevel, type AppLevel } from '@/supabase/roles';
 
 /* =========================
+   Theme constants
+   ========================= */
+const BRAND_GRADIENT =
+    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
+
+/* =========================
    Types
    ========================= */
 
@@ -42,7 +48,6 @@ type FormQuestion = {
     required: boolean;
 };
 
-// For editor where questions always have an ID
 type FormQuestionWithId = Omit<FormQuestion, 'id'> & { id: string };
 
 type FormMeta = {
@@ -76,15 +81,36 @@ function fmtLocalDateTimeInput(d = new Date()) {
 }
 
 function chipTone(status: Supervision['status']) {
+    // Light theme base + Orbit overrides (matches payslips Banner pattern)
     switch (status) {
         case 'SIGNED':
-            return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+            return [
+                'bg-emerald-50 text-emerald-700 ring-emerald-100',
+                '[data-orbit="1"]:bg-emerald-500/10',
+                '[data-orbit="1"]:text-emerald-200',
+                '[data-orbit="1"]:ring-emerald-400/25',
+            ].join(' ');
         case 'ISSUED':
-            return 'bg-amber-50 text-amber-700 ring-amber-100';
+            return [
+                'bg-amber-50 text-amber-700 ring-amber-100',
+                '[data-orbit="1"]:bg-amber-500/10',
+                '[data-orbit="1"]:text-amber-200',
+                '[data-orbit="1"]:ring-amber-400/25',
+            ].join(' ');
         case 'DRAFT':
-            return 'bg-slate-50 text-slate-700 ring-slate-100';
+            return [
+                'bg-slate-50 text-slate-700 ring-slate-100',
+                '[data-orbit="1"]:bg-slate-500/10',
+                '[data-orbit="1"]:text-slate-200',
+                '[data-orbit="1"]:ring-slate-400/25',
+            ].join(' ');
         default:
-            return 'bg-rose-50 text-rose-700 ring-rose-100';
+            return [
+                'bg-rose-50 text-rose-700 ring-rose-100',
+                '[data-orbit="1"]:bg-rose-500/10',
+                '[data-orbit="1"]:text-rose-200',
+                '[data-orbit="1"]:ring-rose-400/25',
+            ].join(' ');
     }
 }
 
@@ -142,15 +168,20 @@ export default function SupervisionsPage() {
     }, [canStart, tab]);
 
     return (
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6" style={{ color: 'var(--ink)' }}>
             <header className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">Supervisions</h1>
-                    <p className="text-sm text-gray-600">View, start, and manage supervisions.</p>
+                    <h1 className="text-2xl font-semibold" style={{ color: 'var(--ink)' }}>
+                        Supervisions
+                    </h1>
+                    <p className="text-sm" style={{ color: 'var(--sub)' }}>
+                        View, start, and manage supervisions.
+                    </p>
                 </div>
             </header>
 
-            <div className="inline-flex rounded-lg border bg-white ring-1 ring-gray-50 shadow-sm overflow-hidden">
+            {/* Tabs */}
+            <div className="flex gap-2">
                 <TabBtn active={tab === 'MY'} onClick={() => setTab('MY')}>
                     My Supervisions
                 </TabBtn>
@@ -184,15 +215,52 @@ export default function SupervisionsPage() {
                 <ActiveSupervisions forceReveal={forceShowActive} onHandled={() => setForceShowActive(false)} />
             )}
             {tab === 'FORMS' && (isAdmin || isCompany) && <FormBuilder />}
+
+            {/* --- Orbit-only select/input fixes (scoped to this page) --- */}
+            <style jsx global>{`
+        /* Make native popovers dark in Orbit and ensure closed state isn't washed out */
+        [data-orbit="1"] select,
+        [data-orbit="1"] input[type='number'],
+        [data-orbit="1"] input[type='date'],
+        [data-orbit="1"] input[type='datetime-local'],
+        [data-orbit="1"] textarea {
+          color-scheme: dark;
+          background: var(--nav-item-bg);
+          color: var(--ink);
+          border-color: var(--ring);
+        }
+        /* Option text inside the opened dropdown menu */
+        [data-orbit="1"] select option {
+          color: var(--ink);
+          background-color: #0b1221; /* solid fallback so options don't look transparent */
+        }
+        /* Firefox also respects this for the popup list */
+        @-moz-document url-prefix() {
+          [data-orbit="1"] select option {
+            background-color: #0b1221;
+          }
+        }
+        /* Remove the greyed-out look some UAs apply */
+        [data-orbit="1"] select:where(:not(:disabled)) {
+          opacity: 1;
+        }
+      `}</style>
         </div>
     );
 }
 
-function TabBtn(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
+function TabBtn(
+    props: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean },
+) {
     const { active, children, ...rest } = props;
     return (
         <button
-            className={`px-4 py-2 text-sm ${active ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`}
+            className="px-3 py-1.5 rounded-md ring-1 transition"
+            style={
+                active
+                    ? { background: BRAND_GRADIENT, color: '#FFFFFF', borderColor: 'var(--ring-strong)' }
+                    : { background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }
+            }
             {...rest}
         >
             {children}
@@ -261,19 +329,37 @@ function MySupervisions() {
         })();
     }, []);
 
-    if (!uid) return <p>Loading…</p>;
+    if (!uid)
+        return (
+            <p style={{ color: 'var(--sub)' }}>
+                Loading…
+            </p>
+        );
 
     return (
         <div className="space-y-6">
             {/* PENDING MY APPROVAL */}
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50">
-                <div className="p-3 border-b">
-                    <h3 className="text-sm font-semibold">Pending my approval</h3>
-                    <p className="text-xs text-gray-500">These have been submitted to you for acceptance.</p>
+            <section
+                className="rounded-lg overflow-hidden ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <div
+                    className="p-3 flex flex-col gap-0.5"
+                    style={{ borderBottom: '1px solid var(--ring)', background: 'var(--nav-item-bg)' }}
+                >
+                    <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                        Pending my approval
+                    </h3>
+                    <p className="text-xs" style={{ color: 'var(--sub)' }}>
+                        These have been submitted to you for acceptance.
+                    </p>
                 </div>
                 <div className="overflow-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
+                        <thead
+                            className="sticky top-0 z-10"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">When</th>
                                 <th className="text-left p-2">Supervisor</th>
@@ -283,13 +369,17 @@ function MySupervisions() {
                         </thead>
                         <tbody>
                             {pending.map((r) => (
-                                <tr key={r.id} className="border-t">
-                                    <td className="p-2">{new Date(r.scheduled_for).toLocaleString()}</td>
-                                    <td className="p-2">{r.supervisor_name || r.supervisor_id.slice(0, 8)}</td>
+                                <tr key={r.id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {new Date(r.scheduled_for).toLocaleString()}
+                                    </td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {r.supervisor_name || r.supervisor_id.slice(0, 8)}
+                                    </td>
                                     <td className="p-2">
                                         <span
                                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${chipTone(
-                                                r.status
+                                                r.status,
                                             )}`}
                                         >
                                             {r.status === 'ISSUED' ? 'SUBMITTED' : r.status}
@@ -297,7 +387,8 @@ function MySupervisions() {
                                     </td>
                                     <td className="p-2">
                                         <button
-                                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                             onClick={() => setPendingOpen(r)}
                                         >
                                             Review
@@ -307,7 +398,7 @@ function MySupervisions() {
                             ))}
                             {pending.length === 0 && (
                                 <tr>
-                                    <td className="p-4 text-gray-500" colSpan={4}>
+                                    <td className="p-4" style={{ color: 'var(--sub)' }} colSpan={4}>
                                         Nothing pending.
                                     </td>
                                 </tr>
@@ -318,15 +409,26 @@ function MySupervisions() {
             </section>
 
             {/* COMPLETED FOR ME (SIGNED) with pagination */}
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50">
-                <div className="p-3 border-b flex items-center justify-between">
+            <section
+                className="rounded-lg overflow-hidden ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <div
+                    className="p-3 flex items-center justify-between"
+                    style={{ borderBottom: '1px solid var(--ring)', background: 'var(--nav-item-bg)' }}
+                >
                     <div>
-                        <h3 className="text-sm font-semibold">Completed supervisions (for me)</h3>
-                        <p className="text-xs text-gray-500">You were the supervisee.</p>
+                        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                            Completed supervisions (for me)
+                        </h3>
+                        <p className="text-xs" style={{ color: 'var(--sub)' }}>
+                            You were the supervisee.
+                        </p>
                     </div>
                     <div className="flex gap-2">
                         <button
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition disabled:opacity-60"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             disabled={forMePage === 0}
                             onClick={async () => {
                                 const next = Math.max(0, forMePage - 1);
@@ -337,7 +439,8 @@ function MySupervisions() {
                             Prev
                         </button>
                         <button
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             onClick={async () => {
                                 const next = forMePage + 1;
                                 setForMePage(next);
@@ -350,7 +453,10 @@ function MySupervisions() {
                 </div>
                 <div className="overflow-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
+                        <thead
+                            className="sticky top-0 z-10"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">Date</th>
                                 <th className="text-left p-2">Supervisor</th>
@@ -359,15 +465,21 @@ function MySupervisions() {
                         </thead>
                         <tbody>
                             {cForMe.map((r) => (
-                                <tr key={r.id} className="border-t">
-                                    <td className="p-2">{new Date(r.scheduled_for).toLocaleString()}</td>
-                                    <td className="p-2">{r.supervisor_name || r.supervisor_id.slice(0, 8)}</td>
-                                    <td className="p-2">{r.status}</td>
+                                <tr key={r.id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {new Date(r.scheduled_for).toLocaleString()}
+                                    </td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {r.supervisor_name || r.supervisor_id.slice(0, 8)}
+                                    </td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {r.status}
+                                    </td>
                                 </tr>
                             ))}
                             {cForMe.length === 0 && (
                                 <tr>
-                                    <td className="p-4 text-gray-500" colSpan={3}>
+                                    <td className="p-4" style={{ color: 'var(--sub)' }} colSpan={3}>
                                         No items on this page.
                                     </td>
                                 </tr>
@@ -378,15 +490,26 @@ function MySupervisions() {
             </section>
 
             {/* COMPLETED BY ME (SIGNED) with pagination */}
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50">
-                <div className="p-3 border-b flex items-center justify-between">
+            <section
+                className="rounded-lg overflow-hidden ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <div
+                    className="p-3 flex items-center justify-between"
+                    style={{ borderBottom: '1px solid var(--ring)', background: 'var(--nav-item-bg)' }}
+                >
                     <div>
-                        <h3 className="text-sm font-semibold">Previously completed supervisions (by me)</h3>
-                        <p className="text-xs text-gray-500">You were the supervisor. Read-only.</p>
+                        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                            Previously completed supervisions (by me)
+                        </h3>
+                        <p className="text-xs" style={{ color: 'var(--sub)' }}>
+                            You were the supervisor. Read-only.
+                        </p>
                     </div>
                     <div className="flex gap-2">
                         <button
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-60"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition disabled:opacity-60"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             disabled={byMePage === 0}
                             onClick={async () => {
                                 const next = Math.max(0, byMePage - 1);
@@ -397,7 +520,8 @@ function MySupervisions() {
                             Prev
                         </button>
                         <button
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                            className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                             onClick={async () => {
                                 const next = byMePage + 1;
                                 setByMePage(next);
@@ -410,7 +534,10 @@ function MySupervisions() {
                 </div>
                 <div className="overflow-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
+                        <thead
+                            className="sticky top-0 z-10"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">Date</th>
                                 <th className="text-left p-2">Supervisee</th>
@@ -419,15 +546,21 @@ function MySupervisions() {
                         </thead>
                         <tbody>
                             {cByMe.map((r) => (
-                                <tr key={r.id} className="border-t">
-                                    <td className="p-2">{new Date(r.scheduled_for).toLocaleString()}</td>
-                                    <td className="p-2">{r.supervisee_name || r.supervisee_id.slice(0, 8)}</td>
-                                    <td className="p-2">{r.status}</td>
+                                <tr key={r.id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {new Date(r.scheduled_for).toLocaleString()}
+                                    </td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {r.supervisee_name || r.supervisee_id.slice(0, 8)}
+                                    </td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {r.status}
+                                    </td>
                                 </tr>
                             ))}
                             {cByMe.length === 0 && (
                                 <tr>
-                                    <td className="p-4 text-gray-500" colSpan={3}>
+                                    <td className="p-4" style={{ color: 'var(--sub)' }} colSpan={3}>
                                         No items on this page.
                                     </td>
                                 </tr>
@@ -449,7 +582,7 @@ function MySupervisions() {
                     canAccept
                     onAccepted={async () => {
                         setPendingOpen(null);
-                        await loadAll(uid, forMePage * PAGE, byMePage * PAGE);
+                        await loadAll(uid, forMePage * 5, byMePage * 5);
                     }}
                 />
             )}
@@ -525,7 +658,7 @@ function StartSupervision({
                 const asLevel = (lvl as Level) || '4_STAFF';
                 if (asLevel === '1_ADMIN' || asLevel === '2_COMPANY') {
                     const h = await supabase.from('homes').select('id,name,company_id').eq('company_id', cid).order('name');
-                    setHomes(((h.data as Home[]) || []));
+                    setHomes((h.data as Home[]) || []);
                 } else if (asLevel === '3_MANAGER') {
                     // Managers: ONLY homes they are a manager of
                     const myHomes = await supabase
@@ -534,11 +667,11 @@ function StartSupervision({
                         .eq('user_id', me)
                         .eq('role', 'MANAGER');
                     const ids = Array.from(
-                        new Set(((myHomes.data as { home_id: string }[] | null) ?? []).map((r) => r.home_id))
+                        new Set(((myHomes.data as { home_id: string }[] | null) ?? []).map((r) => r.home_id)),
                     );
                     if (ids.length) {
                         const h = await supabase.from('homes').select('id,name,company_id').in('id', ids).order('name');
-                        setHomes(((h.data as Home[]) || []));
+                        setHomes((h.data as Home[]) || []);
                     } else {
                         setHomes([]);
                     }
@@ -583,6 +716,7 @@ function StartSupervision({
                 p_company_id: companyId || null,
             });
             if (error) {
+                // eslint-disable-next-line no-console
                 console.error(error);
                 setPeople([]);
                 setBankPeople([]);
@@ -662,16 +796,33 @@ function StartSupervision({
         }
     }
 
-    if (loading) return <p>Loading…</p>;
+    if (loading)
+        return (
+            <p style={{ color: 'var(--sub)' }}>
+                Loading…
+            </p>
+        );
 
     return (
-        <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4 space-y-3">
-            <h2 className="text-base font-semibold">Start a supervision</h2>
+        <div
+            className="rounded-lg ring-1 p-4 space-y-3"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+        >
+            <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                Start a supervision
+            </h2>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                    <label className="block text-sm mb-1">Home</label>
+                    <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                        Home
+                    </label>
                     <select
-                        className="w-full border rounded-lg px-3 py-2 disabled:bg-gray-50"
+                        className="w-full rounded-lg px-3 py-2 ring-1 disabled:opacity-70"
+                        style={{
+                            background: 'var(--nav-item-bg)',
+                            color: 'var(--ink)',
+                            borderColor: 'var(--ring)',
+                        }}
                         value={homeId}
                         onChange={(e) => setHomeId(e.target.value)}
                         disabled={lockingHome}
@@ -683,12 +834,23 @@ function StartSupervision({
                             </option>
                         ))}
                     </select>
-                    {lockingHome && <p className="text-[11px] text-gray-500 mt-1">As a Team Leader, your home is fixed.</p>}
+                    {lockingHome && (
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
+                            As a Team Leader, your home is fixed.
+                        </p>
+                    )}
                 </div>
                 <div className="sm:col-span-2">
-                    <label className="block text-sm mb-1">Home member (staff or manager)</label>
+                    <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                        Home member (staff or manager)
+                    </label>
                     <select
-                        className="w-full border rounded-lg px-3 py-2"
+                        className="w-full rounded-lg px-3 py-2 ring-1"
+                        style={{
+                            background: 'var(--nav-item-bg)',
+                            color: 'var(--ink)',
+                            borderColor: 'var(--ring)',
+                        }}
                         value={superviseeId}
                         onChange={(e) => {
                             const v = e.target.value;
@@ -705,14 +867,23 @@ function StartSupervision({
                         ))}
                     </select>
                     {!!bankSuperviseeId && (
-                        <p className="text-[11px] text-amber-700 mt-1">Bank staff selected; clear it to pick a home member.</p>
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
+                            Bank staff selected; clear it to pick a home member.
+                        </p>
                     )}
                 </div>
                 {canPickBank && (
                     <div className="sm:col-span-2">
-                        <label className="block text-sm mb-1">Bank staff (company-wide)</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                            Bank staff (company-wide)
+                        </label>
                         <select
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{
+                                background: 'var(--nav-item-bg)',
+                                color: 'var(--ink)',
+                                borderColor: 'var(--ring)',
+                            }}
                             value={bankSuperviseeId}
                             onChange={(e) => {
                                 const v = e.target.value;
@@ -728,31 +899,46 @@ function StartSupervision({
                                 </option>
                             ))}
                         </select>
-                        <p className="text-[11px] text-gray-500 mt-1">
-                            You can pick bank staff regardless of the selected home. You cannot pick both a bank staff member and a home
-                            member.
+                        <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
+                            You can pick bank staff regardless of the selected home. You cannot pick both a bank staff member and a
+                            home member.
                         </p>
                         {!!superviseeId && (
-                            <p className="text-[11px] text-amber-700 mt-1">
+                            <p className="text-[11px] mt-1" style={{ color: 'var(--sub)' }}>
                                 Home member selected; clear it to pick a bank staff member.
                             </p>
                         )}
                     </div>
                 )}
                 <div>
-                    <label className="block text-sm mb-1">Scheduled for</label>
+                    <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                        Scheduled for
+                    </label>
                     <input
                         type="datetime-local"
-                        className="w-full border rounded-lg px-3 py-2"
+                        className="w-full rounded-lg px-3 py-2 ring-1"
+                        style={{
+                            background: 'var(--nav-item-bg)',
+                            color: 'var(--ink)',
+                            borderColor: 'var(--ring)',
+                        }}
                         value={scheduledFor}
                         onChange={(e) => setScheduledFor(e.target.value)}
                     />
                 </div>
-                <div className="sm:col-span-4">
-                    <button onClick={createDraft} className="rounded border px-3 py-2 text-sm hover:bg-gray-50">
+                <div className="sm:col-span-4 flex items-center gap-3">
+                    <button
+                        onClick={createDraft}
+                        className="rounded-md px-3 py-2 text-sm text-white transition"
+                        style={{ background: BRAND_GRADIENT }}
+                    >
                         Create
                     </button>
-                    {err && <span className="ml-3 text-sm text-rose-600">{err}</span>}
+                    {err && (
+                        <span className="text-sm" style={{ color: 'var(--sub)' }}>
+                            {err}
+                        </span>
+                    )}
                 </div>
             </div>
         </div>
@@ -794,7 +980,7 @@ function ActiveSupervisions({
                 .not('status', 'in', ['("SIGNED")', '("CANCELLED")'])
                 .order('scheduled_for', { ascending: false });
 
-            if (!list.error) setRows(((list.data as SupervisionV[]) || []));
+            if (!list.error) setRows((list.data as SupervisionV[]) || []);
             else setRows([]);
             setLoading(false);
 
@@ -802,16 +988,27 @@ function ActiveSupervisions({
         })();
     }, [forceReveal, onHandled]);
 
-    if (loading) return <p>Loading…</p>;
+    if (loading)
+        return (
+            <p style={{ color: 'var(--sub)' }}>
+                Loading…
+            </p>
+        );
 
     const selected = rows.find((r) => r.id === openId) || null;
 
     return (
         <div className="space-y-4">
-            <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50">
+            <div
+                className="rounded-lg overflow-hidden ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
                 <div className="overflow-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
+                        <thead
+                            className="sticky top-0 z-10"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">When</th>
                                 <th className="text-left p-2">Home</th>
@@ -822,14 +1019,20 @@ function ActiveSupervisions({
                         </thead>
                         <tbody>
                             {rows.map((r) => (
-                                <tr key={r.id} className="border-t">
-                                    <td className="p-2">{new Date(r.scheduled_for).toLocaleString()}</td>
-                                    <td className="p-2">{r.home_name ?? '—'}</td>
-                                    <td className="p-2">{r.supervisee_name ?? r.supervisee_id.slice(0, 8)}</td>
+                                <tr key={r.id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {new Date(r.scheduled_for).toLocaleString()}
+                                    </td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {r.home_name ?? '—'}
+                                    </td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>
+                                        {r.supervisee_name ?? r.supervisee_id.slice(0, 8)}
+                                    </td>
                                     <td className="p-2">
                                         <span
                                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ring-1 ${chipTone(
-                                                r.status
+                                                r.status,
                                             )}`}
                                         >
                                             {r.status === 'ISSUED' ? 'SUBMITTED' : r.status}
@@ -838,7 +1041,12 @@ function ActiveSupervisions({
                                     <td className="p-2">
                                         {r.status === 'DRAFT' ? (
                                             <button
-                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                style={{
+                                                    background: 'var(--nav-item-bg)',
+                                                    color: 'var(--ink)',
+                                                    borderColor: 'var(--ring)',
+                                                }}
                                                 onClick={() => setOpenId(r.id)}
                                             >
                                                 Begin / Resume
@@ -846,13 +1054,23 @@ function ActiveSupervisions({
                                         ) : r.status === 'ISSUED' ? (
                                             <div className="flex gap-2">
                                                 <button
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                    style={{
+                                                        background: 'var(--nav-item-bg)',
+                                                        color: 'var(--ink)',
+                                                        borderColor: 'var(--ring)',
+                                                    }}
                                                     onClick={() => setOpenId(r.id)} // opens read-only view
                                                 >
                                                     View
                                                 </button>
                                                 <button
-                                                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                    style={{
+                                                        background: 'var(--nav-item-bg)',
+                                                        color: 'var(--ink)',
+                                                        borderColor: 'var(--ring)',
+                                                    }}
                                                     onClick={async () => {
                                                         try {
                                                             const back = await supabase
@@ -870,7 +1088,7 @@ function ActiveSupervisions({
                                                                 .eq('supervisor_id', me)
                                                                 .not('status', 'in', ['("SIGNED")', '("CANCELLED")'])
                                                                 .order('scheduled_for', { ascending: false });
-                                                            if (!list.error) setRows(((list.data as SupervisionV[]) || []));
+                                                            if (!list.error) setRows((list.data as SupervisionV[]) || []);
                                                         } catch (e: unknown) {
                                                             const msg = e instanceof Error ? e.message : 'Failed to withdraw.';
                                                             alert(msg);
@@ -881,14 +1099,16 @@ function ActiveSupervisions({
                                                 </button>
                                             </div>
                                         ) : (
-                                            <span className="text-gray-500 text-xs">—</span>
+                                            <span className="text-xs" style={{ color: 'var(--sub)' }}>
+                                                —
+                                            </span>
                                         )}
                                     </td>
                                 </tr>
                             ))}
                             {rows.length === 0 && (
                                 <tr>
-                                    <td className="p-4 text-gray-500" colSpan={5}>
+                                    <td className="p-4" style={{ color: 'var(--sub)' }} colSpan={5}>
                                         No active supervisions.
                                     </td>
                                 </tr>
@@ -913,7 +1133,7 @@ function ActiveSupervisions({
                             .eq('supervisor_id', me)
                             .not('status', 'in', ['("SIGNED")', '("CANCELLED")'])
                             .order('scheduled_for', { ascending: false });
-                        if (!list.error) setRows(((list.data as SupervisionV[]) || []));
+                        if (!list.error) setRows((list.data as SupervisionV[]) || []);
                     }}
                     // NEW: lock when not a draft
                     readOnly={selected.status !== 'DRAFT'}
@@ -984,21 +1204,22 @@ function SupervisionEditor({
 
                 if (qs.error) throw qs.error;
 
-                const mapped: FormQuestionWithId[] = ((qs.data as Array<{
-                    id: string;
-                    order_index: number;
-                    label: string;
-                    type: QuestionType;
-                    options: string[] | null;
-                    required: boolean | null;
-                }>) || []).map((q) => ({
-                    id: q.id,
-                    order_index: q.order_index,
-                    label: q.label,
-                    type: (q.type as QuestionType) || 'TEXT',
-                    options: (q.options as string[] | null) ?? [],
-                    required: Boolean(q.required),
-                }));
+                const mapped: FormQuestionWithId[] =
+                    ((qs.data as Array<{
+                        id: string;
+                        order_index: number;
+                        label: string;
+                        type: QuestionType;
+                        options: string[] | null;
+                        required: boolean | null;
+                    }>) || []).map((q) => ({
+                        id: q.id,
+                        order_index: q.order_index,
+                        label: q.label,
+                        type: (q.type as QuestionType) || 'TEXT',
+                        options: (q.options as string[] | null) ?? [],
+                        required: Boolean(q.required),
+                    }));
                 setQuestions(mapped);
 
                 // Load previous answers if table exists
@@ -1098,34 +1319,48 @@ function SupervisionEditor({
     }
 
     return (
-        <div className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4">
+        <div
+            className="rounded-lg ring-1 p-4"
+            style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+        >
             <div className="flex items-start justify-between">
                 <div>
-                    <h3 className="text-base font-semibold">
+                    <h3 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
                         Supervision: {supervision.supervisee_name ?? supervision.supervisee_id.slice(0, 8)}
                     </h3>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs" style={{ color: 'var(--sub)' }}>
                         Scheduled for {new Date(supervision.scheduled_for).toLocaleString()}
                     </p>
                 </div>
-                <button onClick={onClose} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">
+                <button
+                    onClick={onClose}
+                    className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                >
                     Close
                 </button>
             </div>
 
             {!form ? (
-                <p className="mt-3 text-sm text-gray-600">{err || 'No active form found.'}</p>
+                <p className="mt-3 text-sm" style={{ color: 'var(--sub)' }}>
+                    {err || 'No active form found.'}
+                </p>
             ) : (
                 <div className="mt-4 space-y-4">
                     {questions.map((q) => (
-                        <div key={q.id} className="border rounded-lg p-3">
-                            <label className="block text-sm font-medium mb-2">
-                                {q.label} {q.required && <span className="text-rose-600">*</span>}
+                        <div key={q.id} className="rounded-lg p-3 ring-1" style={{ borderColor: 'var(--ring)', background: 'var(--nav-item-bg)' }}>
+                            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--ink)' }}>
+                                {q.label} {q.required && <span style={{ color: '#DC2626' }}>*</span>}
                             </label>
 
                             {q.type === 'TEXT' && (
                                 <textarea
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                        borderColor: 'var(--ring)',
+                                    }}
                                     rows={3}
                                     value={(answers.get(q.id) as string) ?? ''}
                                     disabled={readOnly}
@@ -1135,7 +1370,12 @@ function SupervisionEditor({
 
                             {q.type === 'SINGLE' && (
                                 <select
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full rounded-lg px-3 py-2 ring-1"
+                                    style={{
+                                        background: 'var(--nav-item-bg)',
+                                        color: 'var(--ink)',
+                                        borderColor: 'var(--ring)',
+                                    }}
                                     value={(answers.get(q.id) as string) ?? ''}
                                     disabled={readOnly}
                                     onChange={(e) => setAnswer(q.id, e.target.value)}
@@ -1157,8 +1397,12 @@ function SupervisionEditor({
                                         return (
                                             <label
                                                 key={i}
-                                                className={`inline-flex items-center gap-2 border rounded-lg px-3 py-1 text-sm ${checked ? 'bg-indigo-50 border-indigo-200' : ''
-                                                    }`}
+                                                className="inline-flex items-center gap-2 rounded-lg px-3 py-1 text-sm ring-1 transition"
+                                                style={
+                                                    checked
+                                                        ? { background: 'var(--card-grad)', borderColor: 'var(--ring-strong)', color: 'var(--ink)' }
+                                                        : { background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }
+                                                }
                                             >
                                                 <input
                                                     type="checkbox"
@@ -1180,13 +1424,18 @@ function SupervisionEditor({
                         </div>
                     ))}
 
-                    {err && <p className="text-sm text-rose-600">{err}</p>}
+                    {err && (
+                        <p className="text-sm" style={{ color: 'var(--sub)' }}>
+                            {err}
+                        </p>
+                    )}
 
                     {readOnly ? (
                         <div className="flex gap-2">
                             {canAccept && supervision.status === 'ISSUED' && (
                                 <button
-                                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                    className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                     onClick={async () => {
                                         try {
                                             const { data: u } = await supabase.auth.getUser();
@@ -1217,21 +1466,27 @@ function SupervisionEditor({
                                     Accept &amp; Sign
                                 </button>
                             )}
-                            <button className="rounded border px-3 py-2 text-sm hover:bg-gray-50" onClick={onClose}>
+                            <button
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                                onClick={onClose}
+                            >
                                 Close
                             </button>
                         </div>
                     ) : (
                         <div className="flex gap-2">
                             <button
-                                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                className="rounded-md px-3 py-2 text-sm ring-1 transition disabled:opacity-60"
+                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                 onClick={saveDraft}
                                 disabled={saving}
                             >
                                 {saving ? 'Saving…' : 'Save draft'}
                             </button>
                             <button
-                                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                                className="rounded-md px-3 py-2 text-sm text-white transition disabled:opacity-60"
+                                style={{ background: BRAND_GRADIENT }}
                                 onClick={submit}
                                 disabled={saving}
                             >
@@ -1275,15 +1530,11 @@ function FormBuilder() {
 
                 if (isAdmin) {
                     const co = await supabase.from('companies').select('id,name').order('name');
-                    setCompanies(((co.data as { id: string; name: string }[]) || []));
+                    setCompanies((co.data as { id: string; name: string }[]) || []);
                     if (!companyId && co.data?.[0]?.id) setCompanyId(co.data[0].id);
                 } else {
                     // company via membership
-                    const cm = await supabase
-                        .from('company_memberships')
-                        .select('company_id')
-                        .eq('user_id', me)
-                        .maybeSingle();
+                    const cm = await supabase.from('company_memberships').select('company_id').eq('user_id', me).maybeSingle();
                     const cid = cm.data?.company_id || '';
                     setCompanyId(cid);
                 }
@@ -1306,7 +1557,7 @@ function FormBuilder() {
                 .eq('company_id', companyId)
                 .order('created_at', { ascending: false });
 
-            if (!f.error) setForms(((f.data as FormMeta[]) || []));
+            if (!f.error) setForms((f.data as FormMeta[]) || []);
             else setForms([]);
         })();
     }, [companyId]);
@@ -1369,7 +1620,7 @@ function FormBuilder() {
                 .select('*')
                 .eq('company_id', companyId)
                 .order('created_at', { ascending: false });
-            if (!list.error) setForms(((list.data as FormMeta[]) || []));
+            if (!list.error) setForms((list.data as FormMeta[]) || []);
 
             setName('');
             setQs([{ order_index: 1, label: 'How are things going?', type: 'TEXT', options: [], required: true }]);
@@ -1385,35 +1636,47 @@ function FormBuilder() {
         if (!companyId) return;
         // Set selected active, unset others
         await supabase.from('supervision_forms').update({ is_active: false }).eq('company_id', companyId);
-        const upd = await supabase
-            .from('supervision_forms')
-            .update({ is_active: true })
-            .eq('id', formId)
-            .select('*')
-            .single();
+        const upd = await supabase.from('supervision_forms').update({ is_active: true }).eq('id', formId).select('*').single();
         if (!upd.error) {
             const list = await supabase
                 .from('supervision_forms')
                 .select('*')
                 .eq('company_id', companyId)
                 .order('created_at', { ascending: false });
-            if (!list.error) setForms(((list.data as FormMeta[]) || []));
+            if (!list.error) setForms((list.data as FormMeta[]) || []);
         }
     }
 
-    if (loading) return <p>Loading…</p>;
+    if (loading)
+        return (
+            <p style={{ color: 'var(--sub)' }}>
+                Loading…
+            </p>
+        );
 
     return (
         <div className="space-y-4">
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50 p-4">
-                <h2 className="text-base font-semibold">Create supervision form</h2>
+            <section
+                className="rounded-lg ring-1 p-4"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                    Create supervision form
+                </h2>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                     <div className="sm:col-span-1">
-                        <label className="block text-sm mb-1">Company</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                            Company
+                        </label>
                         {companies.length > 0 ? (
                             <select
-                                className="w-full border rounded-lg px-3 py-2"
+                                className="w-full rounded-lg px-3 py-2 ring-1"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
                                 value={companyId}
                                 onChange={(e) => setCompanyId(e.target.value)}
                             >
@@ -1424,13 +1687,29 @@ function FormBuilder() {
                                 ))}
                             </select>
                         ) : (
-                            <input className="w-full border rounded-lg px-3 py-2 bg-gray-50" value="(Your company)" readOnly />
+                            <input
+                                className="w-full rounded-lg px-3 py-2 ring-1"
+                                style={{
+                                    background: 'var(--nav-item-bg)',
+                                    color: 'var(--ink)',
+                                    borderColor: 'var(--ring)',
+                                }}
+                                value="(Your company)"
+                                readOnly
+                            />
                         )}
                     </div>
                     <div className="sm:col-span-2">
-                        <label className="block text-sm mb-1">Form name</label>
+                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                            Form name
+                        </label>
                         <input
-                            className="w-full border rounded-lg px-3 py-2"
+                            className="w-full rounded-lg px-3 py-2 ring-1"
+                            style={{
+                                background: 'var(--nav-item-bg)',
+                                color: 'var(--ink)',
+                                borderColor: 'var(--ring)',
+                            }}
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="e.g. Standard Supervision v1"
@@ -1440,28 +1719,48 @@ function FormBuilder() {
 
                 <div className="mt-4 space-y-3">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold">Questions</h3>
-                        <button onClick={addQuestion} className="rounded border px-3 py-1.5 text-sm hover:bg-gray-50">
+                        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                            Questions
+                        </h3>
+                        <button
+                            onClick={addQuestion}
+                            className="rounded-md px-3 py-1.5 text-sm ring-1 transition"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
+                        >
                             Add question
                         </button>
                     </div>
 
                     <div className="space-y-2">
                         {qs.map((q, idx) => (
-                            <div key={idx} className="border rounded-lg p-3">
+                            <div key={idx} className="rounded-lg p-3 ring-1" style={{ borderColor: 'var(--ring)', background: 'var(--nav-item-bg)' }}>
                                 <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
                                     <div className="sm:col-span-4">
-                                        <label className="block text-sm mb-1">Question text</label>
+                                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                                            Question text
+                                        </label>
                                         <input
-                                            className="w-full border rounded-lg px-3 py-2"
+                                            className="w-full rounded-lg px-3 py-2 ring-1"
+                                            style={{
+                                                background: 'var(--nav-item-bg)',
+                                                color: 'var(--ink)',
+                                                borderColor: 'var(--ring)',
+                                            }}
                                             value={q.label}
                                             onChange={(e) => updQuestion(idx, { label: e.target.value })}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm mb-1">Type</label>
+                                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                                            Type
+                                        </label>
                                         <select
-                                            className="w-full border rounded-lg px-3 py-2"
+                                            className="w-full rounded-lg px-3 py-2 ring-1"
+                                            style={{
+                                                background: 'var(--nav-item-bg)',
+                                                color: 'var(--ink)',
+                                                borderColor: 'var(--ring)',
+                                            }}
                                             value={q.type}
                                             onChange={(e) =>
                                                 updQuestion(idx, {
@@ -1476,7 +1775,7 @@ function FormBuilder() {
                                         </select>
                                     </div>
                                     <div className="flex items-end">
-                                        <label className="inline-flex items-center gap-2 text-sm">
+                                        <label className="inline-flex items-center gap-2 text-sm" style={{ color: 'var(--ink)' }}>
                                             <input
                                                 type="checkbox"
                                                 checked={q.required}
@@ -1489,14 +1788,17 @@ function FormBuilder() {
 
                                 {q.type !== 'TEXT' && (
                                     <div className="mt-2">
-                                        <label className="block text-sm mb-1">Options</label>
+                                        <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
+                                            Options
+                                        </label>
                                         <OptionsEditor options={q.options} onChange={(opts) => updQuestion(idx, { options: opts })} />
                                     </div>
                                 )}
 
                                 <div className="mt-2">
                                     <button
-                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                        className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                        style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                         onClick={() => delQuestion(idx)}
                                     >
                                         Remove
@@ -1506,26 +1808,39 @@ function FormBuilder() {
                         ))}
                     </div>
 
-                    <div>
+                    <div className="flex items-center gap-3">
                         <button
                             onClick={saveForm}
-                            className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
+                            className="rounded-md px-3 py-2 text-sm text-white transition disabled:opacity-60"
+                            style={{ background: BRAND_GRADIENT }}
                             disabled={saving}
                         >
                             {saving ? 'Saving…' : 'Save form'}
                         </button>
-                        {err && <span className="ml-3 text-sm text-rose-600">{err}</span>}
+                        {err && (
+                            <span className="text-sm" style={{ color: 'var(--sub)' }}>
+                                {err}
+                            </span>
+                        )}
                     </div>
                 </div>
             </section>
 
-            <section className="rounded-xl border bg-white shadow-sm ring-1 ring-gray-50">
-                <div className="p-4">
-                    <h2 className="text-base font-semibold">Existing forms</h2>
+            <section
+                className="rounded-lg overflow-hidden ring-1"
+                style={{ background: 'var(--card-grad)', borderColor: 'var(--ring)' }}
+            >
+                <div className="p-4" style={{ background: 'var(--nav-item-bg)', borderBottom: '1px solid var(--ring)' }}>
+                    <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+                        Existing forms
+                    </h2>
                 </div>
                 <div className="overflow-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10">
+                        <thead
+                            className="sticky top-0 z-10"
+                            style={{ background: 'var(--nav-item-bg)', color: 'var(--sub)' }}
+                        >
                             <tr>
                                 <th className="text-left p-2">Name</th>
                                 <th className="text-left p-2">Active</th>
@@ -1534,26 +1849,27 @@ function FormBuilder() {
                         </thead>
                         <tbody>
                             {forms.map((f) => (
-                                <tr key={f.id} className="border-t">
-                                    <td className="p-2">{f.name}</td>
-                                    <td className="p-2">{f.is_active ? 'Yes' : 'No'}</td>
+                                <tr key={f.id} className="border-t" style={{ borderColor: 'var(--ring)' }}>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{f.name}</td>
+                                    <td className="p-2" style={{ color: 'var(--ink)' }}>{f.is_active ? 'Yes' : 'No'}</td>
                                     <td className="p-2">
                                         {!f.is_active ? (
                                             <button
-                                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                                className="rounded-md px-2 py-1 text-xs ring-1 transition"
+                                                style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                                                 onClick={() => setActive(f.id)}
                                             >
                                                 Set active
                                             </button>
                                         ) : (
-                                            <span className="text-gray-500 text-xs">Current active</span>
+                                            <span className="text-xs" style={{ color: 'var(--sub)' }}>Current active</span>
                                         )}
                                     </td>
                                 </tr>
                             ))}
                             {(!forms || forms.length === 0) && (
                                 <tr>
-                                    <td className="p-4 text-gray-500" colSpan={3}>
+                                    <td className="p-4" style={{ color: 'var(--sub)' }} colSpan={3}>
                                         No forms yet.
                                     </td>
                                 </tr>
@@ -1574,18 +1890,21 @@ function OptionsEditor({
     onChange: (opts: string[]) => void;
 }) {
     const [val, setVal] = useState('');
+
     return (
         <div className="space-y-2">
             <div className="flex gap-2">
                 <input
-                    className="flex-1 border rounded-lg px-3 py-2"
+                    className="flex-1 rounded-lg px-3 py-2 ring-1"
+                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     value={val}
                     onChange={(e) => setVal(e.target.value)}
                     placeholder="Add option…"
                 />
                 <button
                     type="button"
-                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
+                    className="rounded-md px-3 py-2 text-sm ring-1 transition"
+                    style={{ background: 'var(--nav-item-bg)', color: 'var(--ink)', borderColor: 'var(--ring)' }}
                     onClick={() => {
                         const v = val.trim();
                         if (!v) return;
@@ -1600,12 +1919,14 @@ function OptionsEditor({
                 {options.map((o, i) => (
                     <span
                         key={i}
-                        className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs bg-gray-50"
+                        className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs ring-1"
+                        style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
                     >
                         {o}
                         <button
                             type="button"
-                            className="text-gray-500 hover:text-gray-900"
+                            className="transition"
+                            style={{ color: 'var(--sub)' }}
                             onClick={() => onChange(options.filter((x) => x !== o))}
                             aria-label="Remove option"
                         >
@@ -1617,3 +1938,5 @@ function OptionsEditor({
         </div>
     );
 }
+
+
