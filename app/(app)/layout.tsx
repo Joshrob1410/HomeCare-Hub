@@ -1,7 +1,6 @@
 ﻿import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
-import Image from 'next/image'; // ← added
+import Image from 'next/image';
 import { getServerSupabase } from '@/supabase/server';
 
 import UserChip from './_components/UserChip';
@@ -16,31 +15,21 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-const BRAND_GRADIENT =
-    'linear-gradient(135deg, #7C3AED 0%, #6366F1 50%, #3B82F6 100%)';
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
     const supabase = await getServerSupabase();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect('/auth/login');
 
-    // 1) user pref
-    let orbitEnabled: boolean | null = null;
+    // Resolve theme from DB; default to LIGHT if unset
+    let orbitEnabled = false;
     const { data: pref } = await supabase
         .from('user_preferences')
         .select('theme_mode')
         .eq('user_id', user.id)
         .maybeSingle();
-    if (pref?.theme_mode === 'ORBIT' || pref?.theme_mode === 'LIGHT') {
-        orbitEnabled = pref.theme_mode === 'ORBIT';
-    }
 
-    // 2) cookie fallback
-    if (orbitEnabled === null) {
-        const hdrs = await headers();
-        const cookieHeader = hdrs.get('cookie') ?? '';
-        orbitEnabled = /(?:^|;\s*)orbit=1(?:;|$)/.test(cookieHeader);
-    }
+    if (pref?.theme_mode === 'ORBIT') orbitEnabled = true;
+    if (pref?.theme_mode === 'LIGHT') orbitEnabled = false;
 
     return (
         <div className="min-h-screen" style={{ background: 'var(--page-bg)' }}>
@@ -66,10 +55,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                     <div className="flex items-center gap-2">
                         <MobileSidebar orbitInitial={orbitEnabled} />
                         <Link href="/dashboard" className="inline-flex items-center gap-2">
-                            {/* replaced HO badge with logo image */}
+                            {/* Logo */}
                             <div className="h-8 w-8 rounded-xl overflow-hidden shadow-sm ring-2 ring-white/70" aria-hidden>
                                 <Image
-                                    src="/logo.png"  // ← change to '/logo.svg' if your asset is SVG
+                                    src="/logo.png" // change to '/logo.svg' if your asset is SVG
                                     alt="HomeOrbit logo"
                                     width={32}
                                     height={32}
@@ -98,6 +87,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 />
             </header>
 
+            {/* Keep Sidebar as-is for now */}
             <Sidebar />
 
             <main className="px-4 py-6 lg:pl-72">

@@ -1,6 +1,7 @@
+// app/(app)/_components/ThemeCSSBridge.tsx
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect, useEffect } from "react";
 
 type Props = { initialOrbit: boolean };
 
@@ -54,7 +55,7 @@ function applyVars(orbit: boolean) {
     r.style.setProperty("--header-tint", t.headerTint);
     r.style.setProperty("--brand-link", t.link);
 
-    // new: neutral surfaces you can use for inputs/cards/rows
+    // neutral surfaces
     r.style.setProperty("--nav-item-bg", t.navItemBg);
     r.style.setProperty("--nav-item-bg-hover", t.navItemBgHover);
 
@@ -66,9 +67,13 @@ function applyVars(orbit: boolean) {
 }
 
 export default function ThemeCSSBridge({ initialOrbit }: Props) {
-    useEffect(() => {
+    // Apply before paint to avoid any flash/mismatch
+    useLayoutEffect(() => {
         applyVars(initialOrbit);
+    }, [initialOrbit]);
 
+    // Listen for changes (same-tab + cross-tab)
+    useEffect(() => {
         const onLocal = (e: Event) => {
             const detail = (e as CustomEvent).detail as { orbit?: boolean } | undefined;
             if (typeof detail?.orbit === "boolean") applyVars(detail.orbit);
@@ -90,7 +95,7 @@ export default function ThemeCSSBridge({ initialOrbit }: Props) {
             window.removeEventListener("orbit:changed", onLocal as EventListener);
             window.removeEventListener("storage", onStorage);
         };
-    }, [initialOrbit]);
+    }, []);
 
     return null;
 }
