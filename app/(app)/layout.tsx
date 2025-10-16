@@ -87,8 +87,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 />
             </header>
 
-            {/* Keep Sidebar as-is for now */}
-            <Sidebar />
+            {/* Pass the required prop */}
+            <Sidebar orbitInitial={orbitEnabled} />
 
             <main className="px-4 py-6 lg:pl-72">
                 <div className="mx-auto max-w-6xl">{children}</div>
