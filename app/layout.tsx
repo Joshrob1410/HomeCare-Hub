@@ -14,13 +14,13 @@ const safeBase = hasValidSiteUrl ? new URL(siteUrl as string) : null;
 
 export const metadata: Metadata = safeBase
   ? {
-      title: { default: "HomeCare Hub", template: "%s · HomeCare Hub" },
-      description: "HomeCare Hub – home management.",
+      title: { default: "HomeOrbit", template: "%s · HomeOrbitb" },
+      description: "HomeOrbit – home management.",
       metadataBase: safeBase,
     }
   : {
-      title: { default: "HomeCare Hub", template: "%s · HomeCare Hub" },
-      description: "HomeCare Hub – home management.",
+      title: { default: "HomeOrbit", template: "%s · HomeOrbitb" },
+      description: "HomeOrbit – home management.",
     };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
