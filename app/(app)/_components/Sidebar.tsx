@@ -25,33 +25,106 @@ type Tone =
     | 'sky';
 
 function getTone(tone: Tone, dark: boolean) {
+    // Dark (Orbit): darker chip bg + stronger ring + brighter text + punchier hover ring
     if (dark) {
         switch (tone) {
-            case 'indigo': return { chipBg: 'bg-indigo-500/10', chipRing: 'ring-indigo-400/20', chipText: 'text-indigo-300', rowHoverRing: 'hover:ring-indigo-400/20' };
-            case 'violet': return { chipBg: 'bg-violet-500/10', chipRing: 'ring-violet-400/20', chipText: 'text-violet-300', rowHoverRing: 'hover:ring-violet-400/20' };
-            case 'fuchsia': return { chipBg: 'bg-fuchsia-500/10', chipRing: 'ring-fuchsia-400/20', chipText: 'text-fuchsia-300', rowHoverRing: 'hover:ring-fuchsia-400/20' };
-            case 'emerald': return { chipBg: 'bg-emerald-500/10', chipRing: 'ring-emerald-400/20', chipText: 'text-emerald-300', rowHoverRing: 'hover:ring-emerald-400/20' };
-            case 'cyan': return { chipBg: 'bg-cyan-500/10', chipRing: 'ring-cyan-400/20', chipText: 'text-cyan-300', rowHoverRing: 'hover:ring-cyan-400/20' };
-            case 'amber': return { chipBg: 'bg-amber-500/10', chipRing: 'ring-amber-400/20', chipText: 'text-amber-300', rowHoverRing: 'hover:ring-amber-400/20' };
-            case 'rose': return { chipBg: 'bg-rose-500/10', chipRing: 'ring-rose-400/20', chipText: 'text-rose-300', rowHoverRing: 'hover:ring-rose-400/20' };
-            case 'slate': return { chipBg: 'bg-slate-500/10', chipRing: 'ring-slate-400/20', chipText: 'text-slate-300', rowHoverRing: 'hover:ring-slate-400/20' };
-            case 'teal': return { chipBg: 'bg-teal-500/10', chipRing: 'ring-teal-400/20', chipText: 'text-teal-300', rowHoverRing: 'hover:ring-teal-400/20' };
+            case 'indigo':
+                return {
+                    chipBg: 'bg-indigo-500/30',
+                    chipRing: 'ring-indigo-400/50',
+                    chipText: 'text-indigo-200',
+                    rowHoverRing: 'hover:ring-indigo-400/40',
+                };
+            case 'violet':
+                return {
+                    chipBg: 'bg-violet-500/30',
+                    chipRing: 'ring-violet-400/50',
+                    chipText: 'text-violet-200',
+                    rowHoverRing: 'hover:ring-violet-400/40',
+                };
+            case 'fuchsia':
+                return {
+                    chipBg: 'bg-fuchsia-500/30',
+                    chipRing: 'ring-fuchsia-400/50',
+                    chipText: 'text-fuchsia-200',
+                    rowHoverRing: 'hover:ring-fuchsia-400/40',
+                };
+            case 'emerald':
+                return {
+                    chipBg: 'bg-emerald-500/30',
+                    chipRing: 'ring-emerald-400/50',
+                    chipText: 'text-emerald-200',
+                    rowHoverRing: 'hover:ring-emerald-400/40',
+                };
+            case 'cyan':
+                return {
+                    chipBg: 'bg-cyan-500/30',
+                    chipRing: 'ring-cyan-400/50',
+                    chipText: 'text-cyan-200',
+                    rowHoverRing: 'hover:ring-cyan-400/40',
+                };
+            case 'amber':
+                return {
+                    chipBg: 'bg-amber-500/30',
+                    chipRing: 'ring-amber-400/50',
+                    chipText: 'text-amber-200',
+                    rowHoverRing: 'hover:ring-amber-400/40',
+                };
+            case 'rose':
+                return {
+                    chipBg: 'bg-rose-500/30',
+                    chipRing: 'ring-rose-400/50',
+                    chipText: 'text-rose-200',
+                    rowHoverRing: 'hover:ring-rose-400/40',
+                };
+            case 'slate':
+                return {
+                    chipBg: 'bg-slate-500/30',
+                    chipRing: 'ring-slate-400/50',
+                    chipText: 'text-slate-200',
+                    rowHoverRing: 'hover:ring-slate-400/40',
+                };
+            case 'teal':
+                return {
+                    chipBg: 'bg-teal-500/30',
+                    chipRing: 'ring-teal-400/50',
+                    chipText: 'text-teal-200',
+                    rowHoverRing: 'hover:ring-teal-400/40',
+                };
             case 'sky':
-            default: return { chipBg: 'bg-sky-500/10', chipRing: 'ring-sky-400/20', chipText: 'text-sky-300', rowHoverRing: 'hover:ring-sky-400/20' };
+            default:
+                return {
+                    chipBg: 'bg-sky-500/30',
+                    chipRing: 'ring-sky-400/50',
+                    chipText: 'text-sky-200',
+                    rowHoverRing: 'hover:ring-sky-400/40',
+                };
         }
     }
+
+    // Light mode unchanged (subtle chips, gentle rings)
     switch (tone) {
-        case 'indigo': return { chipBg: 'bg-indigo-50', chipRing: 'ring-indigo-200', chipText: 'text-indigo-700', rowHoverRing: 'hover:ring-indigo-100' };
-        case 'violet': return { chipBg: 'bg-violet-50', chipRing: 'ring-violet-200', chipText: 'text-violet-700', rowHoverRing: 'hover:ring-violet-100' };
-        case 'fuchsia': return { chipBg: 'bg-fuchsia-50', chipRing: 'ring-fuchsia-200', chipText: 'text-fuchsia-700', rowHoverRing: 'hover:ring-fuchsia-100' };
-        case 'emerald': return { chipBg: 'bg-emerald-50', chipRing: 'ring-emerald-200', chipText: 'text-emerald-700', rowHoverRing: 'hover:ring-emerald-100' };
-        case 'cyan': return { chipBg: 'bg-cyan-50', chipRing: 'ring-cyan-200', chipText: 'text-cyan-700', rowHoverRing: 'hover:ring-cyan-100' };
-        case 'amber': return { chipBg: 'bg-amber-50', chipRing: 'ring-amber-200', chipText: 'text-amber-700', rowHoverRing: 'hover:ring-amber-100' };
-        case 'rose': return { chipBg: 'bg-rose-50', chipRing: 'ring-rose-200', chipText: 'text-rose-700', rowHoverRing: 'hover:ring-rose-100' };
-        case 'slate': return { chipBg: 'bg-slate-50', chipRing: 'ring-slate-200', chipText: 'text-slate-700', rowHoverRing: 'hover:ring-slate-100' };
-        case 'teal': return { chipBg: 'bg-teal-50', chipRing: 'ring-teal-200', chipText: 'text-teal-700', rowHoverRing: 'hover:ring-teal-100' };
+        case 'indigo':
+            return { chipBg: 'bg-indigo-50', chipRing: 'ring-indigo-200', chipText: 'text-indigo-700', rowHoverRing: 'hover:ring-indigo-100' };
+        case 'violet':
+            return { chipBg: 'bg-violet-50', chipRing: 'ring-violet-200', chipText: 'text-violet-700', rowHoverRing: 'hover:ring-violet-100' };
+        case 'fuchsia':
+            return { chipBg: 'bg-fuchsia-50', chipRing: 'ring-fuchsia-200', chipText: 'text-fuchsia-700', rowHoverRing: 'hover:ring-fuchsia-100' };
+        case 'emerald':
+            return { chipBg: 'bg-emerald-50', chipRing: 'ring-emerald-200', chipText: 'text-emerald-700', rowHoverRing: 'hover:ring-emerald-100' };
+        case 'cyan':
+            return { chipBg: 'bg-cyan-50', chipRing: 'ring-cyan-200', chipText: 'text-cyan-700', rowHoverRing: 'hover:ring-cyan-100' };
+        case 'amber':
+            return { chipBg: 'bg-amber-50', chipRing: 'ring-amber-200', chipText: 'text-amber-700', rowHoverRing: 'hover:ring-amber-100' };
+        case 'rose':
+            return { chipBg: 'bg-rose-50', chipRing: 'ring-rose-200', chipText: 'text-rose-700', rowHoverRing: 'hover:ring-rose-100' };
+        case 'slate':
+            return { chipBg: 'bg-slate-50', chipRing: 'ring-slate-200', chipText: 'text-slate-700', rowHoverRing: 'hover:ring-slate-100' };
+        case 'teal':
+            return { chipBg: 'bg-teal-50', chipRing: 'ring-teal-200', chipText: 'text-teal-700', rowHoverRing: 'hover:ring-teal-100' };
         case 'sky':
-        default: return { chipBg: 'bg-sky-50', chipRing: 'ring-sky-200', chipText: 'text-sky-700', rowHoverRing: 'hover:ring-sky-100' };
+        default:
+            return { chipBg: 'bg-sky-50', chipRing: 'ring-sky-200', chipText: 'text-sky-700', rowHoverRing: 'hover:ring-sky-100' };
     }
 }
 
@@ -216,9 +289,15 @@ function Section({
     return (
         <div className="space-y-2">
             <div className="px-1 flex items-center gap-2">
-                <span className={`h-px flex-1 bg-gradient-to-r ${dark ? 'from-indigo-500/20 via-violet-500/20 to-blue-500/20' : 'from-indigo-200 via-violet-200 to-blue-200'}`} />
+                <span
+                    className={`h-px flex-1 bg-gradient-to-r ${dark ? 'from-indigo-500/20 via-violet-500/20 to-blue-500/20' : 'from-indigo-200 via-violet-200 to-blue-200'
+                        }`}
+                />
                 <span className={`text-xs font-semibold ${dark ? 'text-slate-300' : 'text-slate-600'}`}>{title}</span>
-                <span className={`h-px flex-1 bg-gradient-to-r ${dark ? 'from-blue-500/20 via-violet-500/20 to-indigo-500/20' : 'from-blue-200 via-violet-200 to-indigo-200'}`} />
+                <span
+                    className={`h-px flex-1 bg-gradient-to-r ${dark ? 'from-blue-500/20 via-violet-500/20 to-indigo-500/20' : 'from-blue-200 via-violet-200 to-indigo-200'
+                        }`}
+                />
             </div>
             <ul className="space-y-1">{children}</ul>
         </div>
@@ -234,7 +313,7 @@ function Item({
 }: {
     href: string;
     label: string;
-    icon: React.ReactNode;
+    icon: ReactNode;
     tone?: Tone;
     dark: boolean;
 }) {
@@ -247,11 +326,8 @@ function Item({
                 className={`group flex items-center gap-3 rounded-lg px-2 py-2 ring-1 ring-transparent transition bg-[var(--nav-item-bg)] hover:bg-[var(--nav-item-bg-hover)] ${t.rowHoverRing}`}
                 style={{ color: 'var(--ink)' }}
             >
-                {/* ✅ bg + ring come from vars, so they flip with Orbit instantly */}
-                <span
-                    className={`h-7 w-7 grid place-items-center rounded-md ring-1 ${t.chipText}`}
-                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
-                >
+                {/* Tone-forward chip: colored bg + colored ring + bright text */}
+                <span className={`h-7 w-7 grid place-items-center rounded-md ring-1 ${t.chipBg} ${t.chipRing} ${t.chipText}`}>
                     {icon}
                 </span>
 
@@ -260,8 +336,6 @@ function Item({
         </li>
     );
 }
-
-
 
 /* --------------------------  Icons  -------------------------- */
 

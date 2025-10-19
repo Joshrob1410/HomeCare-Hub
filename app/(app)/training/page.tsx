@@ -208,6 +208,9 @@ function CoursePicker({
         setOpen(false);
     }
 
+    // put this directly above the return in CoursePicker()
+    const isOrbit = typeof document !== 'undefined' && document.documentElement.dataset.orbit === '1';
+
     return (
         <div className="relative">
             <input
@@ -256,7 +259,11 @@ function CoursePicker({
                     id="course-combobox-list"
                     role="listbox"
                     className="absolute z-50 mt-1 w-full rounded-xl ring-1 shadow-lg max-h-64 overflow-auto"
-                    style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)' }}
+                    style={{
+                        /* 👇 solid surface only in Orbit */
+                        background: isOrbit ? 'var(--panel-bg)' : 'var(--nav-item-bg)',
+                        borderColor: 'var(--ring)',
+                    }}
                 >
                     {items.length === 0 ? (
                         <div className="px-3 py-2 text-sm" style={{ color: 'var(--sub)' }}>
@@ -287,6 +294,7 @@ function CoursePicker({
             )}
         </div>
     );
+
 }
 
 function CertificateCell({ path }: { path?: string | null }) {
@@ -2997,7 +3005,7 @@ function PeoplePicker({
    ========================= */
 function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCompany: boolean; isManager: boolean }) {
     type Person = { id: string; name: string; home_id?: string | null; is_bank?: boolean };
-
+    type ManagerSubrole = 'MANAGER' | 'DEPUTY_MANAGER' | null;
     const [uid, setUid] = useState<string | null>(null);
     const [level, setLevel] = useState<Level>('4_STAFF');
 
@@ -3026,6 +3034,16 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const [ok, setOk] = useState<string | null>(null);
+
+    // Confirmation state for “already up to date”
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmNames, setConfirmNames] = useState<string[]>([]);
+    const [confirmFreshIds, setConfirmFreshIds] = useState<string[]>([]);
+    const [confirmExistingIds, setConfirmExistingIds] = useState<string[]>([]);
+
+    // NEW: Include managers toggle + map of (user_id:home_id) -> subrole
+    const [includeManagers, setIncludeManagers] = useState<boolean>(false); // default OFF
+    const [managerMap, setManagerMap] = useState<Map<string, ManagerSubrole>>(new Map());
 
     useEffect(() => {
         (async () => {
@@ -3080,6 +3098,32 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin, companyId]);
 
+    // NEW: load manager memberships map for the company in scope
+    useEffect(() => {
+        (async () => {
+            if (!companyId) {
+                setManagerMap(new Map());
+                return;
+            }
+            const { data, error } = await supabase.rpc('list_company_home_manager_members', { p_company_id: companyId });
+            if (error || !Array.isArray(data)) {
+                setManagerMap(new Map());
+                return;
+            }
+            const m = new Map<string, ManagerSubrole>();
+            data.forEach((r: { home_id?: unknown; user_id?: unknown; manager_subrole?: unknown }) => {
+                const home_id = typeof r.home_id === 'string' ? r.home_id : '';
+                const user_id = typeof r.user_id === 'string' ? r.user_id : '';
+                const sub =
+                    r.manager_subrole === 'MANAGER' || r.manager_subrole === 'DEPUTY_MANAGER'
+                        ? (r.manager_subrole as ManagerSubrole)
+                        : null; // treat null as legacy "Manager"
+                if (home_id && user_id) m.set(`${user_id}:${home_id}`, sub);
+            });
+            setManagerMap(m);
+        })();
+    }, [companyId]);
+
     async function loadAdminCompanyScope(cid: string) {
         const h = await supabase.from('homes').select('id,name').eq('company_id', cid);
         if (!h.error) {
@@ -3088,20 +3132,11 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
 
         const roster = await supabase.rpc('list_company_people', { p_company_id: cid });
         const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
-            const row = r as {
-                user_id?: unknown;
-                full_name?: unknown;
-                home_id?: unknown;
-                is_bank?: unknown;
-            };
-
+            const row = r as { user_id?: unknown; full_name?: unknown; home_id?: unknown; is_bank?: unknown };
             const user_id = typeof row.user_id === 'string' ? row.user_id : '';
-            const full_name =
-                typeof row.full_name === 'string' && row.full_name.trim() ? row.full_name : user_id.slice(0, 8);
-            const home_id =
-                typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
+            const full_name = typeof row.full_name === 'string' && row.full_name.trim() ? row.full_name : user_id.slice(0, 8);
+            const home_id = typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
             const is_bank = Boolean(row.is_bank);
-
             return { id: user_id, name: full_name, home_id, is_bank };
         });
         setPeople(ps);
@@ -3120,19 +3155,11 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
 
         const roster = await supabase.rpc('list_company_people', { p_company_id: cid });
         const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
-            const row = r as {
-                user_id?: unknown;
-                full_name?: unknown;
-                home_id?: unknown;
-                is_bank?: unknown;
-            };
-
+            const row = r as { user_id?: unknown; full_name?: unknown; home_id?: unknown; is_bank?: unknown };
             const user_id = typeof row.user_id === 'string' ? row.user_id : '';
             const name = typeof row.full_name === 'string' && row.full_name ? row.full_name : user_id.slice(0, 8);
-            const home_id =
-                typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
+            const home_id = typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
             const is_bank = Boolean(row.is_bank);
-
             return { id: user_id, name, home_id, is_bank };
         });
         setPeople(ps);
@@ -3166,12 +3193,9 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
         const roster = await supabase.rpc('list_manager_people');
         const ps: Person[] = (Array.isArray(roster.data) ? roster.data : []).map((r) => {
             const row = r as { user_id?: unknown; full_name?: unknown; home_id?: unknown };
-
             const user_id = typeof row.user_id === 'string' ? row.user_id : '';
             const name = typeof row.full_name === 'string' && row.full_name ? row.full_name : user_id.slice(0, 8);
-            const home_id =
-                typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
-
+            const home_id = typeof row.home_id === 'string' || row.home_id === null ? (row.home_id as string | null) : null;
             return { id: user_id, name, home_id, is_bank: false };
         });
         setPeople(ps);
@@ -3185,7 +3209,81 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
     }
 
     const canSubmit =
-        !!courseId && !!dueBy && ((mode === 'HOMES' && selectedHomes.length > 0) || (mode === 'PEOPLE' && selectedPeople.length > 0));
+        !!courseId &&
+        !!dueBy &&
+        ((mode === 'HOMES' && selectedHomes.length > 0) || (mode === 'PEOPLE' && selectedPeople.length > 0));
+
+    // Helper to compute user IDs from current selection (respects includeManagers toggle)
+    function computeSelectedRecipientIds(): string[] {
+        const target = new Set<string>();
+
+        if (mode === 'HOMES') {
+            const allowedHomeIds = new Set(selectedHomes);
+
+            people.forEach((p) => {
+                if (!p.home_id || !allowedHomeIds.has(p.home_id)) return;
+
+                // If toggle is OFF, skip "Manager – position: Manager" but keep Deputy
+                if (!includeManagers) {
+                    const key = `${p.id}:${p.home_id}`;
+                    const sub = managerMap.get(key);
+                    // Exclude true Managers (and legacy NULL), include Deputy Managers
+                    if (sub === 'MANAGER' || sub === null) return;
+                }
+
+                target.add(p.id);
+            });
+        } else {
+            selectedPeople.forEach((id) => target.add(id));
+        }
+
+        if (isManager && uid) target.delete(uid);
+        return Array.from(target);
+    }
+
+    // proceed after user chose Skip / Change
+    async function proceedAfterConfirm(includeExisting: boolean) {
+        setErr(null);
+        setOk(null);
+        setSaving(true);
+        setConfirmOpen(false);
+
+        try {
+            const finalRecipients = includeExisting
+                ? [...confirmFreshIds, ...confirmExistingIds]
+                : [...confirmFreshIds];
+
+            if (finalRecipients.length === 0) {
+                setErr('No recipients to set.');
+                return;
+            }
+
+            const { error } = await supabase.rpc('create_training_assignment', {
+                p_course_id: courseId,
+                p_due_by: dueBy,
+                p_recipient_ids: finalRecipients,
+            });
+            if (error) throw error;
+
+            setSelectedHomes([]);
+            setSelectedPeople([]);
+            setCourseId('');
+            setDueBy('');
+
+            const changed = includeExisting ? confirmExistingIds.length : 0;
+            const created = confirmFreshIds.length;
+            const parts: string[] = [];
+            if (created > 0) parts.push(`${created} new recipient${created === 1 ? '' : 's'}`);
+            if (changed > 0)
+                parts.push(`changed due date for ${changed} recipient${changed === 1 ? '' : 's'} who already had this course`);
+            setOk(`Training set: ${parts.join(' & ')}.`);
+        } catch (e) {
+            const message = e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to set training';
+            setErr(message);
+        } finally {
+            setSaving(false);
+        }
+    }
 
     async function onSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -3205,19 +3303,7 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
             return;
         }
 
-        const target = new Set<string>();
-        if (mode === 'HOMES') {
-            const allowedHomeIds = new Set(selectedHomes);
-            people.forEach((p) => {
-                if (p.home_id && allowedHomeIds.has(p.home_id)) target.add(p.id);
-            });
-        } else {
-            selectedPeople.forEach((id) => target.add(id));
-        }
-
-        if (isManager && uid) target.delete(uid);
-
-        const recipients: string[] = Array.from(target);
+        const recipients = computeSelectedRecipientIds();
         if (recipients.length === 0) {
             setErr('No recipients found for the chosen scope.');
             return;
@@ -3225,6 +3311,7 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
 
         setSaving(true);
         try {
+            // Who already has a training record for this course?
             const { data: existing, error: existsErr } = await supabase
                 .from('training_records')
                 .select('user_id')
@@ -3233,19 +3320,28 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
 
             if (existsErr) throw existsErr;
 
-            const already = new Set<string>((existing ?? []).map((r) => r.user_id as string));
-            const filtered = recipients.filter((id) => !already.has(id));
-            const skipped = recipients.length - filtered.length;
+            const already = new Set<string>((existing ?? []).map((r) => (r.user_id as string) || ''));
+            const alreadyIds = recipients.filter((id) => already.has(id));
+            const freshIds = recipients.filter((id) => !already.has(id));
 
-            if (filtered.length === 0) {
-                setErr('Everyone selected already has this course recorded.');
+            if (alreadyIds.length > 0) {
+                // Open confirmation dialog; stop here (don’t keep saving=true while dialog is open)
+                const nameById = new Map(people.map((p) => [p.id, p.name]));
+                const names = alreadyIds.map((id) => nameById.get(id) || id.slice(0, 8));
+
+                setConfirmExistingIds(alreadyIds);
+                setConfirmFreshIds(freshIds);
+                setConfirmNames(names);
+                setSaving(false);
+                setConfirmOpen(true);
                 return;
             }
 
+            // No one already had it → behave like before
             const { error } = await supabase.rpc('create_training_assignment', {
                 p_course_id: courseId,
                 p_due_by: dueBy,
-                p_recipient_ids: filtered,
+                p_recipient_ids: recipients,
             });
             if (error) throw error;
 
@@ -3254,15 +3350,12 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
             setCourseId('');
             setDueBy('');
 
-            const okCount = filtered.length;
-            setOk(
-                `Training set for ${okCount} recipient${okCount === 1 ? '' : 's'}` +
-                (skipped > 0 ? ` (skipped ${skipped} who already have this course).` : '.'),
-            );
+            setOk(`Training set for ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}.`);
         } catch (e) {
             const message = e instanceof Error && typeof e.message === 'string' ? e.message : 'Failed to set training';
             setErr(message);
         } finally {
+            // If we opened the dialog we already set saving=false above; this is safe to run regardless.
             setSaving(false);
         }
     }
@@ -3381,6 +3474,38 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                         <label className="block text-sm mb-1" style={{ color: 'var(--ink)' }}>
                             Homes
                         </label>
+
+                        {/* Include managers toggle */}
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className="text-sm" style={{ color: 'var(--sub)' }}>
+                                Include managers
+                            </span>
+
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={includeManagers}
+                                onClick={() => setIncludeManagers((v) => !v)}
+                                disabled={disableControls}
+                                className="relative inline-flex h-7 w-12 items-center rounded-full ring-1 transition"
+                                style={{
+                                    background: includeManagers ? 'var(--nav-item-bg-hover)' : 'var(--nav-item-bg)',
+                                    borderColor: includeManagers ? 'var(--brand-link)' : 'var(--ring)',
+                                    color: 'var(--ink)',
+                                    opacity: disableControls ? 0.6 : 1,
+                                }}
+                                title="Include managers (position: Manager)"
+                            >
+                                <span
+                                    className="absolute left-1 top-1 h-5 w-5 rounded-full shadow transition-transform"
+                                    style={{
+                                        background: 'var(--panel-bg)',
+                                        transform: includeManagers ? 'translateX(24px)' : 'translateX(0)',
+                                    }}
+                                />
+                            </button>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                             {homes.map((h) => {
                                 const selected = selectedHomes.includes(h.id);
@@ -3453,6 +3578,61 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
                 </div>
             </form>
 
+            {/* Confirmation dialog */}
+            {confirmOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div
+                        className="absolute inset-0"
+                        style={{ background: 'rgba(0,0,0,0.4)' }}
+                        aria-hidden="true"
+                        onClick={() => setConfirmOpen(false)}
+                    />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="confirm-existing-title"
+                        className="relative w-full max-w-lg rounded-xl p-4 ring-1"
+                        style={{ background: 'var(--panel-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                    >
+                        <h3 id="confirm-existing-title" className="text-base font-semibold mb-2" style={{ color: 'var(--ink)' }}>
+                            Some people already have this course up to date
+                        </h3>
+                        <p className="text-sm mb-2" style={{ color: 'var(--sub)' }}>
+                            {confirmNames.length <= 6
+                                ? confirmNames.join(', ')
+                                : `${confirmNames.slice(0, 6).join(', ')} + ${confirmNames.length - 6} more`}
+                        </p>
+                        <p className="text-sm mb-4" style={{ color: 'var(--ink)' }}>
+                            Do you want to{' '}
+                            <span className="font-medium [data-orbit=0]:text-indigo-700 [data-orbit=1]:text-indigo-300">
+                                change their due-by date
+                            </span>{' '}
+                            to <span className="font-mono">{dueBy}</span>, or skip them?
+                        </p>
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                type="button"
+                                className="rounded-lg px-3 py-2 text-sm ring-1"
+                                style={{ background: 'var(--nav-item-bg)', borderColor: 'var(--ring)', color: 'var(--ink)' }}
+                                onClick={() => proceedAfterConfirm(false)}
+                                disabled={saving}
+                            >
+                                Skip
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-lg px-3 py-2 text-sm ring-1"
+                                style={{ background: 'var(--nav-item-bg-hover)', borderColor: 'var(--brand-link)', color: 'var(--ink)' }}
+                                onClick={() => proceedAfterConfirm(true)}
+                                disabled={saving}
+                            >
+                                Change due date
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Orbit-only select fixes (scoped) */}
             <style jsx global>{`
         [data-orbit="1"] select,
@@ -3478,6 +3658,8 @@ function SetTraining({ isAdmin, isCompany, isManager }: { isAdmin: boolean; isCo
         </section>
     );
 }
+
+
 
 /* =========================
    COURSE SETTINGS (create + edit targets → Conditional)
@@ -3899,23 +4081,39 @@ function CourseSettings({ isAdmin }: { isAdmin: boolean }) {
                 </div>
             </section>
 
-            {/* Orbit-only select/input polish */}
             <style jsx global>{`
-        [data-orbit='1'] select,
-        [data-orbit='1'] input[type='date'],
-        [data-orbit='1'] input[type='text'],
-        [data-orbit='1'] input[type='number'],
-        [data-orbit='1'] input[type='url'] {
-          color-scheme: dark;
-          background: var(--nav-item-bg);
-          color: var(--ink);
-          border-color: var(--ring);
-        }
-        [data-orbit='1'] select option {
-          color: var(--ink);
-          background-color: #0b1221;
-        }
-      `}</style>
+  /* Orbit-only: native control polish */
+  [data-orbit='1'] select,
+  [data-orbit='1'] input[type='date'],
+  [data-orbit='1'] input[type='text'],
+  [data-orbit='1'] input[type='number'],
+  [data-orbit='1'] input[type='url'] {
+    color-scheme: dark;
+    background: var(--nav-item-bg);
+    color: var(--ink);
+    border-color: var(--ring);
+  }
+  [data-orbit='1'] select option {
+    color: var(--ink);
+    background-color: #0b1221;
+  }
+
+  /* NEW — Orbit-only: make CoursePicker suggestions panel opaque & legible */
+  [data-orbit='1'] #course-combobox-list {
+    background: var(--panel-bg) !important;   /* overrides inline var(--nav-item-bg) */
+    border-color: var(--ring-strong) !important;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+    backdrop-filter: blur(6px);
+  }
+  [data-orbit='1'] #course-combobox-list [role='option'] {
+    color: var(--ink);
+  }
+  [data-orbit='1'] #course-combobox-list [role='option'][aria-selected='true'],
+  [data-orbit='1'] #course-combobox-list [role='option']:hover {
+    background: var(--nav-item-bg-hover);
+  }
+`}</style>
+
         </div>
     );
 }
